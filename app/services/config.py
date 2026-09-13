@@ -22,8 +22,8 @@ usersFile = dataDir / "users.json"
 historyFile = dataDir / "history.json"
 
 # ---- ゲームバランス (既定値。config.jsonc で変更可) ----
-cooldownSec = 10.0  # Lv1 のクールダウン秒
-minCooldown = 1.5  # クールダウンの下限秒
+cooldownSec = 5.0  # Lv1 のクールダウン秒
+minCooldown = 1.0  # クールダウンの下限秒
 cooldownDecay = 0.87  # クールダウン逓減率 (下限への指数接近。Lv40頃に下限)
 xpPerPlace = 1  # 1マス配置ごとの経験値
 xpBase = 3  # 必要経験値の係数 (次レベルまで xpBase x Lv^xpPow)

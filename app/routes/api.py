@@ -234,7 +234,11 @@ async def apiAccountIssue(body: AccountIssueBody, request: Request):
 
 @router.post("/api/account/login")
 async def apiAccountLogin(body: AccountLoginBody, request: Request):
-    """引っ越しコード+パスワードでログインし、元のトークンを返す (別端末で同じアカウント)。"""
+    """引っ越しコード+パスワードでログインし、元のトークンを返す (別端末で同じアカウント)。
+
+    fromToken 指定時は現端末のアカウントを引っ越し先に統合 (経験値合算・インク合算・
+    履歴/ピクセルの帰属付け替え) してから切り替える。未指定・同一・不存在なら切替のみ。
+    """
     ip = clientIp(request)
     now = time.time()
     fails = [t for t in users.loginFails.get(ip, []) if now - t < cfg.loginLockSec]
@@ -260,4 +264,9 @@ async def apiAccountLogin(body: AccountLoginBody, request: Request):
         users.loginFails[ip] = fails
         return JSONResponse(status_code=401, content={"ok": False, "error": "badLogin"})
     users.loginFails.pop(ip, None)
-    return {"ok": True, **canvas.userPayload(user, user["token"])}
+    merged = False
+    fromToken = (body.fromToken or "").strip()[:64]
+    if fromToken and fromToken != user["token"]:
+        async with dbLock:
+            user, merged = await canvas.mergeAccounts(db, fromToken, user)
+    return {"ok": True, "merged": merged, **canvas.userPayload(user, user["token"])}

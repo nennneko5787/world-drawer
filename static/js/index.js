@@ -10,6 +10,7 @@
   const onlineCount = document.getElementById("onlineCount");
   const settingsBtn = document.getElementById("settingsBtn");
   const settingsPanel = document.getElementById("settingsPanel");
+  const settingsClose = document.getElementById("settingsClose");
   const gridToggle = document.getElementById("gridToggle");
   const cursorToggle = document.getElementById("cursorToggle");
   const draftToggle = document.getElementById("draftToggle");
@@ -257,20 +258,36 @@
 
   // ---------- camera (infinite) ----------
   const cam = { x: 0, y: 0, zoom: 16 };
+  // 実表示サイズ (CSS px)。innerWidth/innerHeight だとスマホの URL バー領域分だけ
+  // バッキングストアと表示サイズが食い違い、縦方向に引き伸ばされて見えるため、
+  // canvas の実表示サイズを基準にする (正方形維持)。
+  function viewW() {
+    return canvas.clientWidth || window.innerWidth;
+  }
+  function viewH() {
+    return canvas.clientHeight || window.innerHeight;
+  }
   function resize() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = Math.floor(innerWidth * dpr);
-    canvas.height = Math.floor(innerHeight * dpr);
+    canvas.width = Math.floor(viewW() * dpr);
+    canvas.height = Math.floor(viewH() * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   window.addEventListener("resize", resize);
   window.addEventListener("resize", scheduleViewportFetch);
+  try {
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", resize);
+      window.visualViewport.addEventListener("resize", scheduleViewportFetch);
+    }
+  } catch {}
+  window.addEventListener("orientationchange", resize);
   resize();
 
   function centerOn(cx, cy, zoom) {
     if (zoom) cam.zoom = zoom;
-    cam.x = innerWidth / 2 - cx * cam.zoom;
-    cam.y = innerHeight / 2 - cy * cam.zoom;
+    cam.x = viewW() / 2 - cx * cam.zoom;
+    cam.y = viewH() / 2 - cy * cam.zoom;
   }
   centerOn(0, 0, 16);
 
@@ -306,8 +323,8 @@
     return {
       minX: clamp(Math.floor(-cam.x / cam.zoom) - fetchMargin),
       minY: clamp(Math.floor(-cam.y / cam.zoom) - fetchMargin),
-      maxX: clamp(Math.ceil((innerWidth - cam.x) / cam.zoom) + fetchMargin),
-      maxY: clamp(Math.ceil((innerHeight - cam.y) / cam.zoom) + fetchMargin),
+      maxX: clamp(Math.ceil((viewW() - cam.x) / cam.zoom) + fetchMargin),
+      maxY: clamp(Math.ceil((viewH() - cam.y) / cam.zoom) + fetchMargin),
     };
   }
 
@@ -374,8 +391,8 @@
 
   async function goToArt() {
     // 近くの他プレイヤー優先、なければ全体の絵の中心へ
-    const cx = (-cam.x + innerWidth / 2) / cam.zoom;
-    const cy = (-cam.y + innerHeight / 2) / cam.zoom;
+    const cx = (-cam.x + viewW() / 2) / cam.zoom;
+    const cy = (-cam.y + viewH() / 2) / cam.zoom;
     let best = null, bestD = Infinity;
     for (const cur of remotes.values()) {
       if (cur.x == null || cur.y == null) continue;
@@ -540,13 +557,14 @@
       if (cacheVal) cacheVal.textContent = String(pixels.size);
     }
     isDark = document.documentElement.dataset.theme === "dark";
+    const vw = viewW(), vh = viewH();
     ctx.fillStyle = isDark ? "#15151b" : background;
-    ctx.fillRect(0, 0, innerWidth, innerHeight);
+    ctx.fillRect(0, 0, vw, vh);
 
     const x0 = Math.floor(-cam.x / cam.zoom) - 1;
-    const x1 = Math.ceil((innerWidth - cam.x) / cam.zoom) + 1;
+    const x1 = Math.ceil((vw - cam.x) / cam.zoom) + 1;
     const y0 = Math.floor(-cam.y / cam.zoom) - 1;
-    const y1 = Math.ceil((innerHeight - cam.y) / cam.zoom) + 1;
+    const y1 = Math.ceil((vh - cam.y) / cam.zoom) + 1;
 
     // 設計図 (自分専用・薄く表示)
     if (showDrafts && drafts.size > 0) {
@@ -619,13 +637,13 @@
       ctx.strokeStyle = "rgba(200,0,0,.35)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      if (origin.x >= 0 && origin.x <= innerWidth) {
+      if (origin.x >= 0 && origin.x <= vw) {
         ctx.moveTo(origin.x, 0);
-        ctx.lineTo(origin.x, innerHeight);
+        ctx.lineTo(origin.x, vh);
       }
-      if (origin.y >= 0 && origin.y <= innerHeight) {
+      if (origin.y >= 0 && origin.y <= vh) {
         ctx.moveTo(0, origin.y);
-        ctx.lineTo(innerWidth, origin.y);
+        ctx.lineTo(vw, origin.y);
       }
       ctx.stroke();
     }
@@ -638,12 +656,12 @@
       for (let x = x0; x <= x1; x++) {
         const px = Math.round(cam.x + x * cam.zoom) + 0.5;
         ctx.moveTo(px, Math.max(0, cam.y + y0 * cam.zoom));
-        ctx.lineTo(px, Math.min(innerHeight, cam.y + (y1 + 1) * cam.zoom));
+        ctx.lineTo(px, Math.min(vh, cam.y + (y1 + 1) * cam.zoom));
       }
       for (let y = y0; y <= y1; y++) {
         const py = Math.round(cam.y + y * cam.zoom) + 0.5;
         ctx.moveTo(Math.max(0, cam.x + x0 * cam.zoom), py);
-        ctx.lineTo(Math.min(innerWidth, cam.x + (x1 + 1) * cam.zoom), py);
+        ctx.lineTo(Math.min(vw, cam.x + (x1 + 1) * cam.zoom), py);
       }
       ctx.stroke();
     }
@@ -664,7 +682,7 @@
         const label = cur.name || t("anon");
         ctx.font = "12px system-ui, sans-serif";
         const w = ctx.measureText(label).width + 12;
-        const lx = Math.min(Math.max(4, sx), innerWidth - w - 4);
+        const lx = Math.min(Math.max(4, sx), vw - w - 4);
         const ly = Math.max(30, sy - 24);
         ctx.fillStyle = cur.color || "#22aa66";
         ctx.fillRect(lx, ly, w, 18);
@@ -693,6 +711,25 @@
         ctx.strokeRect(sx + 1, sy + 1, cam.zoom - 2, cam.zoom - 2);
         ctx.restore();
       }
+    }
+
+    // タッチのホールド中は指で隠れても分かるよう外枠と座標ラベルで強調
+    if (touchHold) {
+      const hx = cam.x + touchHold.x * cam.zoom, hy = cam.y + touchHold.y * cam.zoom;
+      ctx.save();
+      ctx.strokeStyle = "#0aa0ff";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(hx - 5, hy - 5, cam.zoom + 10, cam.zoom + 10);
+      ctx.restore();
+      const holdLabel = formatCoords(touchHold);
+      ctx.font = "13px system-ui, sans-serif";
+      const tw = ctx.measureText(holdLabel).width + 16;
+      const tx = Math.min(Math.max(4, hx + cam.zoom / 2 - tw / 2), vw - tw - 4);
+      const ty = Math.max(30, hy - 36);
+      ctx.fillStyle = "rgba(10, 160, 255, .95)";
+      ctx.fillRect(tx, ty, tw, 22);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(holdLabel, tx + 8, ty + 15);
     }
 
     updateCooldownUI();
@@ -774,7 +811,7 @@
 
   function refreshUserList() {
     // 色と名前の一覧 (座標は出さない)
-    const items = [{ uid: myUid, name: myName, color: myColor, country: myCountry, self: true }];
+    const items = [{ uid: myUid, name: myName, color: myColor, country: myShowCountry ? myCountry : null, self: true }];
     for (const cur of remotes.values()) {
       items.push({ uid: cur.uid || "?", name: cur.name || t("anon"), color: cur.color || "#22aa66", country: cur.country });
     }
@@ -788,7 +825,13 @@
       li.appendChild(dot);
       const label = document.createElement("span");
       label.className = "uname";
-      label.textContent = `${flagEmoji(u.country)}${flagEmoji(u.country) ? " " : ""}${u.name} #${u.uid || "?"}`;
+      label.textContent = "";
+      const flagEl = makeFlagEl(u.country);
+      if (flagEl) {
+        label.appendChild(flagEl);
+        label.appendChild(document.createTextNode(" "));
+      }
+      label.appendChild(document.createTextNode(`${u.name} #${u.uid || "?"}`));
       li.appendChild(label);
       if (u.self) {
         const me = document.createElement("span");
@@ -844,6 +887,12 @@
       refreshInkUI();
       refreshColorUI();
       refreshUserList();
+      try {
+        if (sessionStorage.getItem("wd_merged")) {
+          sessionStorage.removeItem("wd_merged");
+          toast(t("mergedToast"));
+        }
+      } catch {}
       try {
         if (showZone && myLevel < trustedLevel && !sessionStorage.getItem("wd_zoneToast")) {
           sessionStorage.setItem("wd_zoneToast", "1");
@@ -1020,7 +1069,12 @@
       dot.className = "dot";
       dot.style.background = item.userColor || "#22aa66";
       who.appendChild(dot);
-      who.appendChild(document.createTextNode(`${flagEmoji(item.country)}${flagEmoji(item.country) ? " " : ""}${item.name} #${item.uid || "?"}`));
+      const hFlag = makeFlagEl(item.country);
+      if (hFlag) {
+        who.appendChild(hFlag);
+        who.appendChild(document.createTextNode(" "));
+      }
+      who.appendChild(document.createTextNode(`${item.name} #${item.uid || "?"}`));
       main.appendChild(who);
       const time = document.createElement("span");
       time.className = "htime";
@@ -1220,6 +1274,11 @@
 
   // ---------- input (left: paint on click + pan, right/middle: pan only) ----------
   let panning = false, moved = 0, lastPX = 0, lastPY = 0, downPos = null, downButton = 0;
+  // タップ確定は押下位置 (down) を使う。離す位置 (up) だと指のぶれ分ずれるため。
+  let downCell = null;
+  // タッチのホールド中 (移動なし) のプレビューセル。指で隠れても分かるよう強調表示する。
+  // 移動してパンになったら null にして配置キャンセル。
+  let touchHold = null;
   // 指タップはぶれやすいのでタップ判定の遊びを大きめに (マウスは精密なまま)
   let tapSlop = 6;
   const pointers = new Map();
@@ -1227,15 +1286,28 @@
 
   // 右クリックメニューを出さない (右ドラッグ移動のため)
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  // 長押しでの選択・ドラッグ・コールアウト抑止 (iOS Safari 対策)
+  canvas.addEventListener("selectstart", (e) => e.preventDefault());
+  canvas.addEventListener("dragstart", (e) => e.preventDefault());
 
   canvas.addEventListener("pointerdown", (e) => {
     if (e.button === 1) e.preventDefault(); // 中クリックの自動スクロール抑止
-    canvas.setPointerCapture(e.pointerId);
+    // タッチの長押し選択・ダブルタップ拡大の抑止
+    if (e.pointerType === "touch") {
+      try {
+        e.preventDefault();
+      } catch {}
+    }
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {}
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
       panning = false;
+      downCell = null;
+      touchHold = null;
       return;
     }
     panning = true;
@@ -1246,7 +1318,11 @@
     lastPY = e.clientY;
     downPos = { x: e.clientX, y: e.clientY };
     // タップのみ（移動なし）でも位置を他者に伝える。送信抑制は sendCursor 側で行う
-    const downCell = screenToCell(e.clientX, e.clientY);
+    downCell = screenToCell(e.clientX, e.clientY);
+    // タッチは move が来ないタップもあるため、押下時点でプレビュー・座標を更新
+    hover = downCell;
+    if (e.pointerType === "touch") touchHold = downCell;
+    coordsEl.textContent = formatCoords(downCell);
     sendCursor(downCell.x, downCell.y);
   });
   canvas.addEventListener("pointermove", (e) => {
@@ -1259,29 +1335,42 @@
         zoomAt(cx, cy, dist / pinchDist);
       }
       pinchDist = dist;
+      touchHold = null;
       return;
     }
-    const cell = screenToCell(e.clientX, e.clientY);
-    hover = cell;
-    coordsEl.textContent = formatCoords(cell);
-    sendCursor(cell.x, cell.y);
     if (panning) {
       const dx = e.clientX - lastPX, dy = e.clientY - lastPY;
       moved += Math.abs(dx) + Math.abs(dy);
       if (moved > tapSlop) {
         cam.x += dx;
         cam.y += dy;
+        // 移動したのでホールド解除。離しても配置しない (パンとして扱う)
+        touchHold = null;
       }
       lastPX = e.clientX;
       lastPY = e.clientY;
     }
+    if (e.pointerType === "touch" && touchHold) {
+      // ホールド中は押下セルに固定 (指のぶれでプレビューが暴れない)
+      hover = touchHold;
+      coordsEl.textContent = formatCoords(touchHold);
+      sendCursor(touchHold.x, touchHold.y);
+      return;
+    }
+    const cell = screenToCell(e.clientX, e.clientY);
+    hover = cell;
+    coordsEl.textContent = formatCoords(cell);
+    sendCursor(cell.x, cell.y);
   });
   canvas.addEventListener("pointerup", (e) => {
     pointers.delete(e.pointerId);
     if (pointers.size < 2) pinchDist = 0;
     if (panning && pointers.size === 0) {
-      if (moved <= tapSlop && downPos && downButton === 0) {
-        const cell = screenToCell(e.clientX, e.clientY);
+      if (moved <= tapSlop && downPos && downCell && downButton === 0) {
+        // 押下位置で確定 (指のぶれ・離す位置のずれを無視)
+        const cell = downCell;
+        hover = cell;
+        coordsEl.textContent = formatCoords(cell);
         // タップ操作の優先度: 履歴 > スポイト > 設計図 > 配置
         if (historyMode) showHistory(cell.x, cell.y);
         else if (eyedropMode) pickColor(cell.x, cell.y);
@@ -1290,6 +1379,10 @@
       }
       panning = false;
     }
+    downCell = null;
+    touchHold = null;
+    // タッチは指を離したらプレビューを消す (残像防止)
+    if (e.pointerType === "touch") hover = null;
     if (pointers.size === 0) {
       scheduleViewportFetch(); // パン・ピンチ確定後に視野を再取得
       scheduleSaveCamera();
@@ -1298,6 +1391,9 @@
   canvas.addEventListener("pointercancel", (e) => {
     pointers.delete(e.pointerId);
     panning = false;
+    downCell = null;
+    touchHold = null;
+    if (e.pointerType === "touch") hover = null;
   });
   canvas.addEventListener("pointerleave", () => {
     hover = null;
@@ -1765,9 +1861,33 @@
     };
   });
   onlineEl.onclick = () => userPanel.classList.toggle("hidden");
-  function flagEmoji(cc) {
+  function flagCode(cc) {
     if (typeof cc !== "string" || !/^[A-Za-z]{2}$/.test(cc)) return "";
-    return String.fromCodePoint(...[...cc.toUpperCase()].map((c) => 127397 + c.charCodeAt(0)));
+    const up = cc.toUpperCase();
+    if (up === "XX") return "";
+    return up;
+  }
+  // 国旗は全機種で画像表示 (絵文字は Windows 等で旗にならないため使わない)
+  function makeFlagEl(cc) {
+    const code = flagCode(cc);
+    if (!code) return null;
+    const img = document.createElement("img");
+    img.className = "flag";
+    img.alt = code;
+    img.title = code;
+    img.loading = "lazy";
+    img.draggable = false;
+    const low = code.toLowerCase();
+    img.src = `https://flagcdn.com/w20/${low}.png`;
+    img.srcset = `https://flagcdn.com/w40/${low}.png 2x`;
+    img.onerror = () => {
+      // 画像が取れない場合も絵文字ではなく国コード表記にする (全機種で同じ見た目)
+      const fallback = document.createElement("span");
+      fallback.className = "flagFallback";
+      fallback.textContent = code;
+      img.replaceWith(fallback);
+    };
+    return img;
   }
   async function saveShowCountry() {
     const show = countryChk.checked;
@@ -1846,14 +1966,25 @@
       const res = await fetch("/api/account/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: loginCode.value, password: loginPassword.value }),
+        body: JSON.stringify({ code: loginCode.value, password: loginPassword.value, fromToken: token }),
       });
       const data = await res.json();
       if (!data.ok) {
         toast(t(data.error === "locked" ? "lockedToast" : "badLoginToast"));
         return;
       }
+      // 統合時はリロード後に完了トーストを出す
+      try {
+        if (data.merged) sessionStorage.setItem("wd_merged", "1");
+      } catch {}
       localStorage.setItem("wd_token", data.token);
+      // 生き残りアカウントの名前・色をこの端末にも反映 (古い端末別名での上書き防止)
+      try {
+        if (data.profile) {
+          if (data.profile.name) localStorage.setItem("wd_name", data.profile.name);
+          if (data.profile.color) localStorage.setItem("wd_userColor", data.profile.color);
+        }
+      } catch {}
       location.reload();
     } catch {
       toast(t("commError"));
@@ -1906,13 +2037,24 @@
       showHistory(hx, hy);
     }
   };
-  settingsBtn.onclick = () => settingsPanel.classList.toggle("hidden");
+  settingsBtn.onclick = () => {
+    const opening = settingsPanel.classList.contains("hidden");
+    settingsPanel.classList.toggle("hidden");
+    if (opening) {
+      // 横幅が狭いとトップバーが折り返してパネルと被るため、ボタンの直下に出す
+      try {
+        const r = settingsBtn.getBoundingClientRect();
+        settingsPanel.style.top = `${Math.max(8, r.bottom + 8)}px`;
+      } catch {}
+    }
+  };
+  if (settingsClose) settingsClose.onclick = () => settingsPanel.classList.add("hidden");
   profileSave.onclick = saveProfile;
   profileName.addEventListener("keydown", (e) => {
     if (e.key === "Enter") saveProfile();
   });
-  document.getElementById("zoomIn").onclick = () => { zoomAt(innerWidth / 2, innerHeight / 2, 1.4); scheduleViewportFetch(); scheduleSaveCamera(); };
-  document.getElementById("zoomOut").onclick = () => { zoomAt(innerWidth / 2, innerHeight / 2, 1 / 1.4); scheduleViewportFetch(); scheduleSaveCamera(); };
+  document.getElementById("zoomIn").onclick = () => { zoomAt(viewW() / 2, viewH() / 2, 1.4); scheduleViewportFetch(); scheduleSaveCamera(); };
+  document.getElementById("zoomOut").onclick = () => { zoomAt(viewW() / 2, viewH() / 2, 1 / 1.4); scheduleViewportFetch(); scheduleSaveCamera(); };
   document.getElementById("zoomOrigin").onclick = goOrigin;
   document.getElementById("zoomOrigin").onclick = goOrigin;
 

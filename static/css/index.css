@@ -35,9 +35,11 @@
   --chip: #8a6d00;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--page); font-family: system-ui, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; color: var(--chrome-fg); }
-#board { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; cursor: crosshair; background: var(--board); }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--page); font-family: system-ui, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; color: var(--chrome-fg); -webkit-touch-callout: none; }
+#board { position: fixed; inset: 0; width: 100vw; height: 100vh; width: 100dvw; height: 100dvh; display: block; touch-action: none; cursor: crosshair; background: var(--board); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 button, select, input { touch-action: manipulation; }
+#topbar, #toolbar, #profileBar, #settingsPanel, #userPanel, #historyPanel, #accountPanel, #colorPanel, #toast-wrap, #undoBtn { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#profileBar input, #accountPanel input, #colorPanel input, .accCode { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
 
 #topbar {
   position: fixed; top: 10px; left: 10px; right: 10px;
@@ -113,13 +115,16 @@ button.pill.clickable { cursor: pointer; font: inherit; }
 #userList, #historyList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 #userList li, #historyList li { display: flex; align-items: center; gap: 8px; }
 #userList .dot, .hwho .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); flex: none; display: inline-block; }
-#userList .uname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#userList .uname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.flag { width: 18px; height: auto; border-radius: 3px; flex: none; vertical-align: middle; }
+.flagFallback { font-size: 11px; font-weight: 700; color: var(--hint); border: 1px solid var(--border); border-radius: 3px; padding: 0 3px; flex: none; }
+.hwho .flag { width: 16px; }
 .selfTag { font-size: 11px; color: var(--hint); }
 .blockBtn {
   border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg);
   border-radius: 8px; padding: 3px 8px; font-size: 11px; cursor: pointer; flex: none;
 }
-#historyClose, #accountClose, #colorClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
+#historyClose, #accountClose, #colorClose, #settingsClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
 
 #undoBtn {
   position: fixed; right: 10px; bottom: 178px; z-index: 25;

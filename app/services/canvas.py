@@ -441,6 +441,102 @@ async def doProfile(
     }
 
 
+def totalEarnedFor(level: int, xp: int) -> int:
+    """そのアカウントが今まで稼いだ総経験値 (レベル換算前)。"""
+    total = max(0, int(xp or 0))
+    for lv in range(1, users.clampLevel(level)):
+        total += users.xpNeededForLevel(lv)
+    return total
+
+
+def levelXpFromTotal(total: int) -> tuple[int, int]:
+    """総経験値から (level, xp) を再計算。"""
+    total = max(0, int(total or 0))
+    level = 1
+    # 安全弁付き (無限ループ防止)
+    for _ in range(100000):
+        need = users.xpNeededForLevel(level)
+        if total < need:
+            break
+        total -= need
+        level += 1
+    return level, total
+
+
+async def mergeAccounts(
+    db: aiosqlite.Connection, fromToken: str, target: dict
+) -> tuple[dict, bool]:
+    """引っ越しログイン時の統合。現端末のアカウント(fromToken)を引っ越し先に統合する。
+
+    - 経験値は合算してレベル再計算、特殊インクは合算 (両方のデータが合体)
+    - 履歴・ピクセルは両方とも残し、帰属 (uid/by) を引っ越し先 uid に付け替え
+    - 名前・色は引っ越し先を維持。ただし引っ越し先が初期名のままで
+      引っ越し元が名前を変更済みなら、引っ越し元の名前・色を引き継ぐ
+    - 国は引っ越し先になければ引っ越し元のものを引き継ぐ
+    - 表示設定・引っ越しコードは引っ越し先を維持
+    - 統合後は元アカウント行を削除
+    """
+    srcToken = (fromToken or "").strip()[:64]
+    dstToken = target.get("token", "")
+    if not srcToken or not dstToken or srcToken == dstToken:
+        return target, False
+    src = await users.fetchUser(db, srcToken)
+    if src is None:
+        return target, False
+    if src.get("uid") == target.get("uid"):
+        # 万が一 uid が同じでもトークンが違えば旧行だけ消す
+        await db.execute("DELETE FROM users WHERE token = ?", (srcToken,))
+        await db.commit()
+        presence.presence.pop(srcToken, None)
+        return target, False
+
+    total = totalEarnedFor(target.get("level", 1), target.get("xp", 0)) + totalEarnedFor(
+        src.get("level", 1), src.get("xp", 0)
+    )
+    newLevel, newXp = levelXpFromTotal(total)
+    mergedInv: dict[str, int] = {}
+    for k in cfg.specialInks:
+        mergedInv[k] = int(target.get("inventory", {}).get(k, 0)) + int(
+            src.get("inventory", {}).get(k, 0)
+        )
+    newCooldown = max(
+        float(target.get("cooldownUntil", 0.0) or 0.0),
+        float(src.get("cooldownUntil", 0.0) or 0.0),
+    )
+    newCountry = target.get("country") or src.get("country")
+    # 名前・色: 引っ越し先が初期名のままで引っ越し元が変更済みなら引っ越し元を採用
+    newName = target.get("name", "ななし")
+    newColor = target.get("color", "#22aa66")
+    defaultNames = set(users.ANON_NAMES.values())
+    srcName = (src.get("name") or "").strip()
+    if (newName in defaultNames) and srcName and (srcName not in defaultNames):
+        newName = users.cleanName(srcName)
+        newColor = users.cleanColor(src.get("color") or "", newColor)
+    await db.execute(
+        "UPDATE users SET inventory = ?, cooldownUntil = ?, level = ?, xp = ?,"
+        " country = ?, name = ?, color = ? WHERE token = ?",
+        (
+            json.dumps(mergedInv, ensure_ascii=False),
+            newCooldown,
+            newLevel,
+            newXp,
+            newCountry,
+            newName,
+            newColor,
+            dstToken,
+        ),
+    )
+    # 帰属の付け替え (匿名化させないため)
+    await db.execute("UPDATE history SET uid = ? WHERE uid = ?", (target["uid"], src["uid"]))
+    await db.execute("UPDATE pixels SET by = ? WHERE by = ?", (target["uid"], src["uid"]))
+    await db.execute("DELETE FROM users WHERE token = ?", (srcToken,))
+    await db.commit()
+    presence.presence.pop(srcToken, None)
+    refreshed = await users.fetchUser(db, dstToken)
+    assert refreshed is not None  # noqa: S101 — 直前にUPDATEした行のため存在保証
+    return refreshed, True
+
+
 def userPayload(user: dict, token: str, now: float | None = None) -> dict:
     now = time.time() if now is None else now
     level = users.clampLevel(user.get("level", 1))

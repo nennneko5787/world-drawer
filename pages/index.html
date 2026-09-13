@@ -54,6 +54,7 @@
     </header>
 
     <div id="settingsPanel" class="hidden">
+        <div class="panelTitle"><span data-i18n="settingsTitle">設定</span><button id="settingsClose" data-i18n-title="close" title="閉じる"><i class="bi bi-x-lg"></i></button></div>
         <label class="setRow"><input type="checkbox" id="gridToggle" checked> <span data-i18n="setGrid">グリッド表示</span></label>
         <label class="setRow"><input type="checkbox" id="cursorToggle" checked> <span data-i18n="setCursors">他のカーソル表示</span></label>
         <label class="setRow"><input type="checkbox" id="draftToggle" checked> <span data-i18n="setDrafts">設計図表示</span></label>
@@ -114,6 +115,7 @@
         </div>
         <div class="accSection">
             <div class="accLabel" data-i18n="accInLabel">別端末のアカウントでログイン</div>
+            <div class="accLabel" data-i18n="accMergeNote">ログインすると、この端末のレベル・インク・履歴は引っ越し先に統合されます</div>
             <input id="loginCode" data-i18n-ph="loginCodePh" placeholder="引っ越しコード (XXXX-XXXX)" autocomplete="off">
             <input id="loginPassword" type="password" data-i18n-ph="loginPwPh" placeholder="パスワード" autocomplete="current-password">
             <button id="loginBtn" data-i18n="loginBtn">ログイン</button>

@@ -80,13 +80,13 @@
         <p data-i18n="h_levelP">配置ごとに経験値を獲得し、レベルが上がるとクールダウンが短くなります。必要経験値は序盤は軽く、後半はやや重くなります（Lv1→2は3マス、Lv4→5は24マス）。</p>
         <table>
             <tr><th data-i18n="h_thL">レベル</th><th data-i18n="h_thC">クールダウン</th><th data-i18n="h_thN">次レベルまで</th></tr>
-            <tr><td>Lv 1</td><td>10.0<span data-i18n="h_sec">秒</span></td><td>3<span data-i18n="h_cells">マス</span></td></tr>
-            <tr><td>Lv 2</td><td>8.9<span data-i18n="h_sec">秒</span></td><td>8<span data-i18n="h_cells">マス</span></td></tr>
-            <tr><td>Lv 5</td><td><span data-i18n="h_about">約</span>6.4<span data-i18n="h_sec">秒</span></td><td>33<span data-i18n="h_cells">マス</span></td></tr>
-            <tr><td>Lv 10</td><td><span data-i18n="h_about">約</span>3.9<span data-i18n="h_sec">秒</span></td><td>94<span data-i18n="h_cells">マス</span></td></tr>
-            <tr><td>Lv 20</td><td><span data-i18n="h_about">約</span>2.1<span data-i18n="h_sec">秒</span></td><td>268<span data-i18n="h_cells">マス</span></td></tr>
-            <tr><td>Lv 30</td><td><span data-i18n="h_about">約</span>1.6<span data-i18n="h_sec">秒</span></td><td>492<span data-i18n="h_cells">マス</span></td></tr>
-            <tr><td>Lv 40〜</td><td>1.5<span data-i18n="h_sec">秒</span>（<span data-i18n="h_lower">下限</span>）</td><td>—</td></tr>
+            <tr><td>Lv 1</td><td>5.0<span data-i18n="h_sec">秒</span></td><td>3<span data-i18n="h_cells">マス</span></td></tr>
+            <tr><td>Lv 2</td><td>4.5<span data-i18n="h_sec">秒</span></td><td>8<span data-i18n="h_cells">マス</span></td></tr>
+            <tr><td>Lv 5</td><td><span data-i18n="h_about">約</span>3.3<span data-i18n="h_sec">秒</span></td><td>33<span data-i18n="h_cells">マス</span></td></tr>
+            <tr><td>Lv 10</td><td><span data-i18n="h_about">約</span>2.1<span data-i18n="h_sec">秒</span></td><td>94<span data-i18n="h_cells">マス</span></td></tr>
+            <tr><td>Lv 20</td><td><span data-i18n="h_about">約</span>1.3<span data-i18n="h_sec">秒</span></td><td>268<span data-i18n="h_cells">マス</span></td></tr>
+            <tr><td>Lv 30</td><td><span data-i18n="h_about">約</span>1.1<span data-i18n="h_sec">秒</span></td><td>492<span data-i18n="h_cells">マス</span></td></tr>
+            <tr><td>Lv 40〜</td><td>1.0<span data-i18n="h_sec">秒</span>（<span data-i18n="h_lower">下限</span>）</td><td>—</td></tr>
         </table>
         <p data-i18n="h_undoP">配置直後の3秒以内なら取り消しボタンで元に戻せます（使用した特殊インクも返却）。</p>
 
@@ -98,16 +98,17 @@
 
         <h2 data-i18n="h_histH">履歴と非表示</h2>
         <ul>
-            <li data-i18n="h_hist1">履歴モードでマスをクリックすると、誰が・どの色・どのインクで・いつ置いたかが見られます</li>
-            <li data-i18n="h_hist2">各ユーザーには不変の固定ID（#xxxxxx）が振られます</li>
-            <li data-i18n="h_hist3">オンライン一覧や履歴からID単位で非表示にできます（その人のインクとカーソルが隠れます。設定は端末内のみ）</li>
-            <li data-i18n="h_hist4">オンライン一覧に座標は表示しません</li>
-            <li data-i18n="h_histFlag">国旗を設定しているユーザーは一覧と履歴に国旗が出ます</li>
+            <li data-i18n="h_hist1">履歴ツールでマスをタップすると、そのマスの履歴（誰が・どの色・どのインクで・いつ置いたか）が見られます</li>
+            <li data-i18n="h_hist2">各ユーザーには不変の固定ID（#xxxxxx）が振られ、履歴の誰が・オンライン一覧の名前に表示されます</li>
+            <li data-i18n="h_hist3">オンライン一覧のボタンや各マスの履歴から、ID単位で非表示にできます（その人の塗りとカーソルが隠れます。設定は端末内のみ）</li>
+            <li data-i18n="h_hist4">オンライン一覧は名前・色・国旗のみで、座標は表示しません</li>
+            <li data-i18n="h_histFlag">国が自動判定できたユーザーはオンライン一覧と履歴に国旗が出ます</li>
         </ul>
 
         <h2 data-i18n="h_accH">アカウント引っ越し</h2>
-        <p data-i18n="h_accP">人物ボタンから引っ越しコード＋パスワードを発行すると、別端末で同じアカウントにログインできます（コードの再発行で旧コードは無効化）。</p>
-        <p data-i18n="h_accFlag">国は最終接続地から自動設定されます（アカウントパネルで表示/非表示のみ切替可）。規定名は作成時の言語で固定され、全言語圏にそのまま表示されます</p>
+        <p data-i18n="h_accP">人物ボタンから引っ越しコード＋パスワードを発行すると、別端末で同じアカウントにログインできます（コードの再発行で旧コードは無効化）。ログイン時にこの端末のレベル・インクは引っ越し先と合算され、両方の配置履歴は残って引っ越し先のIDにまとめられます。名前・色は引っ越し先のものを使います（引っ越し先が初期名のままなら引っ越し元の名前・色を引き継ぎます）。元の端末アカウントは削除されます。</p>
+        <p data-i18n="h_accFlag">国は最終接続地から自動設定されます（手動設定は不可。アカウントパネルで表示/非表示のみ切替可）</p>
+        <p data-i18n="h_accName">初期名は作成時の言語で固定され、全言語圏にそのまま表示されます</p>
 
         <h2 data-i18n="h_themeH">テーマ</h2>
         <p data-i18n="h_themeP">設定からライト / ダーク / 自動（端末設定に連動）を切り替えられます。グリッド・原点軸・配置可能範囲の表示/非表示も設定から切り替えられます。</p>

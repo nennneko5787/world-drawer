@@ -34,6 +34,8 @@ class AccountIssueBody(StrictModel):
 class AccountLoginBody(StrictModel):
     code: str = Field(default="")
     password: str = Field(default="")
+    # 引っ越し元端末の現トークン。指定時は統合 (マージ) する。空なら切替のみ。
+    fromToken: str = Field(default="")
 
 
 class UndoBody(StrictModel):
