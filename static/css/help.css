@@ -1,0 +1,62 @@
+/* world-drawer ヘルプ専用 (index.css とは独立。キャンバス用設定の影響を受けない) */
+:root {
+  color-scheme: light;
+  --page: #ffffff;
+  --fg: #111114;
+  --muted: #666666;
+  --border: rgba(0, 0, 0, .12);
+  --accent-bg: #111111;
+  --accent-fg: #ffffff;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0b0b0f;
+  --fg: #f0f0f2;
+  --muted: #a2a2b4;
+  --border: rgba(255, 255, 255, .16);
+  --accent-bg: #f0f0f2;
+  --accent-fg: #111111;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  height: auto;
+  overflow: auto;
+  background: var(--page);
+}
+body {
+  color: var(--fg);
+  font-family: system-ui, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+}
+.helpWrap { max-width: 720px; margin: 24px auto 64px; padding: 0 16px; }
+.helpWrap h1 { font-size: 22px; }
+.helpWrap h2 {
+  font-size: 17px;
+  margin-top: 28px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+.helpWrap p, .helpWrap li { font-size: 14px; line-height: 1.8; }
+.helpWrap table { border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+.helpWrap th, .helpWrap td {
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  text-align: right;
+}
+.helpWrap th:first-child, .helpWrap td:first-child { text-align: left; }
+.backBtn {
+  display: inline-block;
+  margin-top: 8px;
+  background: var(--accent-bg);
+  color: var(--accent-fg);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+  text-decoration: none;
+}
+@media (max-width: 700px) {
+  .helpWrap { margin: 16px auto 48px; }
+  .helpWrap h1 { font-size: 19px; }
+  .helpWrap table { display: block; overflow-x: auto; }
+}

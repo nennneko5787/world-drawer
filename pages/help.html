@@ -1,0 +1,94 @@
+<!-- The world drawer - help -->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="h_title">ヘルプ - world-drawer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/static/css/help.css">
+    <script src="/static/js/theme.js"></script>
+    <script src="/static/js/i18n.js" defer></script>
+    <style>
+        .langRow { margin: 8px 0 0; font-size: 13px; }
+        .langRow select { font-size: 13px; padding: 4px 6px; border-radius: 8px; }
+    </style>
+</head>
+<body class="help">
+    <main class="helpWrap">
+        <h1><i class="bi bi-globe"></i> <span data-i18n="h_h1">world-drawer ヘルプ</span></h1>
+        <p><a class="backBtn" href="/" data-i18n="h_back">キャンバスに戻る</a></p>
+        <p class="langRow"><span data-i18n="setLang">言語</span>:
+            <select id="langSel" data-langsel>
+                <option value="ja">日本語</option>
+                <option value="en">English</option>
+                <option value="ko">한국어</option>
+                <option value="zh-CN">简体中文</option>
+                <option value="zh-TW">繁體中文</option>
+            </select>
+        </p>
+
+        <h2 data-i18n="h_basic">基本操作</h2>
+        <ul>
+            <li data-i18n="h_b1">左クリック / タップで1マス配置（塗る・消す・履歴・設計図はツールで切替）</li>
+            <li data-i18n="h_b2">ドラッグ（左・右・中ボタン共通）で移動、ホイール / ピンチでズーム</li>
+            <li data-i18n="h_b3">トップバーの座標はカーソル位置のキャンバス座標です</li>
+            <li data-i18n="h_b4">パレットの色はタップで選択、選択済みをもう一度押す（PCはダブルクリック）と詳細編集できます（端末に保存）</li>
+            <li data-i18n="h_b5">ツールバー上部のハンドルでツールバーを折りたたみ、描画領域を広げられます（設定は端末に保存）</li>
+            <li data-i18n="h_b6">スポイトで描かれたマスの色とインクを取得できます（虹色は取得時の表示色。インク未所持は色のみ取得。取得後は塗るツールに戻り、設計図モードとは併用可）</li>
+            <li data-i18n="h_b7">指でのタップは多少のぶれを許容します。ドラッグ（スライド）で移動、ピンチでズームです</li>
+            <li data-i18n="h_b8">自分のカーソルの送信頻度は設定から変えられます（ひかえめ / 標準 / なめらか / とてもなめらか / 超なめらか）。10秒動かさないと他者から見えなくなります</li>
+            <li data-i18n="h_b9">再訪しても前回の表示位置に戻ります</li>
+        </ul>
+
+        <h2 data-i18n="h_ink">インク</h2>
+        <ul>
+            <li data-i18n="h_i1">通常：無制限。色指定どおりに塗ります</li>
+            <li data-i18n="h_i2">発光：光って見えます（ダークモードでより強く輝きます）</li>
+            <li data-i18n="h_i3">虹色：色指定なしで虹色に塗ります</li>
+            <li data-i18n="h_i4">ゴースト：半透明に塗ります</li>
+            <li data-i18n="h_i5">配置ごとに30%の確率で特殊インクを1〜4マス分獲得します</li>
+        </ul>
+
+        <h2 data-i18n="h_level">レベルとクールダウン</h2>
+        <p data-i18n="h_levelP">配置ごとに経験値を獲得し、レベルが上がるとクールダウンが短くなります。必要経験値は序盤は軽く、後半はやや重くなります（Lv1→2は3マス、Lv4→5は24マス）。</p>
+        <table>
+            <tr><th data-i18n="h_thL">レベル</th><th data-i18n="h_thC">クールダウン</th><th data-i18n="h_thN">次レベルまで</th></tr>
+            <tr><td>Lv 1</td><td>10.0<span data-i18n="h_sec">秒</span></td><td>3<span data-i18n="h_cells">マス</span></td></tr>
+            <tr><td>Lv 2</td><td>9.3<span data-i18n="h_sec">秒</span></td><td>8<span data-i18n="h_cells">マス</span></td></tr>
+            <tr><td>Lv 5</td><td><span data-i18n="h_about">約</span>7.5<span data-i18n="h_sec">秒</span></td><td>33<span data-i18n="h_cells">マス</span></td></tr>
+            <tr><td>Lv 10</td><td><span data-i18n="h_about">約</span>5.2<span data-i18n="h_sec">秒</span></td><td>94<span data-i18n="h_cells">マス</span></td></tr>
+            <tr><td>Lv 20〜</td><td><span data-i18n="h_about">約</span>2.5<span data-i18n="h_sec">秒</span>〜（<span data-i18n="h_lower">下限</span>1.5<span data-i18n="h_sec">秒</span>）</td><td>—</td></tr>
+        </table>
+        <p data-i18n="h_undoP">配置直後の3秒以内なら取り消しボタンで元に戻せます（使用した特殊インクも返却）。</p>
+
+        <h2 data-i18n="h_colorH">色の詳細指定</h2>
+        <p data-i18n="h_colorP">塗る色・カーソル色のボタンから詳細パネルを開き、16進数・RGB・HSV・HSLで直接指定できます。OS標準のカラーピッカーに貼り付けられないコードもここに貼れます。変更はリアルタイムに反映されます。</p>
+
+        <h2 data-i18n="h_draftH">設計図モード</h2>
+        <p data-i18n="h_draftP">建築の下書き用です。描いた内容は自分にだけ薄く表示され、サーバーには送信されません（クールダウン・経験値なし）。塗る・消すツールと組み合わせて描画・消去でき、ツールを切り替えてもモードは維持されます（履歴・スポイト中はそちらが優先）。設定から表示/非表示を切り替えられます。内容は端末に保存されます。</p>
+
+        <h2 data-i18n="h_histH">履歴と非表示</h2>
+        <ul>
+            <li data-i18n="h_hist1">履歴モードでマスをクリックすると、誰が・どの色・どのインクで・いつ置いたかが見られます</li>
+            <li data-i18n="h_hist2">各ユーザーには不変の固定ID（#xxxxxx）が振られます</li>
+            <li data-i18n="h_hist3">オンライン一覧や履歴からID単位で非表示にできます（その人のインクとカーソルが隠れます。設定は端末内のみ）</li>
+            <li data-i18n="h_hist4">オンライン一覧に座標は表示しません</li>
+        </ul>
+
+        <h2 data-i18n="h_accH">アカウント引っ越し</h2>
+        <p data-i18n="h_accP">人物ボタンから引っ越しコード＋パスワードを発行すると、別端末で同じアカウントにログインできます（コードの再発行で旧コードは無効化）。</p>
+
+        <h2 data-i18n="h_themeH">テーマ</h2>
+        <p data-i18n="h_themeP">設定からライト / ダーク / 自動（端末設定に連動）を切り替えられます。グリッド・原点軸・配置可能範囲の表示/非表示も設定から切り替えられます。</p>
+
+        <h2 data-i18n="h_abuseH">荒らし対策</h2>
+        <ul>
+            <li data-i18n="h_ab1">同一IPからの配置は全体で毎分30マスまでの共有上限があります（通常の家族利用には影響しません）</li>
+            <li data-i18n="h_ab2">Lv5未満は、既存の絵や他のプレイヤーの近く（1000マス以内）にのみ配置できます。配置できる範囲は黄色の破線で囲って表示され、カーソルが範囲外では赤い破線になります（表示は設定でオフ可）。入れない場所で置こうとすると「絵の近くへ移動」ボタンが出ます</li>
+            <li data-i18n="h_ab3">ログインの連続失敗は一時ロックされます</li>
+        </ul>
+    </main>
+</body>
+</html>
