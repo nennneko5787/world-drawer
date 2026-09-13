@@ -13,6 +13,7 @@ class PixelEvent(StrictModel):
     c: str
     t: str
     by: str | None = Field(default=None)
+    coats: int = Field(default=1)
 
 
 class PresenceItem(StrictModel):

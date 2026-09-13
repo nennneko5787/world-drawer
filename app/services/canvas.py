@@ -72,6 +72,87 @@ async def checkRadius(db: aiosqlite.Connection, token: str, level: int, x: int, 
     raise PlaceError({"ok": False, "error": "tooFar", "radius": cfg.placeRadius})
 
 
+MAX_GHOST_COATS = 5  # ゴーストの重ね塗り上限 (不透明度は 1-0.5/coats)
+
+
+def isHexColor(value: object) -> bool:
+    """#rrggbb 形式か (焼き付け土台の安全確認用)。"""
+    return isinstance(value, str) and users.HEX_COLOR.match(value) is not None
+
+
+def blendHex(over: str, under: str, alpha: float = 0.5) -> str:
+    """2色の16進カラーを alpha 合成する (ゴーストの混色用)。"""
+    o = over.lstrip("#")
+    u = under.lstrip("#")
+    mixed = (
+        round(int(o[i : i + 2], 16) * alpha + int(u[i : i + 2], 16) * (1.0 - alpha))
+        for i in (0, 2, 4)
+    )
+    return "#{:02x}{:02x}{:02x}".format(*mixed)
+
+
+def splitInkParts(value: str | None) -> set[str]:
+    """t 列の正準形 ("ghost+glow") を特殊インク集合に。通常・不明な型は空集合。"""
+    if not value or value == "normal":
+        return set()
+    parts = set(value.split("+"))
+    if not parts <= set(cfg.specialInks):
+        return set()
+    return parts
+
+
+def resolveGlowPlacement(color: str, existing: Any | None) -> tuple[str, str, int]:
+    """発光の配置内容 (発光色を置き換え、発光を付与。他インクは維持)。"""
+    if not users.HEX_COLOR.match(color or ""):
+        raise PlaceError({"ok": False, "error": "badColor"})
+    if existing is None:
+        return color.lower(), "glow", 1
+    _baseC, baseT, rawCoats = existing
+    parts = splitInkParts(baseT) | {"glow"}
+    coats = 1 if rawCoats is None else int(rawCoats)
+    return color.lower(), "+".join(sorted(parts)), coats
+
+
+def resolveRainbowPlacement(existing: Any | None) -> tuple[str, str, int]:
+    """虹色の配置内容 (表示はアニメ色相のため保存色は維持。新規は仮置き)。"""
+    if existing is None:
+        return "#ff0000", "rainbow", 1
+    baseC, baseT, rawCoats = existing
+    parts = splitInkParts(baseT) | {"rainbow"}
+    coats = 1 if rawCoats is None else int(rawCoats)
+    return baseC, "+".join(sorted(parts)), coats
+
+
+def resolveGhostPlacement(color: str, existing: Any | None) -> tuple[str, str, int]:
+    """ゴーストの配置内容。
+
+    - 空き: 半透明で置く (coats=1)
+    - 既存ゴースト: 色を置き換え、不透明度を深める (上限あり。焼き付け済みは再混合)
+    - 虹色表示中: 色は維持し、ゴースト効果のみ付与
+    - 静止色の土台 (通常・発光) に混ぜて焼き付ける (coats=0=不透明描画)
+    """
+    if not users.HEX_COLOR.match(color or ""):
+        raise PlaceError({"ok": False, "error": "badColor"})
+    chosen = color.lower()
+    if existing is None:
+        return chosen, "ghost", 1
+    baseC, baseT, rawCoats = existing
+    # coats=0 は混色済み。None (想定外) は1扱い。0 を or で潰さないよう注意
+    baseCoats = 1 if rawCoats is None else int(rawCoats)
+    parts = splitInkParts(baseT)
+    if "ghost" in parts:
+        if baseCoats <= 0:
+            base = baseC if isHexColor(baseC) else cfg.background
+            return blendHex(chosen, base), "+".join(sorted(parts)), 0
+        keep = chosen if "rainbow" not in parts else baseC
+        return keep, "+".join(sorted(parts)), min(MAX_GHOST_COATS, baseCoats + 1)
+    parts.add("ghost")
+    if "rainbow" in splitInkParts(baseT):
+        return baseC, "+".join(sorted(parts)), 1
+    base = baseC if isHexColor(baseC) else cfg.background
+    return blendHex(chosen, base), "+".join(sorted(parts)), 0
+
+
 async def writePixel(
     db: aiosqlite.Connection, place: PlaceInput, ink: str, inv: dict, user: dict
 ) -> tuple[dict, str, str]:
@@ -84,25 +165,32 @@ async def writePixel(
         if not users.HEX_COLOR.match(color or ""):
             raise PlaceError({"ok": False, "error": "badColor"})
         await db.execute(
-            "INSERT INTO pixels(x, y, c, t, by) VALUES (?, ?, ?, 'normal', ?)"
-            " ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by",
+            "INSERT INTO pixels(x, y, c, t, by, coats) VALUES (?, ?, ?, 'normal', ?, 1)"
+            " ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t,"
+            " by=excluded.by, coats=excluded.coats",
             (x, y, color.lower(), user["uid"]),
         )
-        return {"c": color.lower(), "t": "normal"}, color.lower(), "normal"
+        return {"c": color.lower(), "t": "normal", "coats": 1}, color.lower(), "normal"
     if inv.get(ink, 0) <= 0:
         raise PlaceError({"ok": False, "error": "noInk", "inventory": dict(inv)})
-    storeColor = "#ff0000" if ink == "rainbow" else ""
-    if ink != "rainbow":
-        if not users.HEX_COLOR.match(color or ""):
-            raise PlaceError({"ok": False, "error": "badColor"})
-        storeColor = color.lower()
+    if ink not in cfg.specialInks:
+        raise PlaceError({"ok": False, "error": "unknownInk"})
+    async with db.execute("SELECT c, t, coats FROM pixels WHERE x = ? AND y = ?", (x, y)) as cur:
+        existing = await cur.fetchone()
+    if ink == "glow":
+        storeColor, storeT, coats = resolveGlowPlacement(color, existing)
+    elif ink == "rainbow":
+        storeColor, storeT, coats = resolveRainbowPlacement(existing)
+    else:
+        storeColor, storeT, coats = resolveGhostPlacement(color, existing)
     await db.execute(
-        "INSERT INTO pixels(x, y, c, t, by) VALUES (?, ?, ?, ?, ?)"
-        " ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by",
-        (x, y, storeColor, ink, user["uid"]),
+        "INSERT INTO pixels(x, y, c, t, by, coats) VALUES (?, ?, ?, ?, ?, ?)"
+        " ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t,"
+        " by=excluded.by, coats=excluded.coats",
+        (x, y, storeColor, storeT, user["uid"], coats),
     )
     inv[ink] -= 1
-    return {"c": storeColor, "t": ink}, storeColor, ink
+    return {"c": storeColor, "t": storeT, "coats": coats}, storeColor, ink
 
 
 def consumeIpBucket(ip: str, now: float) -> None:
@@ -212,14 +300,25 @@ async def executePlace(
 UNDO_WINDOW_SEC = 3.0
 
 
-def normalizeUndoPrev(prevC: str, prevT: str, *, prevEmpty: bool) -> tuple[bool, str, str]:
+def normalizeUndoPrev(
+    prevC: str, prevT: str, *, prevEmpty: bool, prevCoats: int = 1
+) -> tuple[bool, str, str, int]:
     if prevEmpty:
-        return True, cfg.background, "normal"
-    if prevT not in ("normal", *cfg.specialInks):
+        return True, cfg.background, "normal", 1
+    # prevT は単体 ("glow") または重ねがけ正準形 ("ghost+glow")
+    parts = (prevT or "").split("+")
+    allowed = {"normal", *cfg.specialInks}
+    if not parts or any(p not in allowed for p in parts):
+        raise PlaceError({"ok": False, "error": "badPrev"})
+    if "normal" in parts and len(parts) > 1:
         raise PlaceError({"ok": False, "error": "badPrev"})
     if not users.HEX_COLOR.match(prevC or ""):
         raise PlaceError({"ok": False, "error": "badPrev"})
-    return False, prevC.lower(), prevT
+    try:
+        coats = max(0, min(MAX_GHOST_COATS, int(prevCoats)))
+    except (TypeError, ValueError):
+        raise PlaceError({"ok": False, "error": "badPrev"}) from None
+    return False, prevC.lower(), prevT, coats
 
 
 async def fetchUndoLast(db: aiosqlite.Connection, x: int, y: int) -> Any | None:
@@ -269,11 +368,11 @@ async def restoreUndoPixel(db: aiosqlite.Connection, body: UndoBody, user: dict)
         await db.execute("DELETE FROM pixels WHERE x = ? AND y = ?", (body.x, body.y))
         return {"c": cfg.background, "t": "normal", "erased": True}
     await db.execute(
-        "INSERT INTO pixels(x, y, c, t, by) VALUES (?, ?, ?, ?, ?)"
-        " ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t",
-        (body.x, body.y, body.prevC.lower(), body.prevT, user["uid"]),
+        "INSERT INTO pixels(x, y, c, t, by, coats) VALUES (?, ?, ?, ?, ?, ?)"
+        " ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, coats=excluded.coats",
+        (body.x, body.y, body.prevC.lower(), body.prevT, user["uid"], body.prevCoats),
     )
-    return {"c": body.prevC.lower(), "t": body.prevT}
+    return {"c": body.prevC.lower(), "t": body.prevT, "coats": body.prevCoats}
 
 
 async def finalizeUndo(
@@ -344,13 +443,19 @@ async def undoPlace(body: UndoBody, country: str | None = None) -> dict:
     if not inBounds(body.x, body.y):
         return {"ok": False, "error": "outOfBounds"}
     try:
-        prevEmpty, prevC, prevT = normalizeUndoPrev(
-            body.prevC, body.prevT, prevEmpty=body.prevEmpty
+        prevEmpty, prevC, prevT, prevCoats = normalizeUndoPrev(
+            body.prevC, body.prevT, prevEmpty=body.prevEmpty, prevCoats=body.prevCoats
         )
     except PlaceError as err:
         return err.result
     body = body.model_copy(
-        update={"token": token, "prevEmpty": prevEmpty, "prevC": prevC, "prevT": prevT}
+        update={
+            "token": token,
+            "prevEmpty": prevEmpty,
+            "prevC": prevC,
+            "prevT": prevT,
+            "prevCoats": prevCoats,
+        }
     )
 
     db = await getDb()
@@ -565,12 +670,16 @@ async def fetchFirstInt(cur: aiosqlite.Cursor) -> int:
 async def fetchBbox(loX: int, hiX: int, loY: int, hiY: int) -> tuple[dict, bool]:
     db = await getDb()
     async with db.execute(
-        "SELECT x, y, c, t, by FROM pixels WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ? LIMIT ?",
+        "SELECT x, y, c, t, by, coats FROM pixels"
+        " WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ? LIMIT ?",
         (loX, hiX, loY, hiY, cfg.maxBboxPixels + 1),
     ) as cur:
         rows = list(await cur.fetchall())
     truncated = len(rows) > cfg.maxBboxPixels
-    out = {f"{x},{y}": {"c": c, "t": t, "by": by} for x, y, c, t, by in rows[: cfg.maxBboxPixels]}
+    out = {
+        f"{x},{y}": {"c": c, "t": t, "by": by, "coats": coats}
+        for x, y, c, t, by, coats in rows[: cfg.maxBboxPixels]
+    }
     return out, truncated
 
 

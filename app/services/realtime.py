@@ -222,5 +222,6 @@ async def place(sid: str, data: Any) -> None:
             c=result["pixel"]["c"],
             t=result["pixel"]["t"],
             by=result.get("by"),
+            coats=result["pixel"].get("coats", 1),
         )
         await sio.emit("pixel", event.model_dump())

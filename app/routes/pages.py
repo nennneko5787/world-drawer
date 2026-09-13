@@ -2,14 +2,29 @@
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.services import config as cfg
-from app.services import ogp, ogp_image
+from app.services import ogp, ogp_image, staticcache
 from app.services.config import pagesDir
 
 router = APIRouter()
+
+_STATIC_URL_RE = re.compile(r"""(["'])/static/([^"'?#\s]*)""")
+
+
+def versionedStaticUrls(body: str) -> str:
+    """HTML中の /static/ URL に ?v=版クエリを付与する。
+
+    ブラウザの長期キャッシュ (max-age=3600) とHTML (max-age=300) の更新
+    タイミング差による新旧スキュー (古いJSが新しいHTMLの要素を掴めず
+    null クラッシュして画面全体が死ぬ) を防ぐ。版はデプロイ=再起動で変わる。
+    """
+    ver = staticcache.assetVersion(cfg.staticDir)
+    return _STATIC_URL_RE.sub(rf"\1/static/\2?v={ver}", body)
 
 
 def baseUrlFor(request: Request) -> str:
@@ -30,6 +45,7 @@ def localizedPage(name: str, page: str, request: Request, lang: str | None) -> H
         path=request.url.path,
         queryLang=queryLang or None,
     )
+    body = versionedStaticUrls(body)
     return HTMLResponse(
         content=body,
         headers={"vary": "Accept-Language", "cache-control": "public, max-age=300"},

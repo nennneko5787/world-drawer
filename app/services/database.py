@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS pixels(
   x INTEGER NOT NULL, y INTEGER NOT NULL,
   c TEXT NOT NULL, t TEXT NOT NULL DEFAULT 'normal', by TEXT,
+  coats INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (x, y));
 CREATE INDEX IF NOT EXISTS idx_pixels_xy ON pixels(x, y);
 CREATE TABLE IF NOT EXISTS users(
@@ -122,12 +123,25 @@ async def migrateV4AddShowCountry(db: aiosqlite.Connection) -> None:
     await db.commit()
 
 
+async def migrateV5AddCoats(db: aiosqlite.Connection) -> None:
+    """v5: ゴーストの重ね塗り段数 coats 列を追加 (既定1=従来どおり半透明)。
+
+    既存ゴーストは1のままなので見た目は変わらない。
+    """
+    async with db.execute("PRAGMA table_info(pixels)") as cur:
+        cols = {row[1] for row in await cur.fetchall()}
+    if "coats" not in cols:
+        await db.execute("ALTER TABLE pixels ADD COLUMN coats INTEGER NOT NULL DEFAULT 1")
+    await db.commit()
+
+
 Migration = tuple[int, str, Callable[[aiosqlite.Connection], Awaitable[None]]]
 MIGRATIONS: list[Migration] = [
     (1, "legacy_shapes", migrateV1LegacyShapes),
     (2, "undo_refund_columns", migrateV2UndoRefundColumns),
     (3, "add_country", migrateV3AddCountry),
     (4, "add_show_country", migrateV4AddShowCountry),
+    (5, "add_coats", migrateV5AddCoats),
     # 追加時はここへ (番号は単調増加・各ステップは冪等にすること):
     # (4, "add_xxx", migrateV4AddXxx),
 ]
@@ -149,6 +163,23 @@ async def migrate(db: aiosqlite.Connection) -> None:
         await db.execute(f"PRAGMA user_version = {target}")
         await db.commit()
         logger.info("migrated to version %d (%s)", target, name)
+
+
+async def closeDb() -> None:
+    """共有コネクションを閉じる。
+
+    閉じずに終了すると aiosqlite のワーカースレッド (非デーモン) が残り、
+    インタプリタ終了時のスレッド結合で無限に待ってプロセスが固まる
+    (Ctrl+C二度押しで threading._shutdown 内の KeyboardInterrupt になる)。
+    lifespan の shutdown から呼ぶこと。
+    """
+    global db, dbLoop  # noqa: PLW0603 — 共有コネクション管理のため
+    async with dbLock:
+        if db is not None:
+            with contextlib.suppress(Exception):
+                await db.close()
+            db = None
+        dbLoop = None
 
 
 async def getDb() -> aiosqlite.Connection:

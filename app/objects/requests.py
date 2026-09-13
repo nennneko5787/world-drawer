@@ -45,6 +45,7 @@ class UndoBody(StrictModel):
     prevEmpty: bool = Field(default=False)
     prevC: str = Field(default="#000000")
     prevT: str = Field(default="normal")
+    prevCoats: int = Field(default=1)
 
 
 class SocketHello(StrictModel):

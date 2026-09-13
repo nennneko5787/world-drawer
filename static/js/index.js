@@ -80,7 +80,8 @@
   const fpsVal = document.getElementById("fpsVal");
   const cacheVal = document.getElementById("cacheVal");
   const t = (key, params) => window.wdI18n.t(key, params);
-  const inkName = (k) => t("inkL_" + k);
+  // 重ねがけ ("ghost+glow") は各名を合成表示
+  const inkName = (k) => String(k || "").split("+").map((p) => t("inkL_" + p)).join("+");
 
   const coordLimit = 1000000;
   const fetchMargin = 256; // 視野の外側に余分に取得するセル数
@@ -353,9 +354,10 @@
       }
       for (const [key, val] of Object.entries(fresh)) {
         const cur = pixels.get(key);
-        if (!cur || cur.c !== val.c || cur.t !== val.t) {
+        const coats = val.coats ?? 1;
+        if (!cur || cur.c !== val.c || cur.t !== val.t || (cur.coats ?? 1) !== coats) {
           const [px, py] = key.split(",").map(Number);
-          pixels.set(key, { c: val.c, t: val.t, by: val.by || null, x: px, y: py });
+          pixels.set(key, { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats });
         }
       }
       pruneFar(box);
@@ -580,34 +582,40 @@
     }
 
     // ピクセル (単一パス。座標は格納時に解決済みで毎フレームparseしない)
+    // t は単体 ("glow") または重ねがけ ("ghost+glow")。効果は合成して描く
     for (const val of pixels.values()) {
       const x = val.x, y = val.y;
       if (x == null || y == null) continue;
       if (x < x0 || x > x1 || y < y0 || y > y1) continue;
       if (val.by && blocked.has(val.by)) continue; // 非表示ID
       const sx = cam.x + x * cam.zoom, sy = cam.y + y * cam.zoom, s = cam.zoom;
-      if (val.t === "normal") {
+      const vt = String(val.t || "normal");
+      if (vt === "normal") {
         ctx.fillStyle = val.c;
         ctx.fillRect(sx, sy, s, s);
-      } else if (val.t === "rainbow") {
-        ctx.fillStyle = `hsl(${(x * 7 + y * 13 + time * 90) % 360},100%,55%)`;
-        ctx.fillRect(sx, sy, s, s);
-      } else if (val.t === "glow") {
-        // 発光のみ (ダークモードでは強く輝く)
-        ctx.save();
-        ctx.shadowColor = val.c;
-        ctx.shadowBlur = isDark ? s * 1.2 + 12 : Math.max(6, s * 0.8);
-        ctx.fillStyle = val.c;
-        ctx.fillRect(sx, sy, s, s);
-        if (isDark) ctx.fillRect(sx, sy, s, s);
-        ctx.restore();
-      } else if (val.t === "ghost") {
-        ctx.save();
-        ctx.globalAlpha = 0.5;
-        ctx.fillStyle = val.c || "#888888";
-        ctx.fillRect(sx, sy, s, s);
-        ctx.restore();
+        continue;
       }
+      const parts = new Set(vt.split("+"));
+      const hasRainbow = parts.has("rainbow");
+      const hasGlow = parts.has("glow");
+      const hasGhost = parts.has("ghost");
+      let base = val.c;
+      if (hasRainbow) base = `hsl(${(x * 7 + y * 13 + time * 90) % 360},100%,55%)`;
+      ctx.save();
+      if (hasGhost) {
+        // 重ね塗りで濃くなる (coats<=0 は混色済み=不透明)。初回は半透明
+        const coats = val.coats ?? 1;
+        ctx.globalAlpha = coats <= 0 ? 1 : 1 - 0.5 / Math.min(Math.max(1, coats), 5);
+      }
+      if (hasGlow) {
+        // 発光 (ダークモードでは強く輝く)
+        ctx.shadowColor = base;
+        ctx.shadowBlur = isDark ? s * 1.2 + 12 : Math.max(6, s * 0.8);
+      }
+      ctx.fillStyle = base;
+      ctx.fillRect(sx, sy, s, s);
+      if (hasGlow && isDark) ctx.fillRect(sx, sy, s, s);
+      ctx.restore();
     }
 
     // 配置可能ゾーンの境界線 (Lv制限中のみ。サーバー判定と一致する正確な線)
@@ -951,7 +959,7 @@
     socket.on("pixel", (p) => {
       const key = `${p.x},${p.y}`;
       if (p.t === "normal" && String(p.c).toLowerCase() === background.toLowerCase()) pixels.delete(key);
-      else pixels.set(key, { c: p.c, t: p.t, by: p.by || null, x: p.x, y: p.y });
+      else pixels.set(key, { c: p.c, t: p.t, by: p.by || null, x: p.x, y: p.y, coats: p.coats ?? 1 });
       zoneDirty = true;
       if (pendingUndo && `${pendingUndo.x},${pendingUndo.y}` === key && p.by !== myUid) cancelUndo();
       if (historyMode && historyKey === key) showHistory(p.x, p.y);
@@ -1197,9 +1205,9 @@
         }
         return;
       }
-      const prevForUndo = prevPix ? { c: prevPix.c, t: prevPix.t } : null;
+      const prevForUndo = prevPix ? { c: prevPix.c, t: prevPix.t, coats: prevPix.coats ?? 1 } : null;
       if (inkToUse === "erase") pixels.delete(key);
-      else pixels.set(key, { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x, y });
+      else pixels.set(key, { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x, y, coats: data.pixel.coats ?? 1 });
       cooldownUntil = data.cooldownUntil * 1000;
       inventory = data.inventory;
       applyLevelData(data);
@@ -1246,6 +1254,7 @@
       if (target.prev) {
         body.prevC = target.prev.c;
         body.prevT = target.prev.t;
+        body.prevCoats = target.prev.coats ?? 1;
       }
       const res = await fetch("/api/undo", {
         method: "POST",
@@ -1261,7 +1270,7 @@
       }
       const key = `${target.x},${target.y}`;
       if (data.pixel.erased) pixels.delete(key);
-      else pixels.set(key, { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x: target.x, y: target.y });
+      else pixels.set(key, { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x: target.x, y: target.y, coats: data.pixel.coats ?? 1 });
       inventory = data.inventory;
       refreshInkUI();
       applyLevelData(data);
@@ -1794,8 +1803,8 @@
       return;
     }
     let hex = pix.c;
-    const pickedInk = pix.t || "normal";
-    if (pix.t === "rainbow") {
+    const pickedParts = String(pix.t || "normal").split("+");
+    if (pickedParts.includes("rainbow")) {
       // 表示色（アニメーション中の色相）から算出
       const hue = (x * 7 + y * 13 + (Date.now() / 1000) * 90) % 360;
       const [r, g, b] = hsvToRgb(hue, 100, 100);
@@ -1807,14 +1816,22 @@
     }
     hex = String(hex).toLowerCase();
     setPaintColor(hex);
-    // 色とあわせてインクも取得（所持なしは色のみ・インクは維持）
-    const inkLabel = inkName(pickedInk);
-    if (pickedInk !== "normal" && (inventory[pickedInk] || 0) <= 0) {
-      toast(t("eyedropInkMissing", { hex, ink: inkLabel }));
+    if (pickedParts.length > 1) {
+      // 重ねがけセルは色のみ取得 (インクはそのまま。置き直して再現する)
+      toast(t("eyedropCombo", { hex }));
     } else {
-      ink = pickedInk;
-      document.querySelectorAll(".ink").forEach((el) => el.classList.toggle("active", el.dataset.ink === ink));
-      toast(t("eyedropGot", { hex, ink: inkLabel }));
+      // 色とあわせてインクも取得（所持なしは色のみ・インクは維持）
+      const pickedInk = ["normal", "glow", "rainbow", "ghost"].includes(pickedParts[0])
+        ? pickedParts[0]
+        : "normal";
+      const inkLabel = inkName(pickedInk);
+      if (pickedInk !== "normal" && (inventory[pickedInk] || 0) <= 0) {
+        toast(t("eyedropInkMissing", { hex, ink: inkLabel }));
+      } else {
+        ink = pickedInk;
+        document.querySelectorAll(".ink").forEach((el) => el.classList.toggle("active", el.dataset.ink === ink));
+        toast(t("eyedropGot", { hex, ink: inkLabel }));
+      }
     }
     setEyedropMode(false);
     tool = "pen";

@@ -179,6 +179,7 @@ async def apiPlace(body: PlaceInput, request: Request):
                 "c": result["pixel"]["c"],
                 "t": result["pixel"]["t"],
                 "by": result.get("by"),
+                "coats": result["pixel"].get("coats", 1),
             },
         )
     else:
@@ -202,6 +203,7 @@ async def apiUndo(body: UndoBody, request: Request):
                 "c": result["pixel"]["c"],
                 "t": result["pixel"]["t"],
                 "by": result.get("by"),
+                "coats": result["pixel"].get("coats", 1),
             },
         )
         return result

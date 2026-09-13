@@ -31,6 +31,32 @@ MAX_COMPRESS_BYTES = 5 * 1024 * 1024  # これより大きいファイルは恒�
 
 _CACHE: OrderedDict[str, CachedAsset] = OrderedDict()
 _STATS: dict[str, int] = {"hits": 0, "misses": 0, "compressions": 0}
+_ASSET_VERSION: str | None = None
+
+
+def assetVersion(staticDir: Path) -> str:
+    """HTMLに埋める静的アセットの版。
+
+    JS/CSSとHTMLの新旧スキュー (古いJS+新しいHTMLで起きる null クラッシュ) を
+    防ぐため、ファイル群のハッシュをクエリ (?v=) として付与する。
+    デプロイ時は再起動するためプロセス内で一度だけ算出すればよい。
+    """
+    global _ASSET_VERSION  # noqa: PLW0603 — プロセス内キャッシュのため
+    if _ASSET_VERSION is None:
+        try:
+            parts: list[str] = []
+            for path in sorted(staticDir.rglob("*")):
+                if not path.is_file():
+                    continue
+                try:
+                    stat = path.stat()
+                except OSError:
+                    continue
+                parts.append(f"{path.relative_to(staticDir)}:{stat.st_mtime_ns}:{stat.st_size}")
+            _ASSET_VERSION = hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
+        except OSError:
+            _ASSET_VERSION = "dev"
+    return _ASSET_VERSION
 
 
 @dataclass
