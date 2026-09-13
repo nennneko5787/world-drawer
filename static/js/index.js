@@ -97,7 +97,17 @@
   let inventory = { glow: 0, rainbow: 0, ghost: 0 };
   let cooldownUntil = 0;
   let tool = "pen";
-  let ink = "normal";
+  // 特殊インクの複数押し選択。空=通常。正準形はソート結合 ("ghost+glow")
+  const inkSet = new Set();
+  function inkKey() {
+    return inkSet.size === 0 ? "normal" : [...inkSet].sort().join("+");
+  }
+  function syncInkButtons() {
+    document.querySelectorAll(".ink").forEach((el) => {
+      const k = el.dataset.ink;
+      el.classList.toggle("active", k === "normal" ? inkSet.size === 0 : inkSet.has(k));
+    });
+  }
   let showGrid = true;
   let showCursors = true;
   let showAxes = true;
@@ -707,7 +717,7 @@
       ctx.strokeRect(sx + 1, sy + 1, cam.zoom - 2, cam.zoom - 2);
       if (tool === "pen") {
         ctx.globalAlpha = 0.55;
-        ctx.fillStyle = ink === "rainbow" ? `hsl(${(Date.now() / 10) % 360},100%,55%)` : paintColor;
+        ctx.fillStyle = inkSet.has("rainbow") ? `hsl(${(Date.now() / 10) % 360},100%,55%)` : paintColor;
         ctx.fillRect(sx + 1, sy + 1, cam.zoom - 2, cam.zoom - 2);
         ctx.globalAlpha = 1;
       }
@@ -784,13 +794,17 @@
     document.querySelectorAll(".ink").forEach((btn) => {
       const key = btn.dataset.ink;
       if (key === "normal") return;
-      btn.disabled = (inventory[key] || 0) <= 0 && ink !== key;
+      if (key === "normal") {
+        btn.disabled = false;
+        return;
+      }
+      btn.disabled = (inventory[key] || 0) <= 0 && !inkSet.has(key);
     });
   }
 
   function refreshColorUI() {
     // 虹インクは色指定なしのためカラー選択を無効化 (設計図モードを除く)
-    const disabled = tool === "pen" && ink === "rainbow" && !draftMode;
+    const disabled = tool === "pen" && inkSet.has("rainbow") && !draftMode;
     colorBtn.disabled = disabled;
     swatchesEl.classList.toggle("disabled", disabled);
   }
@@ -1169,12 +1183,14 @@
     }
     const key = `${x},${y}`;
     const prevPix = pixels.get(key) || null;
-    const inkToUse = tool === "eraser" ? "erase" : ink;
-    if (inkToUse !== "normal" && inkToUse !== "erase" && (inventory[inkToUse] || 0) <= 0) {
-      toast(t("noInkRevert"));
-      ink = "normal";
-      document.querySelectorAll(".ink").forEach((btn) => btn.classList.toggle("active", btn.dataset.ink === "normal"));
-      return;
+    const inkToUse = tool === "eraser" ? "erase" : inkKey();
+    if (inkToUse !== "normal" && inkToUse !== "erase") {
+      const lacking = inkToUse.split("+").some((p) => (inventory[p] || 0) <= 0);
+      if (lacking) {
+        toast(t("noInkToast"));
+        refreshInkUI();
+        return;
+      }
     }
     try {
       const res = await fetch("/api/place", {
@@ -1816,22 +1832,17 @@
     }
     hex = String(hex).toLowerCase();
     setPaintColor(hex);
-    if (pickedParts.length > 1) {
-      // 重ねがけセルは色のみ取得 (インクはそのまま。置き直して再現する)
-      toast(t("eyedropCombo", { hex }));
+    // セルのインク集合をそのまま選択に反映（不足分があれば現状維持）
+    const cellParts = pickedParts.filter((p) => ["glow", "rainbow", "ghost"].includes(p));
+    const missing = cellParts.filter((p) => (inventory[p] || 0) <= 0);
+    if (missing.length > 0) {
+      toast(t("eyedropInkMissing", { hex, ink: missing.map((p) => inkName(p)).join("+") }));
     } else {
-      // 色とあわせてインクも取得（所持なしは色のみ・インクは維持）
-      const pickedInk = ["normal", "glow", "rainbow", "ghost"].includes(pickedParts[0])
-        ? pickedParts[0]
-        : "normal";
-      const inkLabel = inkName(pickedInk);
-      if (pickedInk !== "normal" && (inventory[pickedInk] || 0) <= 0) {
-        toast(t("eyedropInkMissing", { hex, ink: inkLabel }));
-      } else {
-        ink = pickedInk;
-        document.querySelectorAll(".ink").forEach((el) => el.classList.toggle("active", el.dataset.ink === ink));
-        toast(t("eyedropGot", { hex, ink: inkLabel }));
-      }
+      inkSet.clear();
+      cellParts.forEach((p) => inkSet.add(p));
+      syncInkButtons();
+      const gotLabel = cellParts.length > 0 ? inkName(cellParts.slice().sort().join("+")) : inkName("normal");
+      toast(t("eyedropGot", { hex, ink: gotLabel }));
     }
     setEyedropMode(false);
     tool = "pen";
@@ -1862,17 +1873,21 @@
   document.querySelectorAll(".ink").forEach((btn) => {
     btn.onclick = () => {
       const key = btn.dataset.ink;
-      if (key !== "normal" && (inventory[key] || 0) <= 0) {
-        toast(t("inkMissingToast"));
-        return;
-      }
-      ink = key;
-      document.querySelectorAll(".ink").forEach((el) => el.classList.toggle("active", el === btn));
-      if (key !== "normal") {
+      if (key === "normal") {
+        inkSet.clear();
+      } else if (inkSet.has(key)) {
+        inkSet.delete(key);
+      } else {
+        if ((inventory[key] || 0) <= 0) {
+          toast(t("inkMissingToast"));
+          return;
+        }
+        inkSet.add(key);
         tool = "pen";
         toolPen.classList.add("active");
         toolEraser.classList.remove("active");
       }
+      syncInkButtons();
       setEyedropMode(false);
       refreshColorUI();
     };

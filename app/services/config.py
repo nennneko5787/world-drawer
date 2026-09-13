@@ -41,7 +41,7 @@ specialInks: dict[str, str] = {
 }
 rewardChance = 0.30
 rewardMin = 1
-rewardMax = 4
+rewardMax = 5
 
 # ---- 履歴上限 ----
 maxHistoryPerCell = 20
@@ -55,7 +55,7 @@ loginMaxFails = 10  # ログイン失敗上限
 loginLockSec = 600  # 失敗上限後のロック秒
 
 # ---- 荒らし対策 ----
-placePerMinPerIp = 30  # IP共有の配置上限 (家族利用を妨げない程度に緩め)
+placePerMinPerIp = 60  # IP共有の配置上限 (家族利用を妨げない程度に緩め)
 placeRadius = 1000  # 低レベル時の配置可能半径 (既存ピクセル/他プレイヤーから)
 trustedLevel = 5  # このレベル以上は半径制限なし
 

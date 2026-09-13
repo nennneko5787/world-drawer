@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import random
 import time
-from typing import Any
+from typing import Any, TypeGuard
 
 import aiosqlite
 
@@ -75,7 +75,7 @@ async def checkRadius(db: aiosqlite.Connection, token: str, level: int, x: int, 
 MAX_GHOST_COATS = 5  # ゴーストの重ね塗り上限 (不透明度は 1-0.5/coats)
 
 
-def isHexColor(value: object) -> bool:
+def isHexColor(value: object) -> TypeGuard[str]:
     """#rrggbb 形式か (焼き付け土台の安全確認用)。"""
     return isinstance(value, str) and users.HEX_COLOR.match(value) is not None
 
@@ -101,61 +101,72 @@ def splitInkParts(value: str | None) -> set[str]:
     return parts
 
 
-def resolveGlowPlacement(color: str, existing: Any | None) -> tuple[str, str, int]:
-    """発光の配置内容 (発光色を置き換え、発光を付与。他インクは維持)。"""
-    if not users.HEX_COLOR.match(color or ""):
-        raise PlaceError({"ok": False, "error": "badColor"})
-    if existing is None:
-        return color.lower(), "glow", 1
-    _baseC, baseT, rawCoats = existing
-    parts = splitInkParts(baseT) | {"glow"}
-    coats = 1 if rawCoats is None else int(rawCoats)
-    return color.lower(), "+".join(sorted(parts)), coats
+def parseComboInk(ink: str) -> list[str]:
+    """配置指定 ("glow+ghost" 等) を正準ソート済み部品に。正しくなければ空配列。"""
+    parts = (ink or "").split("+")
+    if not parts or any(p not in cfg.specialInks for p in parts):
+        return []
+    if len(set(parts)) != len(parts):
+        return []
+    return sorted(parts)
 
 
-def resolveRainbowPlacement(existing: Any | None) -> tuple[str, str, int]:
-    """虹色の配置内容 (表示はアニメ色相のため保存色は維持。新規は仮置き)。"""
-    if existing is None:
-        return "#ff0000", "rainbow", 1
-    baseC, baseT, rawCoats = existing
-    parts = splitInkParts(baseT) | {"rainbow"}
-    coats = 1 if rawCoats is None else int(rawCoats)
-    return baseC, "+".join(sorted(parts)), coats
+def resolveComboColor(color: str, need: list[str], existing: Any | None) -> tuple[str, int]:
+    """重ねがけ配置の保存色と段数を決める。
 
-
-def resolveGhostPlacement(color: str, existing: Any | None) -> tuple[str, str, int]:
-    """ゴーストの配置内容。
-
-    - 空き: 半透明で置く (coats=1)
-    - 既存ゴースト: 色を置き換え、不透明度を深める (上限あり。焼き付け済みは再混合)
-    - 虹色表示中: 色は維持し、ゴースト効果のみ付与
-    - 静止色の土台 (通常・発光) に混ぜて焼き付ける (coats=0=不透明描画)
+    - 虹色あり: 表示はアニメ色相のため保存色は維持 (新規は選択色、無ければ仮置き)
+    - ゴーストあり: 空きは選択色、既存ゴーストには重ねて濃く (上限あり)、
+      静止色の土台には混ぜて焼き付ける (coats=0=不透明描画)
+    - 発光のみ: 選択色
     """
-    if not users.HEX_COLOR.match(color or ""):
-        raise PlaceError({"ok": False, "error": "badColor"})
-    chosen = color.lower()
+    wantGhost = "ghost" in need
+    chosen: str | None = None
+    if wantGhost or "glow" in need:
+        if not users.HEX_COLOR.match(color or ""):
+            raise PlaceError({"ok": False, "error": "badColor"})
+        chosen = color.lower()
     if existing is None:
-        return chosen, "ghost", 1
-    baseC, baseT, rawCoats = existing
-    # coats=0 は混色済み。None (想定外) は1扱い。0 を or で潰さないよう注意
-    baseCoats = 1 if rawCoats is None else int(rawCoats)
-    parts = splitInkParts(baseT)
-    if "ghost" in parts:
-        if baseCoats <= 0:
-            base = baseC if isHexColor(baseC) else cfg.background
-            return blendHex(chosen, base), "+".join(sorted(parts)), 0
-        keep = chosen if "rainbow" not in parts else baseC
-        return keep, "+".join(sorted(parts)), min(MAX_GHOST_COATS, baseCoats + 1)
-    parts.add("ghost")
-    if "rainbow" in splitInkParts(baseT):
-        return baseC, "+".join(sorted(parts)), 1
-    base = baseC if isHexColor(baseC) else cfg.background
-    return blendHex(chosen, base), "+".join(sorted(parts)), 0
+        baseC: str | None = None
+        baseParts: set[str] = set()
+        baseCoats = 1
+    else:
+        rowC, rowT, rawCoats = existing
+        baseC = rowC
+        baseParts = splitInkParts(rowT)
+        # coats=0 は混色済み。None (想定外) は1扱い。0 を or で潰さないよう注意
+        baseCoats = 1 if rawCoats is None else int(rawCoats)
+    if "rainbow" in need:
+        storeColor = baseC if isHexColor(baseC) else (chosen if chosen is not None else "#ff0000")
+        coats = baseCoats if wantGhost else 1
+    elif not wantGhost:
+        assert chosen is not None  # noqa: S101 — 虹色・ゴーストなしは発光のみのため検証済み
+        storeColor, coats = chosen, 1  # glow のみ
+    elif "ghost" in baseParts and baseCoats >= 1:
+        assert chosen is not None  # noqa: S101 — ゴーストありのため上で検証済み
+        # 重ね塗り: 色を置き換え、不透明度を深める (ゴーストのみ有効)
+        storeColor, coats = chosen, min(MAX_GHOST_COATS, baseCoats + 1)
+    elif existing is None:
+        assert chosen is not None  # noqa: S101 — ゴーストありのため上で検証済み
+        storeColor, coats = chosen, 1
+    else:
+        assert chosen is not None  # noqa: S101 — ゴーストありのため上で検証済み
+        # 焼き付け済みへの再混合、または静止色の土台への焼き付け
+        storeColor = blendHex(chosen, baseC if isHexColor(baseC) else cfg.background)
+        coats = 0
+    return storeColor, coats
 
 
 async def writePixel(
     db: aiosqlite.Connection, place: PlaceInput, ink: str, inv: dict, user: dict
 ) -> tuple[dict, str, str]:
+    """配置の確定。特殊インクはボタン選択の集合をそのまま適用する (置換。合成はしない)。
+
+    - 通常: 不透明で上書き (重ねがけ解除)。消去: 削除
+    - 虹色あり: 表示はアニメ色相のため保存色は維持 (新規は選択色)
+    - ゴーストあり: 空きは半透明、既存ゴーストには重ねて濃く (上限あり)、
+      静止色の土台には混ぜて焼き付ける (coats=0=不透明描画)
+    - 構成インクを各1消費 (不足が1つでもあれば配置不可)
+    """
     x, y, color = place.x, place.y, place.color
     if ink == "erase":
         await db.execute("DELETE FROM pixels WHERE x = ? AND y = ?", (x, y))
@@ -171,25 +182,23 @@ async def writePixel(
             (x, y, color.lower(), user["uid"]),
         )
         return {"c": color.lower(), "t": "normal", "coats": 1}, color.lower(), "normal"
-    if inv.get(ink, 0) <= 0:
-        raise PlaceError({"ok": False, "error": "noInk", "inventory": dict(inv)})
-    if ink not in cfg.specialInks:
+    need = parseComboInk(ink)
+    if not need:
         raise PlaceError({"ok": False, "error": "unknownInk"})
+    if any(inv.get(p, 0) <= 0 for p in need):
+        raise PlaceError({"ok": False, "error": "noInk", "inventory": dict(inv)})
     async with db.execute("SELECT c, t, coats FROM pixels WHERE x = ? AND y = ?", (x, y)) as cur:
         existing = await cur.fetchone()
-    if ink == "glow":
-        storeColor, storeT, coats = resolveGlowPlacement(color, existing)
-    elif ink == "rainbow":
-        storeColor, storeT, coats = resolveRainbowPlacement(existing)
-    else:
-        storeColor, storeT, coats = resolveGhostPlacement(color, existing)
+    storeColor, coats = resolveComboColor(color, need, existing)
+    storeT = "+".join(need)
     await db.execute(
         "INSERT INTO pixels(x, y, c, t, by, coats) VALUES (?, ?, ?, ?, ?, ?)"
         " ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t,"
         " by=excluded.by, coats=excluded.coats",
         (x, y, storeColor, storeT, user["uid"], coats),
     )
-    inv[ink] -= 1
+    for p in need:
+        inv[p] -= 1
     return {"c": storeColor, "t": storeT, "coats": coats}, storeColor, ink
 
 
@@ -386,8 +395,9 @@ async def finalizeUndo(
     lastId, _uid, _c, lastT, _at, _undone, xpGrant, rewardInk, rewardAmount = last
     await db.execute("UPDATE history SET undone = 1 WHERE id = ?", (lastId,))
     inv = user["inventory"]
-    if lastT in cfg.specialInks:
-        inv[lastT] = inv.get(lastT, 0) + 1
+    # 使用した構成インクを各1返却 (重ねがけ対応。消去・通常は何も返さない)
+    for part in splitInkParts(lastT):
+        inv[part] = inv.get(part, 0) + 1
     # 巻き戻し: 経験値 (レベルダウンあり) と当選報酬。使用済み分は枯渇時に0止め
     level = users.clampLevel(user.get("level", 1))
     xp = int(user.get("xp", 0)) - int(xpGrant or 0)
@@ -470,7 +480,8 @@ async def doPlace(place: PlaceInput, *, ip: str = "unknown", country: str | None
     token = (place.token or "").strip()[:64]
     if not inBounds(place.x, place.y):
         return {"ok": False, "error": "outOfBounds"}
-    if (place.ink or place.inkType or "normal") not in ("normal", "erase", *cfg.specialInks):
+    inkKey = place.ink or place.inkType or "normal"
+    if inkKey not in ("normal", "erase") and not parseComboInk(inkKey):
         return {"ok": False, "error": "unknownInk"}
     if not token:
         return {"ok": False, "error": "missingToken"}
