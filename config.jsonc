@@ -45,6 +45,11 @@
   // trustedLevel: このレベル以上は半径制限なし (1〜100)。
   "trustedLevel": 5,
 
+  // ---- OGP ----
+  // siteUrl: 公開URL (og:url / og:image を絶対URLにするため)。
+  // 空文字ならリクエストの Host から推定。例: "https://example.com"
+  "siteUrl": "",
+
   // ---- 接続元IPの扱い ----
   // trustedProxies: ここに含まれる相手からの接続でのみ
   // CF-Connecting-IP / X-Forwarded-For ヘッダを信用する。

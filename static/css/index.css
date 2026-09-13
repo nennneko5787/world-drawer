@@ -132,25 +132,56 @@ button.pill.clickable { cursor: pointer; font: inherit; }
 
 #colorPanel {
   position: fixed; left: 50%; bottom: 178px; transform: translateX(-50%); z-index: 25;
-  width: min(300px, calc(100vw - 20px));
+  width: min(340px, calc(100vw - 20px)); max-height: calc(100vh - 220px); overflow-y: auto;
   background: var(--chrome); color: var(--chrome-fg);
   border: 1px solid var(--border); border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,.25); padding: 8px 10px;
   display: flex; flex-direction: column; gap: 8px;
 }
 #colorPanel.hidden { display: none; }
-#cpSv { width: 100%; height: 190px; border-radius: 8px; border: 1px solid var(--border); touch-action: none; cursor: crosshair; }
-.cpSliderLabel { font-size: 12px; color: var(--hint); }
-#cpHue { width: 100%; height: 28px; }
+.cpTop { display: flex; gap: 8px; }
+#cpSv { flex: 1; min-width: 0; height: 190px; border-radius: 8px; border: 1px solid var(--border); touch-action: none; cursor: crosshair; }
+#cpHueBar { width: 28px; flex: none; height: 190px; border-radius: 8px; border: 1px solid var(--border); touch-action: none; cursor: ns-resize; }
 .cpTabs { justify-content: center; }
-.cpForm { display: flex; gap: 6px; align-items: center; justify-content: center; font-size: 13px; }
-.cpForm.hidden { display: none; }
-.cpForm input {
+.cpSliders { display: flex; flex-direction: column; gap: 6px; }
+.cpSliders.hidden { display: none; }
+.cpRow { display: grid; grid-template-columns: 3em 3.4em 1fr; gap: 6px; align-items: center; font-size: 12px; color: var(--chrome-fg); }
+.cpRow > span { color: var(--hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cpRow input[type="number"] {
   background: var(--btn); color: var(--btn-fg);
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 6px 8px; font-size: 13px; width: 64px;
+  padding: 5px 6px; font-size: 12px; width: 100%; min-width: 0;
 }
-#cpHex { width: 90px; }
+.cpRow input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 18px; border-radius: 6px;
+  border: 1px solid var(--border); background: #888;
+  padding: 0; margin: 0; cursor: pointer;
+}
+.cpRow input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 12px; height: 22px; border-radius: 4px;
+  background: #fff; border: 2px solid rgba(0,0,0,.55);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.7);
+}
+.cpRow input[type="range"]::-moz-range-thumb {
+  width: 10px; height: 20px; border-radius: 4px;
+  background: #fff; border: 2px solid rgba(0,0,0,.55);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.7);
+}
+.cpCodeRow { display: flex; gap: 6px; align-items: center; justify-content: flex-end; font-size: 12px; color: var(--hint); }
+.cpCodeRow .cpHash { color: var(--chrome-fg); }
+#cpHex {
+  background: var(--btn); color: var(--btn-fg);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 8px; font-size: 12px; width: 90px;
+}
+.cpPalTitle { font-size: 12px; color: var(--hint); margin: 0 2px; }
+#cpBasicGrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+#cpBasicGrid button {
+  aspect-ratio: 1; border-radius: 5px; border: 1px solid rgba(0,0,0,.25);
+  padding: 0; cursor: pointer;
+}
 .cpFoot { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
 #cpPreview { width: 34px; height: 26px; border-radius: 7px; border: 1px solid var(--border); }
 #cpOk {

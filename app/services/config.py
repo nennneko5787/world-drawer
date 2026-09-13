@@ -64,6 +64,11 @@ trustedLevel = 5  # このレベル以上は半径制限なし
 # 直結公開のヘッダは偽装可能なため無視し、ソケットIPを使う
 trustedProxies = ["127.0.0.1", "::1"]
 
+# ---- OGP ----
+# 公開URL (og:url / og:image を絶対URLにするため)。空ならリクエストの Host から推定。
+# 例: "https://example.com"
+siteUrl: str = ""
+
 # ---- config.jsonc の検証表 (キー: (型, 最小, 最大)) ----
 _INT_KEYS: dict[str, tuple[int, int]] = {
     "xpPerPlace": (1, 1000),
@@ -221,6 +226,19 @@ def validateProxyList(value: object) -> list[str] | None:
     return nets
 
 
+def validateSiteUrl(value: object) -> str | None:
+    if not isinstance(value, str):
+        logger.warning("config.jsonc: siteUrl must be a string, using default")
+        return None
+    text = value.strip().rstrip("/")
+    if not text:
+        return ""
+    if not re.match(r"^https?://[^/\s]+$", text):
+        logger.warning("config.jsonc: siteUrl must be like https://example.com, using default")
+        return None
+    return text
+
+
 def applyConfigKey(
     validated: dict[str, int | float | str | list[str]], key: str, value: object
 ) -> None:
@@ -233,6 +251,8 @@ def applyConfigKey(
         result = validateColorKey(value)
     elif key == "trustedProxies":
         result = validateProxyList(value)
+    elif key == "siteUrl":
+        result = validateSiteUrl(value)
     else:
         logger.warning("config.jsonc: unknown key ignored: %s", key)
         return

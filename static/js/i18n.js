@@ -45,7 +45,17 @@
       "countryShow": "国旗を表示",
       "colorPanelT": "色の詳細指定",
       "cpSvAria": "鮮やかさ（横）と明るさ（縦）の選択",
+      "cpHueBarAria": "色相の選択",
       "hueLabel": "色相",
+      "cpChR": "赤",
+      "cpChG": "緑",
+      "cpChB": "青",
+      "cpSat": "彩度",
+      "cpVal": "明度",
+      "cpChroma": "彩度",
+      "cpLight": "明度",
+      "cpCode": "コード",
+      "cpBasic": "基本",
       "colorBtnTitle": "塗る色（詳細指定）",
       "toolsAria": "ツール",
       "toolPen": "塗る",
@@ -163,7 +173,7 @@
       "h_lower": "下限",
       "h_undoP": "配置直後の3秒以内なら取り消しボタンで元に戻せます（使用した特殊インクも返却）。",
       "h_colorH": "色の詳細指定",
-      "h_colorP": "塗る色・カーソル色のボタンから詳細パネルを開き、16進数・RGB・HSV・HSLで直接指定できます。OS標準のカラーピッカーに貼り付けられないコードもここに貼れます。変更はリアルタイムに反映されます。",
+      "h_colorP": "塗る色・カーソル色のボタンから詳細パネルを開き、大きなマスと色相バー、RGB・HSV・LCHのスライダーで直感的に指定できます。コード欄に16進数の直接貼り付けもできます。変更はリアルタイムに反映されます。",
       "h_draftH": "設計図モード",
       "h_draftP": "建築の下書き用です。描いた内容は自分にだけ薄く表示され、サーバーには送信されません（クールダウン・経験値なし）。塗る・消すツールと組み合わせて描画・消去でき、ツールを切り替えてもモードは維持されます（履歴・スポイト中はそちらが優先）。設定から表示/非表示を切り替えられます。内容は端末に保存されます。",
       "h_histH": "履歴と非表示",
@@ -224,7 +234,17 @@
       "countryShow": "Show flag",
       "colorPanelT": "Custom color",
       "cpSvAria": "Pick saturation (horizontal) and brightness (vertical)",
+      "cpHueBarAria": "Pick hue",
       "hueLabel": "Hue",
+      "cpChR": "Red",
+      "cpChG": "Green",
+      "cpChB": "Blue",
+      "cpSat": "Saturation",
+      "cpVal": "Value",
+      "cpChroma": "Chroma",
+      "cpLight": "Lightness",
+      "cpCode": "Code",
+      "cpBasic": "Basic",
       "colorBtnTitle": "Paint color (custom)",
       "toolsAria": "Tools",
       "toolPen": "Paint",
@@ -342,7 +362,7 @@
       "h_lower": "min",
       "h_undoP": "Undo within 3 seconds of placing (special ink refunded).",
       "h_colorH": "Custom color",
-      "h_colorP": "Open details from paint/cursor color buttons; enter HEX/RGB/HSV/HSL directly. Paste codes the OS picker rejects. Applied live.",
+      "h_colorP": "Open details from paint/cursor color buttons; pick intuitively with the big square, hue bar, and RGB/HSV/LCH sliders. You can also paste a hex code directly. Applied live.",
       "h_draftH": "Blueprint mode",
       "h_draftP": "Drafting aid. Only you see it faintly; never sent to server (no cooldown/XP). Combine with paint/erase, persists across tool switches (history/eyedropper take precedence). Toggle in settings. Saved on device.",
       "h_histH": "History and muting",
@@ -403,7 +423,17 @@
       "countryShow": "국기 표시하기",
       "colorPanelT": "색상 상세 지정",
       "cpSvAria": "채도(가로)와 명도(세로) 선택",
+      "cpHueBarAria": "색상 선택",
       "hueLabel": "색상",
+      "cpChR": "빨강",
+      "cpChG": "초록",
+      "cpChB": "파랑",
+      "cpSat": "채도",
+      "cpVal": "명도",
+      "cpChroma": "채도",
+      "cpLight": "명도",
+      "cpCode": "코드",
+      "cpBasic": "기본",
       "colorBtnTitle": "칠할 색상(상세 지정)",
       "toolsAria": "도구",
       "toolPen": "칠하기",
@@ -521,7 +551,7 @@
       "h_lower": "하한",
       "h_undoP": "배치 직후 3초 이내에는 취소 버튼으로 되돌릴 수 있습니다(사용한 특수 잉크도 반환).",
       "h_colorH": "색상 상세 지정",
-      "h_colorP": "칠할 색상·커서 색상 버튼에서 상세 패널을 열어 16진수·RGB·HSV·HSL로 직접 지정할 수 있습니다. OS 기본 컬러피커에 붙여넣을 수 없는 코드도 여기에 붙여넣을 수 있습니다. 변경은 실시간으로 반영됩니다.",
+      "h_colorP": "칠할 색상·커서 색상 버튼에서 상세 패널을 열어 큰 사각형과 색상 막대, RGB·HSV·LCH 슬라이더로 직관적으로 지정할 수 있습니다. 코드란에 16진수를 직접 붙여넣을 수도 있습니다. 변경은 실시간으로 반영됩니다.",
       "h_draftH": "설계도 모드",
       "h_draftP": "건축 밑그림용입니다. 그린 내용은 자신에게만 희미하게 표시되고 서버에는 전송되지 않습니다(쿨다운·경험치 없음). 칠하기·지우개 도구와 조합해 그리고 지울 수 있으며, 도구를 바꿔도 모드는 유지됩니다(기록·스포이드 중에는 해당 모드가 우선). 설정에서 표시/숨기기를 바꿀 수 있습니다. 내용은 기기에 저장됩니다.",
       "h_histH": "기록과 숨기기",
@@ -582,7 +612,17 @@
       "countryShow": "显示国旗",
       "colorPanelT": "颜色详细指定",
       "cpSvAria": "选择饱和度（横向）和明度（纵向）",
+      "cpHueBarAria": "选择色相",
       "hueLabel": "色相",
+      "cpChR": "红",
+      "cpChG": "绿",
+      "cpChB": "蓝",
+      "cpSat": "饱和度",
+      "cpVal": "明度",
+      "cpChroma": "饱和度",
+      "cpLight": "明度",
+      "cpCode": "代码",
+      "cpBasic": "基本",
       "colorBtnTitle": "绘制颜色（详细指定）",
       "toolsAria": "工具",
       "toolPen": "绘制",
@@ -700,7 +740,7 @@
       "h_lower": "下限",
       "h_undoP": "放置后3秒内可用撤销按钮还原（返还使用的特殊墨水）。",
       "h_colorH": "颜色详细指定",
-      "h_colorP": "从绘制颜色、光标颜色按钮打开详细面板，可直接指定16进制、RGB、HSV、HSL。系统取色器无法粘贴的代码也可粘贴到这里。更改实时生效。",
+      "h_colorP": "从绘制颜色、光标颜色按钮打开详细面板，可用大方块、色相条和 RGB/HSV/LCH 滑块直观指定。也可直接在代码栏粘贴16进制。更改实时生效。",
       "h_draftH": "设计图模式",
       "h_draftP": "用于建筑草稿。绘制内容仅自己可见（半透明），不发送到服务器（无冷却、无经验值）。可配合绘制、擦除工具描绘、擦除，切换工具后模式保持（历史、取色器模式中优先后者）。可在设置中切换显示/隐藏。内容保存在本机。",
       "h_histH": "历史与隐藏",
@@ -761,7 +801,17 @@
       "countryShow": "顯示國旗",
       "colorPanelT": "顏色詳細指定",
       "cpSvAria": "選擇飽和度（橫向）和明度（縱向）",
+      "cpHueBarAria": "選擇色相",
       "hueLabel": "色相",
+      "cpChR": "紅",
+      "cpChG": "綠",
+      "cpChB": "藍",
+      "cpSat": "飽和度",
+      "cpVal": "明度",
+      "cpChroma": "飽和度",
+      "cpLight": "明度",
+      "cpCode": "代碼",
+      "cpBasic": "基本",
       "colorBtnTitle": "繪製顏色（詳細指定）",
       "toolsAria": "工具",
       "toolPen": "繪製",
@@ -879,7 +929,7 @@
       "h_lower": "下限",
       "h_undoP": "放置後3秒內可用復原按鈕還原（返還使用的特殊墨水）。",
       "h_colorH": "顏色詳細指定",
-      "h_colorP": "從繪製顏色、游標顏色按鈕開啟詳細面板，可直接指定16進制、RGB、HSV、HSL。系統取色器無法貼上的代碼也可貼到這裡。更改即時生效。",
+      "h_colorP": "從繪製顏色、游標顏色按鈕開啟詳細面板，可用大方塊、色相條和 RGB/HSV/LCH 滑桿直觀指定。也可直接在代碼欄貼上16進制。更改即時生效。",
       "h_draftH": "設計圖模式",
       "h_draftP": "用於建築草稿。繪製內容僅自己可見（半透明），不傳送到伺服器（無冷卻、無經驗值）。可配合繪製、擦除工具描繪、擦除，切換工具後模式保持（歷史、取色器模式中優先後者）。可在設定中切換顯示/隱藏。內容儲存在本機。",
       "h_histH": "歷史與隱藏",
@@ -904,17 +954,34 @@
   const LOCALES = { "ja": "ja-JP", "en": "en-US", "ko": "ko-KR", "zh-CN": "zh-CN", "zh-TW": "zh-TW" };
   const HTML_LANGS = { "ja": "ja", "en": "en", "ko": "ko", "zh-CN": "zh-CN", "zh-TW": "zh-TW" };
 
+  function normalizeTag(raw) {
+    const tag = String(raw || "").toLowerCase().replace(/_/g, "-");
+    if (!tag) return null;
+    if (tag.includes("hant") || tag.startsWith("zh-tw") || tag === "zh-hk" || tag === "zh-mo") return "zh-TW";
+    if (tag.startsWith("zh")) return "zh-CN";
+    if (tag.startsWith("ko")) return "ko";
+    if (tag.startsWith("en")) return "en";
+    if (tag.startsWith("ja")) return "ja";
+    return null;
+  }
+
   function detect() {
+    try {
+      // 共有URLの ?lang= を最優先（OGPの言語別URLと連動）
+      const q = normalizeTag(new URLSearchParams(location.search).get("lang"));
+      if (q) {
+        try {
+          localStorage.setItem("wd_lang", q);
+        } catch {}
+        return q;
+      }
+    } catch {}
     try {
       const saved = localStorage.getItem("wd_lang");
       if (LANGS.includes(saved)) return saved;
     } catch {}
     try {
-      const nav = String(navigator.language || "").toLowerCase();
-      if (nav.startsWith("ko")) return "ko";
-      if (nav.startsWith("zh-tw") || nav.startsWith("zh-hk") || nav.startsWith("zh-mo")) return "zh-TW";
-      if (nav.startsWith("zh")) return "zh-CN";
-      if (nav.startsWith("en")) return "en";
+      return normalizeTag(navigator.language) || "ja";
     } catch {}
     return "ja";
   }

@@ -41,17 +41,27 @@
   const colorPanel = document.getElementById("colorPanel");
   const colorClose = document.getElementById("colorClose");
   const cpSv = document.getElementById("cpSv");
-  const cpHue = document.getElementById("cpHue");
+  const cpHueBar = document.getElementById("cpHueBar");
   const cpHex = document.getElementById("cpHex");
   const cpR = document.getElementById("cpR");
   const cpG = document.getElementById("cpG");
   const cpB = document.getElementById("cpB");
+  const cpRs = document.getElementById("cpRs");
+  const cpGs = document.getElementById("cpGs");
+  const cpBs = document.getElementById("cpBs");
   const cpHsvH = document.getElementById("cpHsvH");
   const cpHsvS = document.getElementById("cpHsvS");
   const cpHsvV = document.getElementById("cpHsvV");
-  const cpHslH = document.getElementById("cpHslH");
-  const cpHslS = document.getElementById("cpHslS");
-  const cpHslL = document.getElementById("cpHslL");
+  const cpHsvHs = document.getElementById("cpHsvHs");
+  const cpHsvSs = document.getElementById("cpHsvSs");
+  const cpHsvVs = document.getElementById("cpHsvVs");
+  const cpLchL = document.getElementById("cpLchL");
+  const cpLchC = document.getElementById("cpLchC");
+  const cpLchH = document.getElementById("cpLchH");
+  const cpLchLs = document.getElementById("cpLchLs");
+  const cpLchCs = document.getElementById("cpLchCs");
+  const cpLchHs = document.getElementById("cpLchHs");
+  const cpBasicGrid = document.getElementById("cpBasicGrid");
   const cpPreview = document.getElementById("cpPreview");
   const cpOk = document.getElementById("cpOk");
   const accountBtn = document.getElementById("accountBtn");
@@ -1307,9 +1317,10 @@
     scheduleSaveCamera();
   }, { passive: false });
 
-  // ---------- custom color picker (HEX/RGB/HSV/HSL) ----------
+  // ---------- custom color picker (GIMP-style: SV + hue bar + RGB/HSV/LCH sliders) ----------
   const cpSvCtx = cpSv.getContext("2d");
-  const cpState = { h: 0, s: 100, v: 100, fmt: "hex" };
+  const cpHueBarCtx = cpHueBar.getContext("2d");
+  const cpState = { h: 0, s: 100, v: 100, lh: 0, fmt: "rgb" };
   function clampNum(v, lo, hi, fallback = 0) {
     const n = Number(v);
     if (!Number.isFinite(n)) return fallback;
@@ -1345,37 +1356,52 @@
     if (h < 0) h += 360;
     return [Math.round(h) % 360, Math.round((mx === 0 ? 0 : d / mx) * 100), Math.round(mx * 100)];
   }
-  function rgbToHsl(r, g, b) {
-    r /= 255;
-    g /= 255;
-    b /= 255;
-    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-    const l = (mx + mn) / 2;
-    const d = mx - mn;
-    let h = 0, s = 0;
-    if (d !== 0) {
-      s = d / (1 - Math.abs(2 * l - 1));
-      if (mx === r) h = 60 * (((g - b) / d) % 6);
-      else if (mx === g) h = 60 * ((b - r) / d + 2);
-      else h = 60 * ((r - g) / d + 4);
-    }
-    if (h < 0) h += 360;
-    return [Math.round(h) % 360, Math.round(s * 100), Math.round(l * 100)];
+  function srgbToLinear(c) {
+    c /= 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
   }
-  function hslToRgb(h, s, l) {
-    s /= 100;
-    l /= 100;
-    const c = (1 - Math.abs(2 * l - 1)) * s;
-    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-    const m = l - c / 2;
-    let r = 0, g = 0, b = 0;
-    if (h < 60) { r = c; g = x; }
-    else if (h < 120) { r = x; g = c; }
-    else if (h < 180) { g = c; b = x; }
-    else if (h < 240) { g = x; b = c; }
-    else if (h < 300) { r = x; b = c; }
-    else { r = c; b = x; }
-    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  function linearToSrgb(c) {
+    const v = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+    return clampNum(Math.round(v * 255), 0, 255);
+  }
+  function rgbToXyz(r, g, b) {
+    const rl = srgbToLinear(r), gl = srgbToLinear(g), bl = srgbToLinear(b);
+    return [
+      rl * 0.4124564 + gl * 0.3575761 + bl * 0.1804375,
+      rl * 0.2126729 + gl * 0.7151522 + bl * 0.0721750,
+      rl * 0.0193339 + gl * 0.1191920 + bl * 0.9503041,
+    ];
+  }
+  function xyzToLab(x, y, z) {
+    const eps = 216 / 24389, kap = 24389 / 27;
+    const f = (t) => (t > eps ? Math.cbrt(t) : (kap * t + 16) / 116);
+    const fx = f(x / 0.95047), fy = f(y), fz = f(z / 1.08883);
+    return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+  }
+  function labToXyz(l, a, b) {
+    const eps = 216 / 24389, kap = 24389 / 27;
+    const fy = (l + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+    const f3 = (t) => {
+      const t3 = t * t * t;
+      return t3 > eps ? t3 : (116 * t - 16) / kap;
+    };
+    return [f3(fx) * 0.95047, f3(fy), f3(fz) * 1.08883];
+  }
+  function rgbToLch(r, g, b) {
+    const [l, a, bb] = xyzToLab(...rgbToXyz(r, g, b));
+    const c = Math.hypot(a, bb);
+    let h = (Math.atan2(bb, a) * 180) / Math.PI;
+    if (h < 0) h += 360;
+    return [l, c, h];
+  }
+  function lchToRgb(l, c, hDeg) {
+    const h = (hDeg * Math.PI) / 180;
+    const [x, y, z] = labToXyz(l, c * Math.cos(h), c * Math.sin(h));
+    return [
+      linearToSrgb(x * 3.2404542 + y * -1.5371385 + z * -0.4985314),
+      linearToSrgb(x * -0.9692660 + y * 1.8760108 + z * 0.0415560),
+      linearToSrgb(x * 0.0556434 + y * -0.2040259 + z * 1.0572252),
+    ];
   }
   function rgbToHex(r, g, b) {
     const hx = (n) => clampNum(Math.round(n), 0, 255).toString(16).padStart(2, "0");
@@ -1390,6 +1416,16 @@
   }
   function cpCurrentHex() {
     return rgbToHex(...hsvToRgb(cpState.h, cpState.s, cpState.v));
+  }
+  const cpCss = (r, g, b) => `rgb(${r},${g},${b})`;
+  function sampleStops(n, fn) {
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(fn(n === 1 ? 0 : i / (n - 1)));
+    return out;
+  }
+  function paintRange(el, stops) {
+    const parts = stops.map((c, i) => `${c} ${(i / (stops.length - 1)) * 100}%`);
+    el.style.background = `linear-gradient(90deg, ${parts.join(", ")})`;
   }
   function drawCpSv() {
     const w = cpSv.width, h = cpSv.height;
@@ -1417,22 +1453,55 @@
     cpSvCtx.arc(px, py, 7, 0, Math.PI * 2);
     cpSvCtx.stroke();
   }
+  function drawCpHueBar() {
+    const w = cpHueBar.width, h = cpHueBar.height;
+    const grad = cpHueBarCtx.createLinearGradient(0, 0, 0, h);
+    for (let i = 0; i <= 12; i++) grad.addColorStop(i / 12, `hsl(${i * 30},100%,50%)`);
+    cpHueBarCtx.fillStyle = grad;
+    cpHueBarCtx.fillRect(0, 0, w, h);
+    const y = Math.min(h - 3, Math.max(3, (cpState.h / 359) * h));
+    cpHueBarCtx.fillStyle = "#fff";
+    cpHueBarCtx.fillRect(0, y - 3, w, 6);
+    cpHueBarCtx.strokeStyle = "#000";
+    cpHueBarCtx.lineWidth = 1;
+    cpHueBarCtx.strokeRect(1, y - 3, w - 2, 6);
+  }
   function syncCpForms() {
     const [r, g, b] = hsvToRgb(cpState.h, cpState.s, cpState.v);
-    const [hh, ss, ll] = rgbToHsl(r, g, b);
-    cpHue.value = String(Math.round(cpState.h));
-    cpHex.value = cpCurrentHex().slice(1);
+    const [l, c, lh] = rgbToLch(r, g, b);
+    if (c >= 0.5) cpState.lh = Math.round(lh) % 360;
+    const li = Math.round(l), ci = Math.round(c);
     cpR.value = String(r);
     cpG.value = String(g);
     cpB.value = String(b);
+    cpRs.value = String(r);
+    cpGs.value = String(g);
+    cpBs.value = String(b);
     cpHsvH.value = String(Math.round(cpState.h));
     cpHsvS.value = String(Math.round(cpState.s));
     cpHsvV.value = String(Math.round(cpState.v));
-    cpHslH.value = String(hh);
-    cpHslS.value = String(ss);
-    cpHslL.value = String(ll);
+    cpHsvHs.value = String(Math.round(cpState.h));
+    cpHsvSs.value = String(Math.round(cpState.s));
+    cpHsvVs.value = String(Math.round(cpState.v));
+    cpLchL.value = String(li);
+    cpLchC.value = String(ci);
+    cpLchH.value = String(cpState.lh);
+    cpLchLs.value = String(li);
+    cpLchCs.value = String(ci);
+    cpLchHs.value = String(cpState.lh);
+    paintRange(cpRs, sampleStops(8, (k) => cpCss(Math.round(k * 255), g, b)));
+    paintRange(cpGs, sampleStops(8, (k) => cpCss(r, Math.round(k * 255), b)));
+    paintRange(cpBs, sampleStops(8, (k) => cpCss(r, g, Math.round(k * 255))));
+    paintRange(cpHsvHs, sampleStops(13, (k) => cpCss(...hsvToRgb(k * 360, 100, 100))));
+    paintRange(cpHsvSs, sampleStops(8, (k) => cpCss(...hsvToRgb(cpState.h, k * 100, cpState.v))));
+    paintRange(cpHsvVs, sampleStops(8, (k) => cpCss(...hsvToRgb(cpState.h, cpState.s, k * 100))));
+    paintRange(cpLchLs, sampleStops(12, (k) => cpCss(...lchToRgb(k * 100, c, cpState.lh))));
+    paintRange(cpLchCs, sampleStops(12, (k) => cpCss(...lchToRgb(l, k * 150, cpState.lh))));
+    paintRange(cpLchHs, sampleStops(13, (k) => cpCss(...lchToRgb(l, c, k * 360))));
+    cpHex.value = cpCurrentHex().slice(1);
     cpPreview.style.background = cpCurrentHex();
     drawCpSv();
+    drawCpHueBar();
     cpApply(cpCurrentHex());
   }
   function cpFromRgb(r, g, b) {
@@ -1442,12 +1511,20 @@
     cpState.v = v;
     syncCpForms();
   }
+  function cpFromLch(l, c, h) {
+    cpFromRgb(...lchToRgb(clampNum(l, 0, 100), clampNum(c, 0, 150), clampNum(h, 0, 359)));
+  }
   function cpSvPoint(e) {
     const rect = cpSv.getBoundingClientRect();
     const cx = (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX) - rect.left;
     const cy = (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY) - rect.top;
     cpState.s = clampNum((cx / rect.width) * 100, 0, 100);
     cpState.v = clampNum((1 - cy / rect.height) * 100, 0, 100);
+    syncCpForms();
+  }
+  function cpHueBarPoint(e) {
+    const rect = cpHueBar.getBoundingClientRect();
+    cpState.h = clampNum(((e.clientY - rect.top) / rect.height) * 359, 0, 359);
     syncCpForms();
   }
   let cpDragging = false;
@@ -1462,9 +1539,17 @@
   cpSv.addEventListener("pointerup", () => {
     cpDragging = false;
   });
-  cpHue.addEventListener("input", () => {
-    cpState.h = clampNum(cpHue.value, 0, 359);
-    syncCpForms();
+  let cpHueDragging = false;
+  cpHueBar.addEventListener("pointerdown", (e) => {
+    cpHueDragging = true;
+    cpHueBar.setPointerCapture(e.pointerId);
+    cpHueBarPoint(e);
+  });
+  cpHueBar.addEventListener("pointermove", (e) => {
+    if (cpHueDragging) cpHueBarPoint(e);
+  });
+  cpHueBar.addEventListener("pointerup", () => {
+    cpHueDragging = false;
   });
   cpHex.addEventListener("change", () => {
     const rgb = parseHexToRgb(cpHex.value);
@@ -1472,51 +1557,62 @@
     else syncCpForms();
   });
   const cpNum = (el, fn) => el.addEventListener("change", fn);
+  const cpSlide = (el, fn) => el.addEventListener("input", fn);
   cpNum(cpR, () => cpFromRgb(cpR.value, cpG.value, cpB.value));
   cpNum(cpG, () => cpFromRgb(cpR.value, cpG.value, cpB.value));
   cpNum(cpB, () => cpFromRgb(cpR.value, cpG.value, cpB.value));
-  cpNum(cpHsvH, () => {
-    cpState.h = clampNum(cpHsvH.value, 0, 359);
-    cpState.s = clampNum(cpHsvS.value, 0, 100);
-    cpState.v = clampNum(cpHsvV.value, 0, 100);
+  cpSlide(cpRs, () => cpFromRgb(cpRs.value, cpG.value, cpB.value));
+  cpSlide(cpGs, () => cpFromRgb(cpR.value, cpGs.value, cpB.value));
+  cpSlide(cpBs, () => cpFromRgb(cpR.value, cpG.value, cpBs.value));
+  const cpHsvFromInputs = (h, s, v) => {
+    cpState.h = clampNum(h, 0, 359);
+    cpState.s = clampNum(s, 0, 100);
+    cpState.v = clampNum(v, 0, 100);
     syncCpForms();
-  });
-  cpNum(cpHsvS, () => {
-    cpState.h = clampNum(cpHsvH.value, 0, 359);
-    cpState.s = clampNum(cpHsvS.value, 0, 100);
-    cpState.v = clampNum(cpHsvV.value, 0, 100);
-    syncCpForms();
-  });
-  cpNum(cpHsvV, () => {
-    cpState.h = clampNum(cpHsvH.value, 0, 359);
-    cpState.s = clampNum(cpHsvS.value, 0, 100);
-    cpState.v = clampNum(cpHsvV.value, 0, 100);
-    syncCpForms();
-  });
-  cpNum(cpHslH, () => {
-    const [r, g, b] = hslToRgb(
-      clampNum(cpHslH.value, 0, 359), clampNum(cpHslS.value, 0, 100), clampNum(cpHslL.value, 0, 100)
-    );
-    cpFromRgb(r, g, b);
-  });
-  cpNum(cpHslS, () => {
-    const [r, g, b] = hslToRgb(
-      clampNum(cpHslH.value, 0, 359), clampNum(cpHslS.value, 0, 100), clampNum(cpHslL.value, 0, 100)
-    );
-    cpFromRgb(r, g, b);
-  });
-  cpNum(cpHslL, () => {
-    const [r, g, b] = hslToRgb(
-      clampNum(cpHslH.value, 0, 359), clampNum(cpHslS.value, 0, 100), clampNum(cpHslL.value, 0, 100)
-    );
-    cpFromRgb(r, g, b);
-  });
+  };
+  cpNum(cpHsvH, () => cpHsvFromInputs(cpHsvH.value, cpHsvS.value, cpHsvV.value));
+  cpNum(cpHsvS, () => cpHsvFromInputs(cpHsvH.value, cpHsvS.value, cpHsvV.value));
+  cpNum(cpHsvV, () => cpHsvFromInputs(cpHsvH.value, cpHsvS.value, cpHsvV.value));
+  cpSlide(cpHsvHs, () => cpHsvFromInputs(cpHsvHs.value, cpHsvS.value, cpHsvV.value));
+  cpSlide(cpHsvSs, () => cpHsvFromInputs(cpHsvH.value, cpHsvSs.value, cpHsvV.value));
+  cpSlide(cpHsvVs, () => cpHsvFromInputs(cpHsvH.value, cpHsvV.value, cpHsvVs.value));
+  const cpLchFromInputs = (l, c, h) => cpFromLch(l, c, h);
+  cpNum(cpLchL, () => cpLchFromInputs(cpLchL.value, cpLchC.value, cpLchH.value));
+  cpNum(cpLchC, () => cpLchFromInputs(cpLchL.value, cpLchC.value, cpLchH.value));
+  cpNum(cpLchH, () => cpLchFromInputs(cpLchL.value, cpLchC.value, cpLchH.value));
+  cpSlide(cpLchLs, () => cpLchFromInputs(cpLchLs.value, cpLchC.value, cpLchH.value));
+  cpSlide(cpLchCs, () => cpLchFromInputs(cpLchL.value, cpLchCs.value, cpLchH.value));
+  cpSlide(cpLchHs, () => cpLchFromInputs(cpLchL.value, cpLchC.value, cpLchHs.value));
   document.querySelectorAll(".cpTabs button").forEach((btn) => {
     btn.onclick = () => {
       cpState.fmt = btn.dataset.fmt;
       document.querySelectorAll(".cpTabs button").forEach((el) => el.classList.toggle("active", el === btn));
-      document.querySelectorAll(".cpForm").forEach((el) => el.classList.toggle("hidden", el.dataset.fmt !== cpState.fmt));
+      document.querySelectorAll(".cpSliders").forEach((el) => el.classList.toggle("hidden", el.dataset.fmt !== cpState.fmt));
     };
+  });
+  const CP_BASIC = [
+    "#000000", "#434343", "#666666", "#999999", "#b7b7b7",
+    "#cccccc", "#d9d9d9", "#efefef", "#f3f3f3", "#ffffff",
+    "#7f0000", "#ff0000", "#ff6b6b", "#ff9e9e", "#7f3300",
+    "#ff7f00", "#ffb36b", "#7f7f00", "#ffff00", "#ffff7f",
+    "#007f00", "#00b300", "#00ff00", "#7fff7f", "#007f7f",
+    "#00ffff", "#7fffff", "#00007f", "#0000ff", "#7f7fff",
+    "#7f007f", "#ff00ff", "#ff7fff", "#ff007f", "#ff5c8a",
+    "#7f0033", "#8a5a00", "#c9a227", "#5b3a00", "#a56900",
+    "#3b2d6b", "#6b4fd8", "#9d8df1", "#0e4d64", "#1591b3",
+    "#5bc8e8", "#1d6b38", "#37b24d", "#8ce99a", "#5c3d00",
+  ];
+  CP_BASIC.forEach((hex) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.style.background = hex;
+    btn.title = hex;
+    btn.setAttribute("aria-label", hex);
+    btn.onclick = () => {
+      const rgb = parseHexToRgb(hex);
+      if (rgb) cpFromRgb(...rgb);
+    };
+    cpBasicGrid.appendChild(btn);
   });
   let cpTarget = { kind: "paint" };
   function cpApply(hex) {
@@ -1606,7 +1702,7 @@
     if (pix.t === "rainbow") {
       // 表示色（アニメーション中の色相）から算出
       const hue = (x * 7 + y * 13 + (Date.now() / 1000) * 90) % 360;
-      const [r, g, b] = hslToRgb(hue, 100, 55);
+      const [r, g, b] = hsvToRgb(hue, 100, 100);
       hex = rgbToHex(r, g, b);
     }
     if (!/^#[0-9a-fA-F]{6}$/.test(hex || "")) {
