@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import re
@@ -23,8 +24,7 @@ historyFile = dataDir / "history.json"
 # ---- ゲームバランス (既定値。config.jsonc で変更可) ----
 cooldownSec = 10.0  # Lv1 のクールダウン秒
 minCooldown = 1.5  # クールダウンの下限秒
-cooldownDecay = 0.93  # レベルごとのクールダウン倍率
-maxLevel = 100
+cooldownDecay = 0.87  # クールダウン逓減率 (下限への指数接近。Lv40頃に下限)
 xpPerPlace = 1  # 1マス配置ごとの経験値
 xpBase = 3  # 必要経験値の係数 (次レベルまで xpBase x Lv^xpPow)
 xpPow = 1.5  # 必要経験値の指数 (序盤は軽く後半は重く)
@@ -59,9 +59,13 @@ placePerMinPerIp = 30  # IP共有の配置上限 (家族利用を妨げない程
 placeRadius = 1000  # 低レベル時の配置可能半径 (既存ピクセル/他プレイヤーから)
 trustedLevel = 5  # このレベル以上は半径制限なし
 
+# 信頼プロキシ (IP/CIDR)。ここからの接続のみ CF-Connecting-IP / X-Forwarded-For
+# を信用する。Cloudflare Tunnel (cloudflaredは自ホスト発) なら既定のままでよい。
+# 直結公開のヘッダは偽装可能なため無視し、ソケットIPを使う
+trustedProxies = ["127.0.0.1", "::1"]
+
 # ---- config.jsonc の検証表 (キー: (型, 最小, 最大)) ----
 _INT_KEYS: dict[str, tuple[int, int]] = {
-    "maxLevel": (1, 10000),
     "xpPerPlace": (1, 1000),
     "xpBase": (1, 100000),
     "coordLimit": (1000, 100_000_000),
@@ -202,14 +206,33 @@ def validateColorKey(value: object) -> str | None:
     return value.lower()
 
 
-def applyConfigKey(validated: dict[str, int | float | str], key: str, value: object) -> None:
+def validateProxyList(value: object) -> list[str] | None:
+    if not isinstance(value, list):
+        logger.warning("config.jsonc: trustedProxies must be a list, using default")
+        return None
+    nets: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        try:
+            nets.append(str(ipaddress.ip_network(item.strip(), strict=False)))
+        except ValueError:
+            logger.warning("config.jsonc: trustedProxies ignored invalid entry: %s", item)
+    return nets
+
+
+def applyConfigKey(
+    validated: dict[str, int | float | str | list[str]], key: str, value: object
+) -> None:
     """1キー分の検証。通れば validated に格納、ダメなら警告。"""
     if key in _INT_KEYS:
-        result: int | float | str | None = validateIntKey(key, value)
+        result: int | float | str | list[str] | None = validateIntKey(key, value)
     elif key in _FLOAT_KEYS:
         result = validateFloatKey(key, value)
     elif key == "background":
         result = validateColorKey(value)
+    elif key == "trustedProxies":
+        result = validateProxyList(value)
     else:
         logger.warning("config.jsonc: unknown key ignored: %s", key)
         return
@@ -229,7 +252,7 @@ def loadConfigFile() -> None:
     if not isinstance(raw, dict):
         logger.warning("config.jsonc root must be an object, using defaults")
         return
-    validated: dict[str, int | float | str] = {}
+    validated: dict[str, int | float | str | list[str]] = {}
     for key, value in raw.items():
         applyConfigKey(validated, key, value)
     rewardMinVal = validated.get("rewardMin", rewardMin)

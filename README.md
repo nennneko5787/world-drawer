@@ -41,7 +41,7 @@ uv run uvicorn main:app --port 5787
 | 項目 | 内容 |
 | --- | --- |
 | `cooldownSec` / `minCooldown` / `cooldownDecay` | Lv1の秒数・下限・レベルごとの倍率 |
-| `maxLevel` / `xpPerPlace` / `xpBase` / `xpPow` | レベル上限・配置ごとの経験値・必要経験値の係数と指数 |
+| `xpPerPlace` / `xpBase` / `xpPow` | 配置ごとの経験値・必要経験値の係数と指数（レベル上限なし） |
 | `background` / `coordLimit` / `maxNameLen` / `maxBboxPixels` | 背景色・座標上限・名前の長さ・視野取得の上限 |
 | `rewardChance` / `rewardMin` / `rewardMax` | 特殊インクの当選確率と付与量 |
 | `maxHistoryPerCell` / `maxHistoryCells` | 履歴の保持上限 |
@@ -76,4 +76,20 @@ JSの構文確認は `node --check static/js/index.js` で行えます。
 ## 注意
 
 - `data/` 配下（描画内容・ユーザー情報）はリポジトリに含めません
-- 本番運用時はリバースプロキシ経由の公開とバックアップを推奨します
+- 本番運用時はバックアップを推奨します
+
+## 公開例：Cloudflare Tunnel
+
+リバースプロキシなしで公開する場合の例です。`cloudflared` が自ホストから出るため、
+既定の `trustedProxies`（`127.0.0.1`・`::1`）のままでクライアントIPを取得できます。
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:5787
+```
+
+- 接続元IPは `CF-Connecting-IP` ヘッダから取得します
+- 国旗は最終接続国の `CF-IPCountry` から自動設定されます（一覧・履歴に表示、アカウントパネルで表示/非表示のみ切替可）
+- `trustedProxies` に含まれる相手からの接続でのみ `CF-Connecting-IP` /
+  `X-Forwarded-For` を信用し、直結リクエストのヘッダは偽装可能なため無視します
+- 別構成のリバースプロキシを使う場合は、その出口IP/CIDRを `trustedProxies`
+  （`config.jsonc`）に追加してください

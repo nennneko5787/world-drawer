@@ -18,7 +18,7 @@
     <canvas id="board"></canvas>
 
     <header id="topbar">
-        <div class="brand"><i class="bi bi-globe"></i><span>world-drawer</span></div>
+        <div class="brand"><i class="bi bi-globe"></i><span>The world drawer</span></div>
         <div id="coords" class="pill" data-i18n-title="coordsTitle" title="カーソル位置のキャンバス座標">(0, 0)</div>
         <div id="cooldown" class="pill" data-i18n="ready">準備OK</div>
         <div id="level" class="pill" data-i18n-title="levelWord" title="レベル">Lv1 0/3xp</div>
@@ -92,6 +92,9 @@
             <input id="loginCode" data-i18n-ph="loginCodePh" placeholder="引っ越しコード (XXXX-XXXX)" autocomplete="off">
             <input id="loginPassword" type="password" data-i18n-ph="loginPwPh" placeholder="パスワード" autocomplete="current-password">
             <button id="loginBtn" data-i18n="loginBtn">ログイン</button>
+        </div>
+        <div class="accSection">
+            <label class="setRow"><input type="checkbox" id="countryChk" checked> <span data-i18n="countryShow">国旗を表示</span></label>
         </div>
     </aside>
 

@@ -10,25 +10,52 @@ from typing import Any
 import socketio
 from pydantic import BaseModel, ValidationError
 
-from app.objects import config as cfg
-from app.objects.models import PixelEvent, PlaceInput, SocketCursor, SocketHello
+from app.objects.requests import PlaceInput, SocketCursor, SocketHello
+from app.objects.responses import PixelEvent
 from app.services import canvas, presence, users
+from app.services import config as cfg
 from app.services.database import dbLock, getDb
 
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 
 
+def scopeProxyHeaders(scope: dict) -> tuple[str, str, str]:
+    """ASGIスコープのヘッダから CF-Connecting-IP / X-Forwarded-For / CF-IPCountry を抜く。"""
+    cfConnectingIp, forwardedFor, countryRaw = "", "", ""
+    rawHeaders = scope.get("headers")
+    if not isinstance(rawHeaders, (list, tuple)):
+        return cfConnectingIp, forwardedFor, countryRaw
+    for item in rawHeaders:
+        try:
+            rawKey, rawValue = item
+            key = bytes(rawKey).decode("latin-1").lower()
+            value = bytes(rawValue).decode("latin-1")
+        except (TypeError, ValueError):
+            continue
+        if key == "cf-connecting-ip":
+            cfConnectingIp = value
+        elif key == "x-forwarded-for":
+            forwardedFor = value
+        elif key == "cf-ipcountry":
+            countryRaw = value
+    return cfConnectingIp, forwardedFor, countryRaw
+
+
 def socketIp(environ: Any) -> str:
+    peer, cfConnectingIp, forwardedFor = "unknown", "", ""
     if isinstance(environ, dict):
         scope = environ.get("asgi.scope")
         if isinstance(scope, dict):
             client = scope.get("client")
             if isinstance(client, (list, tuple)) and client:
-                return str(client[0])
+                peer = str(client[0])
+            cfConnectingIp, forwardedFor, _countryRaw = scopeProxyHeaders(scope)
         remote = environ.get("REMOTE_ADDR")
-        if isinstance(remote, str) and remote:
-            return remote
-    return "unknown"
+        if peer == "unknown" and isinstance(remote, str) and remote:
+            peer = remote
+    return users.resolveClientIp(
+        peer=peer, cfConnectingIp=cfConnectingIp, forwardedFor=forwardedFor
+    )
 
 
 def sidIp(sid: str) -> str:
@@ -37,6 +64,26 @@ def sidIp(sid: str) -> str:
         if callable(getEnviron):
             return socketIp(getEnviron(sid))
     return "unknown"
+
+
+def sidCountry(sid: str) -> str | None:
+    """ハンドシェイク経路のCF-IPCountry。信頼経由のみ採用 (偽装対策)。"""
+    with contextlib.suppress(Exception):
+        getEnviron = getattr(sio, "get_environ", None)
+        if callable(getEnviron):
+            environ = getEnviron(sid)
+            if isinstance(environ, dict):
+                scope = environ.get("asgi.scope")
+                if isinstance(scope, dict):
+                    client = scope.get("client")
+                    peer = (
+                        str(client[0])
+                        if isinstance(client, (list, tuple)) and client
+                        else "unknown"
+                    )
+                    _, _, countryRaw = scopeProxyHeaders(scope)
+                    return users.requestCountry(peer, countryRaw or None)
+    return None
 
 
 def parseSocket[T: BaseModel](model: type[T], data: Any) -> T | None:
@@ -83,7 +130,11 @@ async def hello(sid: str, data: Any) -> None:
     db = await getDb()
     async with dbLock:
         if token:
-            user = await users.ensureUser(db, token)
+            user = await users.ensureUser(db, token, users.defaultNameFor(payload.lang, ""))
+            code = sidCountry(sid)
+            if code and code != user.get("country"):
+                await db.execute("UPDATE users SET country = ? WHERE token = ?", (code, token))
+                user["country"] = code
             if payload.name is not None or payload.color is not None:
                 user["name"] = users.cleanName(payload.name or user["name"])
                 user["color"] = users.cleanColor(payload.color or "", user["color"])
@@ -94,6 +145,8 @@ async def hello(sid: str, data: Any) -> None:
             await db.commit()
         else:
             # トークンなし = 初回。サーバー発行トークンを新規作成
+            # 規定名は作成者のロケールで固定 (全言語圏にそのまま表示)
+            anonFallback = users.defaultNameFor(payload.lang, "")
             while True:
                 token = secrets.token_urlsafe(32)
                 if await users.fetchUser(db, token) is None:
@@ -103,9 +156,10 @@ async def hello(sid: str, data: Any) -> None:
                 users.NewUser(
                     token=token,
                     uid=await users.newUidDb(db),
-                    name=users.cleanName(payload.name or "ななし"),
+                    name=users.cleanName(payload.name or anonFallback, anonFallback),
                     color=users.cleanColor(payload.color or "", users.randomUserColor()),
                     inventory=users.newInventory(),
+                    country=sidCountry(sid),
                 ),
             )
             await db.commit()
@@ -132,6 +186,8 @@ async def cursor(sid: str, data: Any) -> None:
         "name": user["name"],
         "color": user["color"],
         "uid": user["uid"],
+        "country": user.get("country"),
+        "showCountry": user.get("showCountry", True),
         "x": payload.x,
         "y": payload.y,
         "updatedAt": time.time(),
@@ -143,6 +199,7 @@ async def cursor(sid: str, data: Any) -> None:
             "uid": user["uid"],
             "name": user["name"],
             "color": user["color"],
+            "country": user.get("country") if user.get("showCountry", True) else None,
             "x": payload.x,
             "y": payload.y,
         },
@@ -156,7 +213,7 @@ async def place(sid: str, data: Any) -> None:
     if payload is None:
         await sio.emit("placeResult", {"ok": False, "error": "badPayload"}, to=sid)
         return
-    result = await canvas.doPlace(payload, ip=sidIp(sid))
+    result = await canvas.doPlace(payload, ip=sidIp(sid), country=sidCountry(sid))
     await sio.emit("placeResult", result, to=sid)
     if result.get("ok"):
         event = PixelEvent(

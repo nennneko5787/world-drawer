@@ -9,8 +9,8 @@ from typing import Any
 
 import aiosqlite
 
-from app.objects import config as cfg
-from app.objects.models import PlaceInput, UndoBody
+from app.objects.requests import PlaceInput, UndoBody
+from app.services import config as cfg
 from app.services import presence, users
 from app.services.database import dbLock, getDb
 
@@ -133,11 +133,13 @@ async def pruneHistoryCells(db: aiosqlite.Connection) -> None:
     )
 
 
-async def executePlace(db: aiosqlite.Connection, place: PlaceInput, ip: str, now: float) -> dict:
+async def executePlace(
+    db: aiosqlite.Connection, place: PlaceInput, ip: str, now: float, countryCode: str | None = None
+) -> dict:
     token = place.token
     x, y = place.x, place.y
     ink = place.ink or place.inkType or "normal"
-    user = await users.ensureUser(db, token)
+    user = await users.ensureUser(db, token, users.defaultNameFor(place.lang, ""))
     level = users.clampLevel(user.get("level", 1))
     await checkCooldown(user, level, now)
     await checkRadius(db, token, level, x, y)
@@ -146,10 +148,10 @@ async def executePlace(db: aiosqlite.Connection, place: PlaceInput, ip: str, now
     consumeIpBucket(ip, now)
     cooldownUntil = now + users.cooldownForLevel(level)
 
-    # 経験値付与とレベルアップ (複数段上がりに対応)
+    # 経験値付与とレベルアップ (上限なし。複数段上がりに対応。必要値>=1のため必ず停止)
     xp = int(user.get("xp", 0)) + cfg.xpPerPlace
     leveledUp = False
-    while level < cfg.maxLevel and xp >= users.xpNeededForLevel(level):
+    while xp >= users.xpNeededForLevel(level):
         xp -= users.xpNeededForLevel(level)
         level += 1
         leveledUp = True
@@ -159,13 +161,26 @@ async def executePlace(db: aiosqlite.Connection, place: PlaceInput, ip: str, now
         gotInk, amount = reward
         inv[gotInk] = inv.get(gotInk, 0) + amount
 
+    newCountry = countryCode or user.get("country")
     await db.execute(
-        "UPDATE users SET inventory = ?, cooldownUntil = ?, level = ?, xp = ? WHERE token = ?",
-        (json.dumps(inv, ensure_ascii=False), cooldownUntil, level, xp, token),
+        "UPDATE users SET inventory = ?, cooldownUntil = ?, level = ?, xp = ?, country = ?"
+        " WHERE token = ?",
+        (json.dumps(inv, ensure_ascii=False), cooldownUntil, level, xp, newCountry, token),
     )
     await db.execute(
-        "INSERT INTO history(x, y, uid, c, t, at) VALUES (?, ?, ?, ?, ?, ?)",
-        (x, y, user["uid"], histColor, histInk, now),
+        "INSERT INTO history(x, y, uid, c, t, at, xp, rewardInk, rewardAmount)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            x,
+            y,
+            user["uid"],
+            histColor,
+            histInk,
+            now,
+            cfg.xpPerPlace,
+            reward[0] if reward else None,
+            reward[1] if reward else 0,
+        ),
     )
     await db.execute(
         "DELETE FROM history WHERE x = ? AND y = ? AND id NOT IN"
@@ -209,7 +224,7 @@ def normalizeUndoPrev(prevC: str, prevT: str, *, prevEmpty: bool) -> tuple[bool,
 
 async def fetchUndoLast(db: aiosqlite.Connection, x: int, y: int) -> Any | None:
     async with db.execute(
-        "SELECT id, uid, c, t, at, undone FROM history"
+        "SELECT id, uid, c, t, at, undone, xp, rewardInk, rewardAmount FROM history"
         " WHERE x = ? AND y = ? ORDER BY id DESC LIMIT 1",
         (x, y),
     ) as cur:
@@ -217,13 +232,13 @@ async def fetchUndoLast(db: aiosqlite.Connection, x: int, y: int) -> Any | None:
 
 
 def checkUndoFresh(last: Any, user: dict, now: float) -> None:
-    _lastId, lastUid, _c, _t, lastAt, lastUndone = last
+    _lastId, lastUid, _c, _t, lastAt, lastUndone, *_rest = last
     if lastUid != user["uid"] or lastUndone or now - float(lastAt) > UNDO_WINDOW_SEC:
         raise PlaceError({"ok": False, "error": "tooLate"})
 
 
 async def checkUndoCurrent(db: aiosqlite.Connection, body: UndoBody, last: Any) -> None:
-    _lastId, _uid, lastC, lastT, _at, _undone = last
+    _lastId, _uid, lastC, lastT, _at, _undone, *_rest = last
     async with db.execute("SELECT c, t FROM pixels WHERE x = ? AND y = ?", (body.x, body.y)) as cur:
         current = await cur.fetchone()
     if lastT == "erase":
@@ -262,22 +277,40 @@ async def restoreUndoPixel(db: aiosqlite.Connection, body: UndoBody, user: dict)
 
 
 async def finalizeUndo(
-    db: aiosqlite.Connection, body: UndoBody, token: str, user: dict, last: Any
-) -> dict:
-    lastId, _uid, _c, lastT, _at, _undone = last
+    db: aiosqlite.Connection,
+    token: str,
+    user: dict,
+    last: Any,
+    *,
+    countryCode: str | None = None,
+) -> tuple[dict, int, int]:
+    lastId, _uid, _c, lastT, _at, _undone, xpGrant, rewardInk, rewardAmount = last
     await db.execute("UPDATE history SET undone = 1 WHERE id = ?", (lastId,))
     inv = user["inventory"]
     if lastT in cfg.specialInks:
         inv[lastT] = inv.get(lastT, 0) + 1
-        await db.execute(
-            "UPDATE users SET inventory = ? WHERE token = ?",
-            (json.dumps(inv, ensure_ascii=False), token),
-        )
+    # 巻き戻し: 経験値 (レベルダウンあり) と当選報酬。使用済み分は枯渇時に0止め
+    level = users.clampLevel(user.get("level", 1))
+    xp = int(user.get("xp", 0)) - int(xpGrant or 0)
+    while xp < 0 and level > 1:
+        level -= 1
+        xp += users.xpNeededForLevel(level)
+    xp = max(0, xp)
+    if rewardInk:
+        inv[rewardInk] = max(0, inv.get(rewardInk, 0) - int(rewardAmount or 0))
+    newCountry = countryCode or user.get("country")
+    await db.execute(
+        "UPDATE users SET inventory = ?, cooldownUntil = ?, level = ?, xp = ?, country = ?"
+        " WHERE token = ?",
+        (json.dumps(inv, ensure_ascii=False), user["cooldownUntil"], level, xp, newCountry, token),
+    )
     await db.commit()
-    return inv
+    return inv, level, xp
 
 
-async def executeUndo(db: aiosqlite.Connection, body: UndoBody, token: str, now: float) -> dict:
+async def executeUndo(
+    db: aiosqlite.Connection, body: UndoBody, token: str, now: float, countryCode: str | None = None
+) -> dict:
     user = await users.fetchUser(db, token)
     if user is None:
         raise PlaceError({"ok": False, "error": "noUndo"})
@@ -288,7 +321,7 @@ async def executeUndo(db: aiosqlite.Connection, body: UndoBody, token: str, now:
     await checkUndoCurrent(db, body, last)
     await checkUndoPrev(db, body, last[0])
     applied = await restoreUndoPixel(db, body, user)
-    inv = await finalizeUndo(db, body, token, user, last)
+    inv, level, xp = await finalizeUndo(db, token, user, last, countryCode=countryCode)
     return {
         "ok": True,
         "x": body.x,
@@ -297,11 +330,14 @@ async def executeUndo(db: aiosqlite.Connection, body: UndoBody, token: str, now:
         "by": user["uid"],
         "inventory": dict(inv),
         "cooldownUntil": user["cooldownUntil"],
+        "level": level,
+        "xp": xp,
+        "xpNeeded": users.xpNeededForLevel(level),
     }
 
 
-async def undoPlace(body: UndoBody) -> dict:
-    """直前3秒以内の自分の配置を取り消す。経験値・報酬はそのまま、使用インクのみ返却。"""
+async def undoPlace(body: UndoBody, country: str | None = None) -> dict:
+    """直前3秒以内の自分の配置を取り消す。経験値・当選報酬も巻き戻し、使用インクのみ返却。"""
     token = (body.token or "").strip()[:64]
     if not token:
         return {"ok": False, "error": "missingToken"}
@@ -320,12 +356,12 @@ async def undoPlace(body: UndoBody) -> dict:
     db = await getDb()
     try:
         async with dbLock:
-            return await executeUndo(db, body, token, time.time())
+            return await executeUndo(db, body, token, time.time(), country)
     except PlaceError as err:
         return err.result
 
 
-async def doPlace(place: PlaceInput, *, ip: str = "unknown") -> dict:
+async def doPlace(place: PlaceInput, *, ip: str = "unknown", country: str | None = None) -> dict:
     token = (place.token or "").strip()[:64]
     if not inBounds(place.x, place.y):
         return {"ok": False, "error": "outOfBounds"}
@@ -338,7 +374,7 @@ async def doPlace(place: PlaceInput, *, ip: str = "unknown") -> dict:
     db = await getDb()
     try:
         async with dbLock:
-            return await executePlace(db, place, ip, time.time())
+            return await executePlace(db, place, ip, time.time(), country)
     except PlaceError as err:
         return err.result
 
@@ -365,7 +401,14 @@ async def nearPixel(db: aiosqlite.Connection, x: int, y: int) -> bool:
         return await cur.fetchone() is not None
 
 
-async def doProfile(token: str, name: str, color: str) -> dict:
+async def doProfile(
+    token: str,
+    name: str,
+    color: str,
+    *,
+    showCountry: bool | None = None,
+    countryCode: str | None = None,
+) -> dict:
     if not token:
         return {"ok": False, "error": "missingToken"}
     db = await getDb()
@@ -373,17 +416,29 @@ async def doProfile(token: str, name: str, color: str) -> dict:
         user = await users.ensureUser(db, token)
         newName = users.cleanName(name)
         newColor = users.cleanColor(color, user.get("color", "#22aa66"))
+        newShow = user.get("showCountry", True) if showCountry is None else bool(showCountry)
+        newCountry = countryCode or user.get("country")
         await db.execute(
-            "UPDATE users SET name = ?, color = ? WHERE token = ?",
-            (newName, newColor, token),
+            "UPDATE users SET name = ?, color = ?, showCountry = ?, country = ? WHERE token = ?",
+            (newName, newColor, int(newShow), newCountry, token),
         )
         await db.commit()
     item = presence.presence.get(token)
     if item is not None:
         item["name"] = newName
         item["color"] = newColor
+        item["showCountry"] = newShow
+        item["country"] = newCountry
         item["updatedAt"] = time.time()
-    return {"ok": True, "profile": {"name": newName, "color": newColor}}
+    return {
+        "ok": True,
+        "profile": {
+            "name": newName,
+            "color": newColor,
+            "country": newCountry,
+            "showCountry": newShow,
+        },
+    }
 
 
 def userPayload(user: dict, token: str, now: float | None = None) -> dict:
@@ -393,6 +448,8 @@ def userPayload(user: dict, token: str, now: float | None = None) -> dict:
         "token": token,
         "uid": user["uid"],
         "profile": {"name": user["name"], "color": user["color"]},
+        "country": user.get("country"),
+        "showCountry": user.get("showCountry", True),
         "inventory": dict(user["inventory"]),
         "remaining": round(max(0.0, float(user.get("cooldownUntil", 0.0)) - now), 2),
         "cooldownUntil": user["cooldownUntil"],
@@ -447,7 +504,8 @@ async def fetchHistoryItems(
     db = await getDb()
     sql = (
         "SELECT h.id, h.uid, COALESCE(u.name, 'ななし'), COALESCE(u.color, '#22aa66'),"
-        " h.c, h.t, h.at FROM history h LEFT JOIN users u ON u.uid = h.uid"
+        " h.c, h.t, h.at, CASE WHEN u.showCountry = 1 THEN u.country ELSE NULL END"
+        " FROM history h LEFT JOIN users u ON u.uid = h.uid"
         " WHERE h.x = ? AND h.y = ? AND h.undone = 0"
     )
     params: list[object] = [x, y]
@@ -461,8 +519,17 @@ async def fetchHistoryItems(
     hasMore = len(rows) > limit
     return (
         [
-            {"id": rid, "uid": uid, "name": name, "userColor": color, "c": c, "t": t, "at": at}
-            for rid, uid, name, color, c, t, at in rows[:limit]
+            {
+                "id": rid,
+                "uid": uid,
+                "name": name,
+                "userColor": color,
+                "c": c,
+                "t": t,
+                "at": at,
+                "country": country,
+            }
+            for rid, uid, name, color, c, t, at, country in rows[:limit]
         ],
         hasMore,
     )

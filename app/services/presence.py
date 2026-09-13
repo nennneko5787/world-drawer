@@ -22,6 +22,7 @@ def presenceList() -> list[dict]:
                 "uid": item.get("uid", "?"),
                 "name": item.get("name", "ななし"),
                 "color": item.get("color", "#22aa66"),
+                "country": item.get("country") if item.get("showCountry", True) else None,
                 "x": item.get("x"),
                 "y": item.get("y"),
             }
@@ -34,6 +35,8 @@ def presenceEntry(token: str, user: dict) -> dict:
         "name": user["name"],
         "color": user["color"],
         "uid": user["uid"],
+        "country": user.get("country"),
+        "showCountry": user.get("showCountry", True),
         "x": presence.get(token, {}).get("x"),
         "y": presence.get(token, {}).get("y"),
         "updatedAt": time.time(),

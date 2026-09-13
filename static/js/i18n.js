@@ -1,4 +1,4 @@
-/* world-drawer i18n (ja / en / ko / zh-CN / zh-TW)。index.js より先に読むこと。 */
+/* The world drawer i18n (ja / en / ko / zh-CN / zh-TW)。index.js より先に読むこと。 */
 (() => {
   "use strict";
 
@@ -42,6 +42,7 @@
       "loginCodePh": "引っ越しコード (XXXX-XXXX)",
       "loginPwPh": "パスワード",
       "loginBtn": "ログイン",
+      "countryShow": "国旗を表示",
       "colorPanelT": "色の詳細指定",
       "cpSvAria": "鮮やかさ（横）と明るさ（縦）の選択",
       "hueLabel": "色相",
@@ -132,8 +133,8 @@
       "eyedropInkMissing": "色を取得: {hex}（{ink}インクがないため通常インクで塗ります）",
       "eyedropGot": "色を取得: {hex}（{ink}）",
       "inkMissingToast": "そのインクは持っていません（塗ると確率で入手）",
-      "h_title": "ヘルプ - world-drawer",
-      "h_h1": "world-drawer ヘルプ",
+      "h_title": "ヘルプ - The world drawer",
+      "h_h1": "The world drawer ヘルプ",
       "h_back": "キャンバスに戻る",
       "h_basic": "基本操作",
       "h_b1": "左クリック / タップで1マス配置（塗る・消す・履歴・設計図はツールで切替）",
@@ -170,8 +171,10 @@
       "h_hist2": "各ユーザーには不変の固定ID（#xxxxxx）が振られます",
       "h_hist3": "オンライン一覧や履歴からID単位で非表示にできます（その人のインクとカーソルが隠れます。設定は端末内のみ）",
       "h_hist4": "オンライン一覧に座標は表示しません",
+      "h_histFlag": "国旗を設定しているユーザーは一覧と履歴に国旗が出ます",
       "h_accH": "アカウント引っ越し",
       "h_accP": "人物ボタンから引っ越しコード＋パスワードを発行すると、別端末で同じアカウントにログインできます（コードの再発行で旧コードは無効化）。",
+      "h_accFlag": "国は最終接続地から自動設定されます（アカウントパネルで表示/非表示のみ切替可）。規定名は作成時の言語で固定され、全言語圏にそのまま表示されます",
       "h_themeH": "テーマ",
       "h_themeP": "設定からライト / ダーク / 自動（端末設定に連動）を切り替えられます。グリッド・原点軸・配置可能範囲の表示/非表示も設定から切り替えられます。",
       "h_abuseH": "荒らし対策",
@@ -218,6 +221,7 @@
       "loginCodePh": "Transfer code (XXXX-XXXX)",
       "loginPwPh": "Password",
       "loginBtn": "Log in",
+      "countryShow": "Show flag",
       "colorPanelT": "Custom color",
       "cpSvAria": "Pick saturation (horizontal) and brightness (vertical)",
       "hueLabel": "Hue",
@@ -308,8 +312,8 @@
       "eyedropInkMissing": "Got {hex} (no {ink} ink, painting with normal)",
       "eyedropGot": "Got {hex} ({ink})",
       "inkMissingToast": "You don't have that ink (chance to get some when painting)",
-      "h_title": "Help - world-drawer",
-      "h_h1": "world-drawer Help",
+      "h_title": "Help - The world drawer",
+      "h_h1": "The world drawer Help",
       "h_back": "Back to canvas",
       "h_basic": "Basic operations",
       "h_b1": "Left-click / tap to place 1 cell (switch paint, erase, history, blueprint tools)",
@@ -346,8 +350,10 @@
       "h_hist2": "Each user has a permanent ID (#xxxxxx)",
       "h_hist3": "Mute by ID from the online list or history (hides their ink and cursor; device-only)",
       "h_hist4": "The online list shows no coordinates",
+      "h_histFlag": "Users with a flag show it in the list and history",
       "h_accH": "Account transfer",
       "h_accP": "Issue a transfer code + password from the person button to log in on another device (reissuing invalidates the old code).",
+      "h_accFlag": "Country is set automatically from your last connection (toggle visibility only, in the account panel). The default name is fixed in the creator's language and shown as-is everywhere",
       "h_themeH": "Theme",
       "h_themeP": "Switch light / dark / auto (follows device) in settings. Grid, origin axes, and placeable-area visibility too.",
       "h_abuseH": "Anti-griefing",
@@ -394,6 +400,7 @@
       "loginCodePh": "이전 코드(XXXX-XXXX)",
       "loginPwPh": "비밀번호",
       "loginBtn": "로그인",
+      "countryShow": "국기 표시하기",
       "colorPanelT": "색상 상세 지정",
       "cpSvAria": "채도(가로)와 명도(세로) 선택",
       "hueLabel": "색상",
@@ -484,8 +491,8 @@
       "eyedropInkMissing": "색상 획득: {hex}({ink} 잉크가 없어 일반 잉크로 칠합니다)",
       "eyedropGot": "색상 획득: {hex}({ink})",
       "inkMissingToast": "해당 잉크가 없습니다(칠하면 확률로 획득)",
-      "h_title": "도움말 - world-drawer",
-      "h_h1": "world-drawer 도움말",
+      "h_title": "도움말 - The world drawer",
+      "h_h1": "The world drawer 도움말",
       "h_back": "캔버스로 돌아가기",
       "h_basic": "기본 조작",
       "h_b1": "왼쪽 클릭 / 탭으로 1칸 배치(칠하기·지우기·기록·설계도는 도구로 전환)",
@@ -522,8 +529,10 @@
       "h_hist2": "각 사용자에게는 변하지 않는 고정 ID(#xxxxxx)가 부여됩니다",
       "h_hist3": "온라인 목록이나 기록에서 ID 단위로 숨길 수 있습니다(해당 잉크와 커서가 숨겨집니다. 기기 내 설정のみ)",
       "h_hist4": "온라인 목록에는 좌표가 표시되지 않습니다",
+      "h_histFlag": "국기를 설정한 사용자는 목록과 기록에 국기가 표시됩니다",
       "h_accH": "계정 이전",
       "h_accP": "사람 버튼에서 이전 코드+비밀번호를 발급하면 다른 기기에서 같은 계정으로 로그인할 수 있습니다(코드를 다시 발급하면 이전 코드는 무효화).",
+      "h_accFlag": "국가는 마지막 접속지에서 자동 설정됩니다(계정 패널에서 표시 여부만 변경 가능). 기본 이름은 생성 시점의 언어로 고정되어 모든 언어권에 그대로 표시됩니다",
       "h_themeH": "테마",
       "h_themeP": "설정에서 라이트 / 다크 / 자동(기기 설정에 연동)을 바꿀 수 있습니다. 그리드·원점 축·배치 가능 범위의 표시/숨기기도 설정에서 바꿀 수 있습니다.",
       "h_abuseH": "어뷰징 대책",
@@ -570,6 +579,7 @@
       "loginCodePh": "迁移代码（XXXX-XXXX）",
       "loginPwPh": "密码",
       "loginBtn": "登录",
+      "countryShow": "显示国旗",
       "colorPanelT": "颜色详细指定",
       "cpSvAria": "选择饱和度（横向）和明度（纵向）",
       "hueLabel": "色相",
@@ -660,8 +670,8 @@
       "eyedropInkMissing": "已取色 {hex}（没有{ink}墨水，用普通墨水绘制）",
       "eyedropGot": "已取色 {hex}（{ink}）",
       "inkMissingToast": "没有该墨水（绘制时有概率获得）",
-      "h_title": "帮助 - world-drawer",
-      "h_h1": "world-drawer 帮助",
+      "h_title": "帮助 - The world drawer",
+      "h_h1": "The world drawer 帮助",
       "h_back": "返回画布",
       "h_basic": "基本操作",
       "h_b1": "左键 / 点击放置1格（绘制、擦除、历史、设计图用工具切换）",
@@ -698,8 +708,10 @@
       "h_hist2": "每个用户都有不变的固定ID（#xxxxxx）",
       "h_hist3": "可从在线列表或历史中按ID隐藏（隐藏其墨水和光标，仅本机设置）",
       "h_hist4": "在线列表不显示坐标",
+      "h_histFlag": "设置了国旗的用户会在列表和历史中显示国旗",
       "h_accH": "账号迁移",
       "h_accP": "从人物按钮生成迁移代码＋密码后，可在其他设备登录同一账号（重新生成后旧代码失效）。",
+      "h_accFlag": "国家按最后连接地自动设置（仅可在账号面板切换显示与否）。默认名按创建时的语言固定，向所有语言圈原样显示",
       "h_themeH": "主题",
       "h_themeP": "可在设置中切换浅色 / 深色 / 自动（跟随设备设置）。网格、原点轴、可放置范围的显示/隐藏也可在设置中切换。",
       "h_abuseH": "防破坏措施",
@@ -746,6 +758,7 @@
       "loginCodePh": "遷移代碼（XXXX-XXXX）",
       "loginPwPh": "密碼",
       "loginBtn": "登入",
+      "countryShow": "顯示國旗",
       "colorPanelT": "顏色詳細指定",
       "cpSvAria": "選擇飽和度（橫向）和明度（縱向）",
       "hueLabel": "色相",
@@ -836,8 +849,8 @@
       "eyedropInkMissing": "已取色 {hex}（沒有{ink}墨水，用普通墨水繪製）",
       "eyedropGot": "已取色 {hex}（{ink}）",
       "inkMissingToast": "沒有該墨水（繪製時有機率獲得）",
-      "h_title": "說明 - world-drawer",
-      "h_h1": "world-drawer 說明",
+      "h_title": "說明 - The world drawer",
+      "h_h1": "The world drawer 說明",
       "h_back": "返回畫布",
       "h_basic": "基本操作",
       "h_b1": "左鍵 / 點選放置1格（繪製、擦除、歷史、設計圖用工具切換）",
@@ -874,8 +887,10 @@
       "h_hist2": "每個使用者都有不變的固定ID（#xxxxxx）",
       "h_hist3": "可從線上列表或歷史中按ID隱藏（隱藏其墨水和游標，僅本機設定）",
       "h_hist4": "線上列表不顯示座標",
+      "h_histFlag": "設定了國旗的使用者會在列表和歷史中顯示國旗",
       "h_accH": "帳號遷移",
       "h_accP": "從人物按鈕產生遷移代碼＋密碼後，可在其他裝置登入同一帳號（重新產生後舊代碼失效）。",
+      "h_accFlag": "國家按最後連線地自動設定（僅可在帳號面板切換顯示與否）。預設名按建立時的語言固定，向所有語言圈原樣顯示",
       "h_themeH": "主題",
       "h_themeP": "可在設定中切換淺色 / 深色 / 自動（跟隨裝置設定）。網格、原點軸、可放置範圍的顯示/隱藏也可在設定中切換。",
       "h_abuseH": "防破壞措施",
@@ -946,6 +961,16 @@
     if (typeof window.wdLocaleRefresh === "function") window.wdLocaleRefresh();
   }
 
+  function wireSelects() {
+    // data-langsel なセレクトはどのページでも言語切替として動作させる
+    document.querySelectorAll("select[data-langsel]").forEach((el) => {
+      if (el.dataset.wdWired) return;
+      el.dataset.wdWired = "1";
+      el.addEventListener("change", () => setLang(el.value));
+    });
+  }
+
+  wireSelects();
   applyStatic();
 
   window.wdI18n = {

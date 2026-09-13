@@ -1,12 +1,10 @@
-"""Pydanticモデル (HTTPボディ + Socket.IOペイロード)。"""
+"""リクエストモデル (HTTPボディ + Socket.IO受信ペイロード)。"""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-
-class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+from app.objects.base import StrictModel
 
 
 class PlaceInput(StrictModel):
@@ -18,12 +16,14 @@ class PlaceInput(StrictModel):
     token: str = Field(default="")
     ink: str | None = Field(default=None)
     inkType: str | None = Field(default=None, alias="type")
+    lang: str | None = Field(default=None)
 
 
 class ProfileBody(StrictModel):
     token: str = Field(default="")
     name: str = Field(default="ななし")
     color: str = Field(default="#22aa66")
+    showCountry: bool | None = Field(default=None)
 
 
 class AccountIssueBody(StrictModel):
@@ -49,26 +49,10 @@ class SocketHello(StrictModel):
     token: str = Field(default="")
     name: str | None = Field(default=None)
     color: str | None = Field(default=None)
+    lang: str | None = Field(default=None)
 
 
 class SocketCursor(StrictModel):
     token: str = Field(default="")
     x: int
     y: int
-
-
-class PixelEvent(StrictModel):
-    x: int
-    y: int
-    c: str
-    t: str
-    by: str | None = Field(default=None)
-
-
-class PresenceItem(StrictModel):
-    token: str
-    uid: str = Field(default="?")
-    name: str = Field(default="ななし")
-    color: str = Field(default="#22aa66")
-    x: int | None = Field(default=None)
-    y: int | None = Field(default=None)

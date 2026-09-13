@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
 
-from app.objects.config import pagesDir
+from app.services.config import pagesDir
 
 router = APIRouter()
 

@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 
 import aiosqlite
 
-from app.objects import config as cfg
+from app.services import config as cfg
 from app.services import users
 
 logger = logging.getLogger(__name__)
@@ -32,12 +32,14 @@ CREATE TABLE IF NOT EXISTS users(
   inventory TEXT NOT NULL DEFAULT '{}',
   cooldownUntil REAL NOT NULL DEFAULT 0,
   level INTEGER NOT NULL DEFAULT 1, xp INTEGER NOT NULL DEFAULT 0,
-  transferCode TEXT UNIQUE, passwordHash TEXT);
+  transferCode TEXT UNIQUE, passwordHash TEXT, country TEXT,
+  showCountry INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS history(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   x INTEGER NOT NULL, y INTEGER NOT NULL,
   uid TEXT NOT NULL, c TEXT NOT NULL, t TEXT NOT NULL,
-  at REAL NOT NULL, undone INTEGER NOT NULL DEFAULT 0);
+  at REAL NOT NULL, undone INTEGER NOT NULL DEFAULT 0,
+  xp INTEGER NOT NULL DEFAULT 0, rewardInk TEXT, rewardAmount INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_history_cell ON history(x, y, at);
 """
 
@@ -89,11 +91,45 @@ async def migrateV1LegacyShapes(db: aiosqlite.Connection) -> None:
     await migrateHistorySchema(db)
 
 
+async def migrateV2UndoRefundColumns(db: aiosqlite.Connection) -> None:
+    """v2: 取り消し時の巻き戻し用に履歴へ付与記録列を追加 (既存行は0扱い)。"""
+    async with db.execute("PRAGMA table_info(history)") as cur:
+        cols = {row[1] for row in await cur.fetchall()}
+    if "xp" not in cols:
+        await db.execute("ALTER TABLE history ADD COLUMN xp INTEGER NOT NULL DEFAULT 0")
+    if "rewardInk" not in cols:
+        await db.execute("ALTER TABLE history ADD COLUMN rewardInk TEXT")
+    if "rewardAmount" not in cols:
+        await db.execute("ALTER TABLE history ADD COLUMN rewardAmount INTEGER NOT NULL DEFAULT 0")
+    await db.commit()
+
+
+async def migrateV3AddCountry(db: aiosqlite.Connection) -> None:
+    """v3: 国旗表示用の country 列を追加 (NULL=非表示)。"""
+    async with db.execute("PRAGMA table_info(users)") as cur:
+        cols = {row[1] for row in await cur.fetchall()}
+    if "country" not in cols:
+        await db.execute("ALTER TABLE users ADD COLUMN country TEXT")
+    await db.commit()
+
+
+async def migrateV4AddShowCountry(db: aiosqlite.Connection) -> None:
+    """v4: 国旗の表示切替 showCountry 列を追加 (既定表示)。"""
+    async with db.execute("PRAGMA table_info(users)") as cur:
+        cols = {row[1] for row in await cur.fetchall()}
+    if "showCountry" not in cols:
+        await db.execute("ALTER TABLE users ADD COLUMN showCountry INTEGER NOT NULL DEFAULT 1")
+    await db.commit()
+
+
 Migration = tuple[int, str, Callable[[aiosqlite.Connection], Awaitable[None]]]
 MIGRATIONS: list[Migration] = [
     (1, "legacy_shapes", migrateV1LegacyShapes),
+    (2, "undo_refund_columns", migrateV2UndoRefundColumns),
+    (3, "add_country", migrateV3AddCountry),
+    (4, "add_show_country", migrateV4AddShowCountry),
     # 追加時はここへ (番号は単調増加・各ステップは冪等にすること):
-    # (2, "add_xxx", migrateV2AddXxx),
+    # (4, "add_xxx", migrateV4AddXxx),
 ]
 
 
@@ -174,7 +210,7 @@ def parseLegacyUser(tok: object, val: object, usedUids: set[str]) -> tuple | Non
         uid = users.genUid(usedUids)
     usedUids.add(uid)
     try:
-        level = max(1, min(cfg.maxLevel, int(val.get("level", 1))))
+        level = max(1, int(val.get("level", 1)))
     except (TypeError, ValueError):
         level = 1
     try:

@@ -8,8 +8,7 @@
   // ---- クールダウンとレベル ----
   "cooldownSec": 10.0, // Lv1 のクールダウン秒 (0.5〜3600)
   "minCooldown": 1.5, // クールダウンの下限秒 (0.1〜3600)
-  "cooldownDecay": 0.93, // レベルごとの倍率 (0.5〜1.0)。Lv10で約5.2秒
-  "maxLevel": 100, // 最大レベル (1〜10000)
+  "cooldownDecay": 0.87, // 逓減率 (0.5〜1.0)。序盤は速く終盤は緩やか、Lv40頃に下限
   "xpPerPlace": 1, // 1マス配置ごとの経験値 (1〜1000)
   "xpBase": 3, // 必要経験値の係数 (1〜100000)。次レベルまで xpBase × Lv^xpPow
   "xpPow": 1.5, // 必要経験値の指数 (1.0〜3.0)。1.5で序盤軽く後半やや重く
@@ -45,4 +44,11 @@
   "placeRadius": 1000,
   // trustedLevel: このレベル以上は半径制限なし (1〜100)。
   "trustedLevel": 5,
+
+  // ---- 接続元IPの扱い ----
+  // trustedProxies: ここに含まれる相手からの接続でのみ
+  // CF-Connecting-IP / X-Forwarded-For ヘッダを信用する。
+  // Cloudflare Tunnel (cloudflaredは自ホスト発) なら既定のまま。
+  // 直結公開のリクエストヘッダは偽装可能なため無視し、ソケットIPを使う。
+  "trustedProxies": ["127.0.0.1", "::1"],
 }

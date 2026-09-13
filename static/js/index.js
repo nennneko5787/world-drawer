@@ -63,6 +63,7 @@
   const loginCode = document.getElementById("loginCode");
   const loginPassword = document.getElementById("loginPassword");
   const loginBtn = document.getElementById("loginBtn");
+  const countryChk = document.getElementById("countryChk");
   const toolbarEl = document.getElementById("toolbar");
   const chromeToggle = document.getElementById("chromeToggle");
   const fpsVal = document.getElementById("fpsVal");
@@ -158,7 +159,7 @@
   let token = localStorage.getItem("wd_token") || "";
   async function ensureToken() {
     if (token) return;
-    const res = await fetch("/api/session", { method: "POST" });
+    const res = await fetch(`/api/session?lang=${encodeURIComponent(window.wdI18n.lang)}`, { method: "POST" });
     const data = await res.json();
     if (!data.ok || !data.token) throw new Error("session failed");
     token = data.token;
@@ -174,8 +175,13 @@
       setProfileColor(data.profile.color || myColor);
     }
     if (data.inventory) inventory = { ...inventory, ...data.inventory };
+    myCountry = data.country ?? null;
+    myShowCountry = data.showCountry ?? true;
+    countryChk.checked = myShowCountry;
   }
   let myName = localStorage.getItem("wd_name") || t("anon");
+  let myCountry = null;
+  let myShowCountry = true;
   let myColor = localStorage.getItem("wd_userColor") || "#22aa66";
   profileName.value = myName;
   let paintColor = "#ff0000";
@@ -758,9 +764,9 @@
 
   function refreshUserList() {
     // 色と名前の一覧 (座標は出さない)
-    const items = [{ uid: myUid, name: myName, color: myColor, self: true }];
+    const items = [{ uid: myUid, name: myName, color: myColor, country: myCountry, self: true }];
     for (const cur of remotes.values()) {
-      items.push({ uid: cur.uid || "?", name: cur.name || t("anon"), color: cur.color || "#22aa66" });
+      items.push({ uid: cur.uid || "?", name: cur.name || t("anon"), color: cur.color || "#22aa66", country: cur.country });
     }
     items.sort((a, b) => (a.self ? -1 : b.self ? 1 : String(a.name).localeCompare(String(b.name), window.wdI18n.locale)));
     userList.innerHTML = "";
@@ -772,7 +778,7 @@
       li.appendChild(dot);
       const label = document.createElement("span");
       label.className = "uname";
-      label.textContent = `${u.name} #${u.uid || "?"}`;
+      label.textContent = `${flagEmoji(u.country)}${flagEmoji(u.country) ? " " : ""}${u.name} #${u.uid || "?"}`;
       li.appendChild(label);
       if (u.self) {
         const me = document.createElement("span");
@@ -802,9 +808,12 @@
     try {
       await ensureToken();
       await fetchViewport(); // 視野+余白だけ取得
-      const me = await (await fetch("/api/me?token=" + encodeURIComponent(token))).json();
+      const me = await (await fetch(`/api/me?token=${encodeURIComponent(token)}&lang=${encodeURIComponent(window.wdI18n.lang)}`)).json();
       inventory = { ...inventory, ...me.inventory };
       cooldownUntil = me.cooldownUntil ? me.cooldownUntil * 1000 : 0;
+      myCountry = me.country ?? null;
+      myShowCountry = me.showCountry ?? true;
+      countryChk.checked = myShowCountry;
       if (me.uid) {
         myUid = me.uid;
         myUidEl.textContent = `#${myUid}`;
@@ -851,7 +860,7 @@
     socket = io();
     socket.on("connect", () => {
       socketReady = true;
-      socket.emit("hello", { token, name: myName, color: myColor });
+      socket.emit("hello", { token, name: myName, color: myColor, lang: window.wdI18n.lang });
     });
     socket.on("init", (d) => {
       background = d.background || background;
@@ -868,6 +877,9 @@
         localStorage.setItem("wd_token", token);
       }
       inventory = { ...inventory, ...d.inventory };
+      myCountry = d.country ?? null;
+      myShowCountry = d.showCountry ?? true;
+      countryChk.checked = myShowCountry;
       cooldownUntil = d.cooldownUntil ? d.cooldownUntil * 1000 : cooldownUntil;
       if (d.uid) {
         myUid = d.uid;
@@ -906,6 +918,7 @@
       uid: u.uid ?? cur.uid,
       name: u.name ?? cur.name ?? t("anon"),
       color: u.color ?? cur.color ?? "#22aa66",
+      country: u.country ?? cur.country,
       x: u.x ?? cur.x,
       y: u.y ?? cur.y,
       updatedAt: Date.now(),
@@ -919,7 +932,7 @@
       if (!u || !u.token || u.token === token) return; // 自分は除外
       seen.add(u.token);
       const cur = remotes.get(u.token) || {};
-      remotes.set(u.token, { ...cur, uid: u.uid ?? cur.uid, name: u.name, color: u.color, x: u.x ?? cur.x, y: u.y ?? cur.y, updatedAt: Date.now() });
+      remotes.set(u.token, { ...cur, uid: u.uid ?? cur.uid, name: u.name, color: u.color, country: u.country ?? cur.country, x: u.x ?? cur.x, y: u.y ?? cur.y, updatedAt: Date.now() });
     });
     for (const tok of [...remotes.keys()]) {
       if (tok !== token && !seen.has(tok)) remotes.delete(tok);
@@ -957,7 +970,7 @@
       await fetch("/api/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, name: myName, color: myColor }),
+        body: JSON.stringify({ token, name: myName, color: myColor, showCountry: myShowCountry }),
       });
       if (socket && socketReady) socket.emit("hello", { token, name: myName, color: myColor });
       toast(t("profileSaved", { name: myName }));
@@ -997,7 +1010,7 @@
       dot.className = "dot";
       dot.style.background = item.userColor || "#22aa66";
       who.appendChild(dot);
-      who.appendChild(document.createTextNode(`${item.name} #${item.uid || "?"}`));
+      who.appendChild(document.createTextNode(`${flagEmoji(item.country)}${flagEmoji(item.country) ? " " : ""}${item.name} #${item.uid || "?"}`));
       main.appendChild(who);
       const time = document.createElement("span");
       time.className = "htime";
@@ -1187,6 +1200,7 @@
       else pixels.set(key, { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x: target.x, y: target.y });
       inventory = data.inventory;
       refreshInkUI();
+      applyLevelData(data);
       zoneDirty = true;
       toast(t("undoneToast"));
     } catch {
@@ -1655,6 +1669,33 @@
     };
   });
   onlineEl.onclick = () => userPanel.classList.toggle("hidden");
+  function flagEmoji(cc) {
+    if (typeof cc !== "string" || !/^[A-Za-z]{2}$/.test(cc)) return "";
+    return String.fromCodePoint(...[...cc.toUpperCase()].map((c) => 127397 + c.charCodeAt(0)));
+  }
+  async function saveShowCountry() {
+    const show = countryChk.checked;
+    try {
+      const res = await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, name: myName, color: myColor, showCountry: show }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        toast(t("profileFailed"));
+        countryChk.checked = myShowCountry;
+        return;
+      }
+      myShowCountry = data.profile.showCountry;
+      myCountry = data.profile.country ?? null;
+      countryChk.checked = myShowCountry;
+      refreshUserList();
+    } catch {
+      toast(t("commError"));
+      countryChk.checked = myShowCountry;
+    }
+  }
   undoBtn.onclick = doUndo;
   // ツールバー折りたたみ (描画領域の確保・端末に保存)
   let chromeHidden = false;
@@ -1677,6 +1718,8 @@
   applyChrome();
   accountBtn.onclick = () => accountPanel.classList.toggle("hidden");
   accountClose.onclick = () => accountPanel.classList.add("hidden");
+  countryChk.checked = myShowCountry;
+  countryChk.onchange = saveShowCountry;
   issueBtn.onclick = async () => {
     const pw = issuePassword.value || "";
     if (pw.length < 8) {
@@ -1767,9 +1810,6 @@
       showHistory(hx, hy);
     }
   };
-  document.getElementById("langSel")?.addEventListener("change", (e) => {
-    window.wdI18n.setLang(e.target.value);
-  });
   settingsBtn.onclick = () => settingsPanel.classList.toggle("hidden");
   profileSave.onclick = saveProfile;
   profileName.addEventListener("keydown", (e) => {
