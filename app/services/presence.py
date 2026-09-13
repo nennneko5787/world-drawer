@@ -30,6 +30,11 @@ def presenceList() -> list[dict]:
     return out
 
 
+def sidsForTokens(tokens: set[str]) -> list[str]:
+    """指定トークン群で接続中の Socket.IO セッションID一覧 (マージ通知の宛先用)。"""
+    return [sid for sid, tok in onlineBySid.items() if tok in tokens]
+
+
 def presenceEntry(token: str, user: dict) -> dict:
     return {
         "name": user["name"],

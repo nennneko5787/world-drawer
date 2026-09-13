@@ -29,8 +29,10 @@ def requestPeer(request: Request | None) -> str:
     return request.client.host or "unknown"
 
 
-def headerCountry(request: Request) -> str | None:
-    return users.requestCountry(requestPeer(request), request.headers.get("cf-ipcountry"))
+def headerCountry(request: Request, tz: str = "") -> str | None:
+    peer = requestPeer(request)
+    cfHeader = request.headers.get("cf-ipcountry")
+    return users.requestCountry(peer, cfHeader, tz or None)
 
 
 def clientToken(request: Request | None, bodyToken: str = "") -> str:
@@ -101,8 +103,26 @@ async def apiHistory(x: int, y: int, limit: int = 20, beforeId: int | None = Non
     return {"ok": True, "x": x, "y": y, "items": items, "hasMore": hasMore}
 
 
+@router.get("/api/debug/geo")
+async def apiDebugGeo(request: Request, tz: str = "") -> dict:
+    """国判定の診断用。見えているヘッダ・解決結果をそのまま返す (自分の接続分のみ)。"""
+    peer = requestPeer(request)
+    cfCountry = request.headers.get("cf-ipcountry")
+    return {
+        "peer": peer,
+        "peerTrusted": users.peerTrusted(peer),
+        "cfConnectingIp": request.headers.get("cf-connecting-ip", ""),
+        "forwardedFor": request.headers.get("x-forwarded-for", ""),
+        "cfIpcountry": cfCountry or "",
+        "tz": (tz or "")[:64],
+        "tzCountry": users.countryFromTimezone(tz),
+        "resolvedIp": clientIp(request),
+        "resolvedCountry": headerCountry(request, tz),
+    }
+
+
 @router.get("/api/me")
-async def apiMe(request: Request, token: str = "", lang: str = ""):
+async def apiMe(request: Request, token: str = "", lang: str = "", tz: str = ""):
     tok = clientToken(request, token)
     if not tok:
         return JSONResponse(status_code=400, content={"ok": False, "error": "missingToken"})
@@ -111,7 +131,7 @@ async def apiMe(request: Request, token: str = "", lang: str = ""):
         user = await users.ensureUser(
             db, tok, users.defaultNameFor(lang or None, request.headers.get("accept-language", ""))
         )
-        code = headerCountry(request)
+        code = headerCountry(request, tz)
         if code and code != user.get("country"):
             await db.execute("UPDATE users SET country = ? WHERE token = ?", (code, tok))
             user["country"] = code
@@ -125,7 +145,7 @@ async def apiUsers() -> dict:
 
 
 @router.post("/api/session")
-async def apiSession(request: Request, lang: str = ""):
+async def apiSession(request: Request, lang: str = "", tz: str = ""):
     """サーバー発行のセッショントークンを新規作成 (secrets使用)。規定名は作成者のロケールで固定。"""
     ip = clientIp(request)
     if not users.checkRate(users.sessionHits, ip, cfg.sessionPerHour, 3600.0):
@@ -144,7 +164,7 @@ async def apiSession(request: Request, lang: str = ""):
                 name=users.defaultNameFor(lang or None, request.headers.get("accept-language", "")),
                 color=users.randomUserColor(),
                 inventory=users.newInventory(),
-                country=headerCountry(request),
+                country=headerCountry(request, tz),
             ),
         )
         await db.commit()
@@ -159,7 +179,7 @@ async def apiProfile(body: ProfileBody, request: Request):
         body.name,
         body.color,
         showCountry=body.showCountry,
-        countryCode=headerCountry(request),
+        countryCode=headerCountry(request, body.tz),
     )
     if not result.get("ok"):
         return JSONResponse(status_code=400, content=result)
@@ -271,4 +291,11 @@ async def apiAccountLogin(body: AccountLoginBody, request: Request):
     if fromToken and fromToken != user["token"]:
         async with dbLock:
             user, merged = await canvas.mergeAccounts(db, fromToken, user)
+    if merged:
+        # 統合元・統合先トークンで接続中の全タブに再読み込みを促す。
+        # 放置すると古いトークンのタブが空アカウントを復活させたり、
+        # 古い名前で上書きしたりするため。
+        for sid in presence.sidsForTokens({user["token"], fromToken}):
+            await sio.emit("accountMerged", {"token": user["token"]}, to=sid)
+        await sio.emit("presence", presence.presenceList())
     return {"ok": True, "merged": merged, **canvas.userPayload(user, user["token"])}

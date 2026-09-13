@@ -24,6 +24,7 @@ class ProfileBody(StrictModel):
     name: str = Field(default="ななし")
     color: str = Field(default="#22aa66")
     showCountry: bool | None = Field(default=None)
+    tz: str = Field(default="")
 
 
 class AccountIssueBody(StrictModel):
@@ -53,6 +54,7 @@ class SocketHello(StrictModel):
     name: str | None = Field(default=None)
     color: str | None = Field(default=None)
     lang: str | None = Field(default=None)
+    tz: str | None = Field(default=None)
 
 
 class SocketCursor(StrictModel):

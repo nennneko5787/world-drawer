@@ -66,8 +66,9 @@ def sidIp(sid: str) -> str:
     return "unknown"
 
 
-def sidCountry(sid: str) -> str | None:
-    """ハンドシェイク経路のCF-IPCountry。信頼経由のみ採用 (偽装対策)。"""
+def sidCountry(sid: str, tz: str | None = None) -> str | None:
+    """ハンドシェイク経路のCF-IPCountry。信頼経由のみ採用 (偽装対策)。
+    無い場合は端末タイムゾーンから推定する。"""
     with contextlib.suppress(Exception):
         getEnviron = getattr(sio, "get_environ", None)
         if callable(getEnviron):
@@ -82,8 +83,8 @@ def sidCountry(sid: str) -> str | None:
                         else "unknown"
                     )
                     _, _, countryRaw = scopeProxyHeaders(scope)
-                    return users.requestCountry(peer, countryRaw or None)
-    return None
+                    return users.requestCountry(peer, countryRaw or None, tz)
+    return users.countryFromTimezone(tz)
 
 
 def parseSocket[T: BaseModel](model: type[T], data: Any) -> T | None:
@@ -130,18 +131,29 @@ async def hello(sid: str, data: Any) -> None:
     db = await getDb()
     async with dbLock:
         if token:
-            user = await users.ensureUser(db, token, users.defaultNameFor(payload.lang, ""))
-            code = sidCountry(sid)
-            if code and code != user.get("country"):
-                await db.execute("UPDATE users SET country = ? WHERE token = ?", (code, token))
-                user["country"] = code
-            if payload.name is not None or payload.color is not None:
-                user["name"] = users.cleanName(payload.name or user["name"])
-                user["color"] = users.cleanColor(payload.color or "", user["color"])
-                await db.execute(
-                    "UPDATE users SET name = ?, color = ? WHERE token = ?",
-                    (user["name"], user["color"], token),
+            # 既存行の name/color は上書きしない。保存 (/api/profile) と
+            # 統合 (mergeAccounts) だけが正であり、古い端末の hello で
+            # 統合結果が巻き戻るのを防ぐ。表示側はサーバーに合わせる。
+            user = await users.fetchUser(db, token)
+            if user is None:
+                # トークンだけ残って行がない (DB初期化等) → 持ち込み名で作り直す
+                anonFallback = users.defaultNameFor(payload.lang, "")
+                user = await users.insertUser(
+                    db,
+                    users.NewUser(
+                        token=token,
+                        uid=await users.newUidDb(db),
+                        name=users.cleanName(payload.name or anonFallback, anonFallback),
+                        color=users.cleanColor(payload.color or "", users.randomUserColor()),
+                        inventory=users.newInventory(),
+                        country=sidCountry(sid, payload.tz),
+                    ),
                 )
+            else:
+                code = sidCountry(sid, payload.tz)
+                if code and code != user.get("country"):
+                    await db.execute("UPDATE users SET country = ? WHERE token = ?", (code, token))
+                    user["country"] = code
             await db.commit()
         else:
             # トークンなし = 初回。サーバー発行トークンを新規作成

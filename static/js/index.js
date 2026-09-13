@@ -87,6 +87,14 @@
   const fetchMargin = 256; // 視野の外側に余分に取得するセル数
   const maxCache = 150000; // 手元に保持するピクセル数の上限
   const maxDrafts = 20000; // 設計図の保持上限
+  // 端末タイムゾーン (国旗の推定用。CF-IPCountryが無い場合の代替)
+  const myTz = (() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch {
+      return "";
+    }
+  })();
 
   // ---------- state (camelCase) ----------
   let background = "#ffffff";
@@ -181,7 +189,7 @@
   let token = localStorage.getItem("wd_token") || "";
   async function ensureToken() {
     if (token) return;
-    const res = await fetch(`/api/session?lang=${encodeURIComponent(window.wdI18n.lang)}`, { method: "POST" });
+    const res = await fetch(`/api/session?lang=${encodeURIComponent(window.wdI18n.lang)}&tz=${encodeURIComponent(myTz)}`, { method: "POST" });
     const data = await res.json();
     if (!data.ok || !data.token) throw new Error("session failed");
     token = data.token;
@@ -883,7 +891,7 @@
     try {
       await ensureToken();
       await fetchViewport(); // 視野+余白だけ取得
-      const me = await (await fetch(`/api/me?token=${encodeURIComponent(token)}&lang=${encodeURIComponent(window.wdI18n.lang)}`)).json();
+      const me = await (await fetch(`/api/me?token=${encodeURIComponent(token)}&lang=${encodeURIComponent(window.wdI18n.lang)}&tz=${encodeURIComponent(myTz)}`)).json();
       inventory = { ...inventory, ...me.inventory };
       cooldownUntil = me.cooldownUntil ? me.cooldownUntil * 1000 : 0;
       myCountry = me.country ?? null;
@@ -895,15 +903,19 @@
       }
       applyLevelData(me);
       if (me.profile) {
-        // サーバー側に保存済みがあればそちらを優先
-        if (me.profile.name && localStorage.getItem("wd_name") == null) {
+        // サーバー正 (保存・統合結果) に合わせる。端末別の古い名での上書きを防ぐ
+        if (me.profile.name) {
           myName = me.profile.name;
           profileName.value = myName;
-        } else if (me.profile.name) {
-          myName = profileName.value || me.profile.name;
+          try {
+            localStorage.setItem("wd_name", myName);
+          } catch {}
         }
-        if (me.profile.color && localStorage.getItem("wd_userColor") == null) {
+        if (me.profile.color) {
           setProfileColor(me.profile.color);
+          try {
+            localStorage.setItem("wd_userColor", myColor);
+          } catch {}
         }
       }
       refreshInkUI();
@@ -941,7 +953,7 @@
     socket = io();
     socket.on("connect", () => {
       socketReady = true;
-      socket.emit("hello", { token, name: myName, color: myColor, lang: window.wdI18n.lang });
+      socket.emit("hello", { token, name: myName, color: myColor, lang: window.wdI18n.lang, tz: myTz });
     });
     socket.on("init", (d) => {
       background = d.background || background;
@@ -966,9 +978,34 @@
         myUid = d.uid;
         myUidEl.textContent = `#${myUid}`;
       }
+      if (d.profile && document.activeElement !== profileName) {
+        // サーバー正に合わせる (統合後の古い端末など)。入力中は上書きしない
+        if (d.profile.name) {
+          myName = d.profile.name;
+          profileName.value = myName;
+          try {
+            localStorage.setItem("wd_name", myName);
+          } catch {}
+        }
+        if (d.profile.color) {
+          setProfileColor(d.profile.color);
+          try {
+            localStorage.setItem("wd_userColor", myColor);
+          } catch {}
+        }
+      }
       applyLevelData(d);
       refreshInkUI();
       refreshUserList();
+    });
+    socket.on("accountMerged", (d) => {
+      // 統合対象アカウントの全接続先で生き残りトークンに載せ替えて再読み込み。
+      // 放置すると古いトークンのタブが空アカウントを復活させてしまう。
+      try {
+        if (d && d.token) localStorage.setItem("wd_token", d.token);
+        sessionStorage.setItem("wd_merged", "1");
+      } catch {}
+      location.reload();
     });
     socket.on("pixel", (p) => {
       const key = `${p.x},${p.y}`;
@@ -1051,9 +1088,9 @@
       await fetch("/api/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, name: myName, color: myColor, showCountry: myShowCountry }),
+        body: JSON.stringify({ token, name: myName, color: myColor, showCountry: myShowCountry, tz: myTz }),
       });
-      if (socket && socketReady) socket.emit("hello", { token, name: myName, color: myColor });
+      if (socket && socketReady) socket.emit("hello", { token, name: myName, color: myColor, tz: myTz });
       toast(t("profileSaved", { name: myName }));
       refreshUserList();
     } catch {
@@ -1927,7 +1964,7 @@
       const res = await fetch("/api/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, name: myName, color: myColor, showCountry: show }),
+        body: JSON.stringify({ token, name: myName, color: myColor, showCountry: show, tz: myTz }),
       });
       const data = await res.json();
       if (!data.ok) {
