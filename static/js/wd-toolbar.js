@@ -238,7 +238,11 @@
     resize();
   };
   applyChrome();
-  accountBtn.onclick = () => accountPanel.classList.toggle("hidden");
+  accountBtn.onclick = () => {
+    const opening = accountPanel.classList.contains("hidden");
+    accountPanel.classList.toggle("hidden");
+    if (opening && adminPanel) adminPanel.classList.add("hidden");
+  };
   accountClose.onclick = () => accountPanel.classList.add("hidden");
   countryChk.checked = myShowCountry;
   countryChk.onchange = saveShowCountry;

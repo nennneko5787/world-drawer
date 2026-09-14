@@ -48,6 +48,7 @@
     <script src="/static/js/wd-picker.js" defer></script>
     <script src="/static/js/wd-toolbar.js" defer></script>
     <script src="/static/js/wd-panels.js" defer></script>
+    <script src="/static/js/wd-admin.js" defer></script>
     <script src="/static/js/wd-main.js" defer></script>
 </head>
 <body>
@@ -60,6 +61,7 @@
         <div id="level" class="pill" data-i18n-title="levelWord" title="レベル">Lv1 0/3xp</div>
         <button id="online" class="pill clickable" data-i18n-title="onlineTitle" title="オンライン中のユーザー一覧"><i class="bi bi-people"></i> <span id="onlineCount">1</span></button>
         <button id="accountBtn" class="pill clickable" data-i18n-title="accountTitle" title="アカウント引っ越し"><i class="bi bi-person"></i></button>
+        <button id="adminBtn" class="pill clickable hidden" data-i18n-title="adminTitle" title="管理"><i class="bi bi-shield"></i></button>
         <a id="helpBtn" class="pill clickable" data-i18n-title="helpTitle" title="ヘルプ" href="/help"><i class="bi bi-question-circle"></i></a>
         <button id="settingsBtn" class="pill clickable" data-i18n-title="settingsTitle" title="設定"><i class="bi bi-gear"></i></button>
     </header>
@@ -145,6 +147,19 @@
         </div>
         <div class="accSection">
             <label class="setRow"><input type="checkbox" id="countryChk" checked> <span data-i18n="countryShow">国旗を表示</span></label>
+        </div>
+    </aside>
+
+    <aside id="adminPanel" class="hidden">
+        <div class="panelTitle"><span data-i18n="adminTitle">管理</span><button id="adminClose" data-i18n-title="close" title="閉じる"><i class="bi bi-x-lg"></i></button></div>
+        <div class="accSection">
+            <input id="adminUid" data-i18n-ph="adminUidPh" placeholder="対象UID" autocomplete="off" spellcheck="false">
+            <button id="adminLookup" data-i18n="adminLookup">照会</button>
+            <div id="adminResult" class="accLabel"></div>
+        </div>
+        <div class="accSection">
+            <button id="adminRollback" data-i18n="adminRollback">巻き戻し</button>
+            <button id="adminBanIp" data-i18n="adminBanIp">IP禁止(24h)</button>
         </div>
     </aside>
 

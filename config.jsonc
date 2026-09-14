@@ -44,6 +44,18 @@
   "placeRadius": 1000,
   // trustedLevel: このレベル以上は半径制限なし (1〜100)。
   "trustedLevel": 5,
+  // requireSocketForPlace: 配置にsocket.io接続を必須化 (true/false)。
+  // true でREST直叩きの自動配置を封じられる。false だとsocket.ioなし環境でも
+  // 配置できるがスクリプト荒らしに弱くなる。変更は再起動後に反映。
+  "requireSocketForPlace": true,
+  // maxSocketsPerIp: IPごとの同時socket接続上限 (1〜1000)。多アカウント荒らし対策。
+  "maxSocketsPerIp": 64,
+
+  // ---- 管理者 ----
+  // adminTokens: 管理画面を出すセッションのトークン一覧。
+  // 自分のトークンはブラウザの開発者ツールで localStorage の wd_token 値を確認。
+  // 空のままなら管理機能は無効。変更は再起動後に反映。
+  "adminTokens": [],
 
   // ---- OGP ----
   // siteUrl: 公開URL (og:url / og:image を絶対URLにするため)。

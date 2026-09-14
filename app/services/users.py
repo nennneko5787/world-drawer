@@ -35,6 +35,47 @@ ANON_NAMES: dict[str, str] = {
 sessionHits: dict[str, list[float]] = {}
 loginFails: dict[str, list[float]] = {}
 ipPlaceHits: dict[str, list[float]] = {}
+# 荒らし特定用: token -> 最終配置元IP (配置時に更新。再起動で消える)
+lastIpByToken: dict[str, str] = {}
+# IP禁止: ip -> 禁止期限 (epoch秒)。再起動で消える
+bannedIps: dict[str, float] = {}
+_LAST_IP_CAP = 10000
+
+
+def notePlaceIp(ip: str, token: str) -> None:
+    """配置試行の帰属を記録 (荒らしの特定用)。unknown は捨てる。"""
+    if not ip or ip == "unknown" or not token:
+        return
+    lastIpByToken[token] = ip
+    if len(lastIpByToken) > _LAST_IP_CAP:
+        for old in list(lastIpByToken)[: len(lastIpByToken) - _LAST_IP_CAP]:
+            del lastIpByToken[old]
+
+
+def ipForToken(token: str) -> str | None:
+    return lastIpByToken.get(token)
+
+
+def banIp(ip: str, seconds: float) -> float:
+    """IPを禁止する。戻り値は禁止期限。seconds<=0 で解除。"""
+    now = time.time()
+    if seconds <= 0:
+        bannedIps.pop(ip, None)
+        return 0.0
+    until = now + max(1.0, seconds)
+    bannedIps[ip] = until
+    return until
+
+
+def ipBanRemaining(ip: str) -> float:
+    until = bannedIps.get(ip, 0.0)
+    if until <= 0.0:
+        return 0.0
+    remain = until - time.time()
+    if remain <= 0.0:
+        bannedIps.pop(ip, None)
+        return 0.0
+    return remain
 
 
 def newInventory() -> dict[str, int]:

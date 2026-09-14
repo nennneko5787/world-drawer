@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import random
 import time
@@ -288,6 +290,10 @@ async def executePlace(
     if random.random() < HISTORY_PRUNE_CHANCE:  # noqa: S311 — ゲーム内整理の間引きであり秘密情報ではない
         await pruneHistoryCells(db)
     await db.commit()
+    # presence表示のレベルを新鮮に保つ (一覧での荒らし特定用)
+    entry = presence.presence.get(token)
+    if entry is not None:
+        entry["level"] = level
 
     return {
         "ok": True,
@@ -476,21 +482,79 @@ async def undoPlace(body: UndoBody, country: str | None = None) -> dict:
         return err.result
 
 
-async def doPlace(place: PlaceInput, *, ip: str = "unknown", country: str | None = None) -> dict:
-    token = (place.token or "").strip()[:64]
+# カーソル-配置の照合 (スクリプト荒らし対策)。正規クライアントはタップ時に
+# 必ずカーソルを送るため、socket観測の最終位置と大きく外れた配置は拒否する。
+# REST/socket の到着順が前後しても誤爆しないよう、不一致時は少し待って再判定する
+# (DBロックの外で行い、通常の一致パスには待ちを入れない)。
+CURSOR_FRESH_SEC = 5.0
+CURSOR_MAX_DIST = 16
+CURSOR_WAIT_SEC = 0.35
+
+
+def _cursorMatches(token: str, x: int, y: int) -> bool:
+    entry = presence.presence.get(token)
+    if entry is None:
+        return False
+    cx, cy = entry.get("x"), entry.get("y")
+    if cx is None or cy is None:
+        return False
+    try:
+        if time.time() - float(entry.get("updatedAt", 0)) > CURSOR_FRESH_SEC:
+            return False
+        return max(abs(int(cx) - x), abs(int(cy) - y)) <= CURSOR_MAX_DIST
+    except (TypeError, ValueError):
+        return False
+
+
+async def checkCursorProximity(token: str, x: int, y: int) -> dict | None:
+    """一致すれば None、不一致ならエラーボディ。"""
+    if _cursorMatches(token, x, y):
+        return None
+    await asyncio.sleep(CURSOR_WAIT_SEC)
+    if _cursorMatches(token, x, y):
+        return None
+    return {"ok": False, "error": "cursorMismatch"}
+
+
+def _chargeAttempt(ip: str) -> None:
+    """拒否した試行もIPバケツに計上 (無限プローブ対策)。超過時は無視する。"""
+    if not ip or ip == "unknown":
+        return
+    with contextlib.suppress(PlaceError):
+        consumeIpBucket(ip, time.time())
+
+
+async def _doPlaceInner(place: PlaceInput, token: str, ip: str, country: str | None) -> dict:
     if not inBounds(place.x, place.y):
-        return {"ok": False, "error": "outOfBounds"}
+        raise PlaceError({"ok": False, "error": "outOfBounds"})
     inkKey = place.ink or place.inkType or "normal"
     if inkKey not in ("normal", "erase") and not parseComboInk(inkKey):
-        return {"ok": False, "error": "unknownInk"}
+        raise PlaceError({"ok": False, "error": "unknownInk"})
     if not token:
-        return {"ok": False, "error": "missingToken"}
+        raise PlaceError({"ok": False, "error": "missingToken"})
+    users.notePlaceIp(ip, token)
+    if users.ipBanRemaining(ip) > 0:
+        raise PlaceError({"ok": False, "error": "banned"})
+    if cfg.requireSocketForPlace:
+        if token not in presence.onlineBySid.values():
+            # socket未接続のREST直叩きを拒否。通常クライアントは常時接続のため影響なし
+            _chargeAttempt(ip)
+            raise PlaceError({"ok": False, "error": "noSocket"})
+        mismatch = await checkCursorProximity(token, place.x, place.y)
+        if mismatch is not None:
+            _chargeAttempt(ip)
+            raise PlaceError(mismatch)
     place = place.model_copy(update={"token": token})
 
     db = await getDb()
+    async with dbLock:
+        return await executePlace(db, place, ip, time.time(), country)
+
+
+async def doPlace(place: PlaceInput, *, ip: str = "unknown", country: str | None = None) -> dict:
+    token = (place.token or "").strip()[:64]
     try:
-        async with dbLock:
-            return await executePlace(db, place, ip, time.time(), country)
+        return await _doPlaceInner(place, token, ip, country)
     except PlaceError as err:
         return err.result
 
@@ -658,6 +722,7 @@ def userPayload(user: dict, token: str, now: float | None = None) -> dict:
     level = users.clampLevel(user.get("level", 1))
     return {
         "token": token,
+        "isAdmin": bool(token) and token in set(cfg.adminTokens or []),
         "uid": user["uid"],
         "profile": {"name": user["name"], "color": user["color"]},
         "country": user.get("country"),
@@ -715,12 +780,13 @@ async def fetchPixelCount() -> int:
 async def fetchHistoryItems(
     x: int, y: int, limit: int = 20, beforeId: int | None = None
 ) -> tuple[list[dict], bool]:
-    """名前・色はusersから都度解決 (改名対応)。新しい順+hasMore。取り消し済みは除外。"""
+    """名前・色・レベルはusersから都度解決 (改名対応)。新しい順+hasMore。取り消し済みは除外。"""
     limit = max(1, min(100, limit))
     db = await getDb()
     sql = (
         "SELECT h.id, h.uid, COALESCE(u.name, 'ななし'), COALESCE(u.color, '#22aa66'),"
-        " h.c, h.t, h.at, CASE WHEN u.showCountry = 1 THEN u.country ELSE NULL END"
+        " h.c, h.t, h.at, CASE WHEN u.showCountry = 1 THEN u.country ELSE NULL END,"
+        " COALESCE(u.level, 1)"
         " FROM history h LEFT JOIN users u ON u.uid = h.uid"
         " WHERE h.x = ? AND h.y = ? AND h.undone = 0"
     )
@@ -740,12 +806,13 @@ async def fetchHistoryItems(
                 "uid": uid,
                 "name": name,
                 "userColor": color,
+                "level": level,
                 "c": c,
                 "t": t,
                 "at": at,
                 "country": country,
             }
-            for rid, uid, name, color, c, t, at, country in rows[:limit]
+            for rid, uid, name, color, c, t, at, country, level in rows[:limit]
         ],
         hasMore,
     )

@@ -70,6 +70,10 @@
     if (data.xp != null) myXp = data.xp;
     if (data.xpNeeded) xpNeeded = data.xpNeeded;
     if (data.cooldown) cooldown = data.cooldown;
+    if (typeof data.isAdmin === "boolean" && data.isAdmin !== isAdmin) {
+      isAdmin = data.isAdmin;
+      refreshAdminUI();
+    }
     refreshLevelUI();
   }
 
@@ -78,10 +82,10 @@
   }
 
   function refreshUserList() {
-    // 色と名前の一覧 (座標は出さない)
-    const items = [{ uid: myUid, name: myName, color: myColor, country: myShowCountry ? myCountry : null, self: true }];
+    // 色と名前とレベルの一覧 (座標は出さない)
+    const items = [{ uid: myUid, name: myName, color: myColor, level: myLevel, country: myShowCountry ? myCountry : null, self: true }];
     for (const cur of remotes.values()) {
-      items.push({ uid: cur.uid || "?", name: cur.name || t("anon"), color: cur.color || "#22aa66", country: cur.country });
+      items.push({ uid: cur.uid || "?", name: cur.name || t("anon"), color: cur.color || "#22aa66", level: cur.level ?? 1, country: cur.country });
     }
     items.sort((a, b) => (a.self ? -1 : b.self ? 1 : String(a.name).localeCompare(String(b.name), window.wdI18n.locale)));
     userList.innerHTML = "";
@@ -99,7 +103,7 @@
         label.appendChild(flagEl);
         label.appendChild(document.createTextNode(" "));
       }
-      label.appendChild(document.createTextNode(`${u.name} #${u.uid || "?"}`));
+      label.appendChild(document.createTextNode(`${u.name} #${u.uid || "?"} Lv${u.level ?? "?"}`));
       li.appendChild(label);
       if (u.self) {
         const me = document.createElement("span");

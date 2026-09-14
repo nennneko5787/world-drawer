@@ -11,11 +11,14 @@ from fastapi.responses import JSONResponse
 from app.objects.requests import (
     AccountIssueBody,
     AccountLoginBody,
+    AdminBanBody,
+    AdminLookupBody,
+    AdminRollbackBody,
     PlaceInput,
     ProfileBody,
     UndoBody,
 )
-from app.services import canvas, presence, users
+from app.services import admin, canvas, presence, users
 from app.services import config as cfg
 from app.services.database import dbLock, getDb
 from app.services.realtime import sio
@@ -216,6 +219,10 @@ async def apiPlace(body: PlaceInput, request: Request):
     else:
         if result.get("error") == "missingToken":
             status = 400
+        elif result.get("error") in ("banned", "noSocket"):
+            status = 403
+        elif result.get("error") == "cursorMismatch":
+            status = 409
         else:
             status = 429 if result.get("error") in ("cooldown", "ipBusy") else 400
         return JSONResponse(status_code=status, content=result)
@@ -240,6 +247,46 @@ async def apiUndo(body: UndoBody, request: Request):
         return result
     status = 400 if result.get("error") in ("missingToken", "badPrev") else 409
     return JSONResponse(status_code=status, content=result)
+
+
+def _adminError() -> JSONResponse:
+    return JSONResponse(status_code=403, content={"ok": False, "error": "forbidden"})
+
+
+@router.post("/api/admin/lookup")
+async def apiAdminLookup(body: AdminLookupBody):
+    if not admin.isAdminToken(body.token):
+        return _adminError()
+    db = await getDb()
+    async with dbLock:
+        user = await admin.lookupUser(db, body.uid)
+    if user is None:
+        return {"ok": False, "error": "noUser"}
+    return {"ok": True, "user": user}
+
+
+@router.post("/api/admin/rollback")
+async def apiAdminRollback(body: AdminRollbackBody):
+    if not admin.isAdminToken(body.token):
+        return _adminError()
+    db = await getDb()
+    async with dbLock:
+        result = await admin.rollbackUser(db, body.uid, body.limit)
+    if not result.get("ok"):
+        return JSONResponse(status_code=400, content=result)
+    for ev in result.pop("events", []):
+        await sio.emit("pixel", ev)
+    return result
+
+
+@router.post("/api/admin/ban")
+async def apiAdminBan(body: AdminBanBody):
+    if not admin.isAdminToken(body.token):
+        return _adminError()
+    result = admin.banIp(body.ip, body.seconds)
+    if not result.get("ok"):
+        return JSONResponse(status_code=400, content=result)
+    return result
 
 
 @router.post("/api/account/issue")

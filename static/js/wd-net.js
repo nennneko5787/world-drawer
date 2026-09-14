@@ -308,6 +308,10 @@
       if (!r.ok && r.error === "cooldown") {
         cooldownUntil = r.cooldownUntil * 1000;
         toast(t("cooldownToast", { s: r.remaining }));
+      } else if (!r.ok && r.error === "noSocket") {
+        toast(t("socketRequiredToast"));
+      } else if (!r.ok && r.error === "cursorMismatch") {
+        toast(t("cursorMismatchToast"));
       }
     });
     socket.on("cursor", applyRemote);
@@ -337,6 +341,7 @@
       uid: u.uid,
       name: u.name ?? cur.name ?? t("anon"),
       color: u.color ?? cur.color ?? "#22aa66",
+      level: u.level ?? cur.level ?? 1,
       country: u.country ?? cur.country,
       x: u.x ?? cur.x,
       y: u.y ?? cur.y,
@@ -355,7 +360,7 @@
       if (!u || !u.uid || u.uid === myUid) return; // 自分は除外
       seen.add(u.uid);
       const cur = remotes.get(u.uid) || {};
-      remotes.set(u.uid, { ...cur, uid: u.uid, name: u.name, color: u.color, country: u.country ?? cur.country, x: u.x ?? cur.x, y: u.y ?? cur.y, updatedAt: Date.now() });
+      remotes.set(u.uid, { ...cur, uid: u.uid, name: u.name, color: u.color, level: u.level ?? cur.level ?? 1, country: u.country ?? cur.country, x: u.x ?? cur.x, y: u.y ?? cur.y, updatedAt: Date.now() });
     });
     for (const uid of [...remotes.keys()]) {
       // myUid 確定前に紛れた自分自身もここで掃除する
@@ -432,6 +437,10 @@
           );
         } else if (data.error === "ipBusy") {
           toast(t("ipBusyToast"));
+        } else if (data.error === "noSocket") {
+          toast(t("socketRequiredToast"));
+        } else if (data.error === "cursorMismatch") {
+          toast(t("cursorMismatchToast"));
         } else {
           toast(t("placeFailedToast", { error: data.error }));
         }

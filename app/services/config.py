@@ -58,6 +58,13 @@ loginLockSec = 600  # 失敗上限後のロック秒
 placePerMinPerIp = 60  # IP共有の配置上限 (家族利用を妨げない程度に緩め)
 placeRadius = 1000  # 低レベル時の配置可能半径 (既存ピクセル/他プレイヤーから)
 trustedLevel = 5  # このレベル以上は半径制限なし
+# 配置にsocket.io接続を必須化 (REST直叩きの自動配置を封じる。無効化すると
+# socket.ioなし環境でも配置できるが、スクリプト荒らしに弱くなる)
+requireSocketForPlace = True
+maxSocketsPerIp = 64  # IPごとの同時socket接続上限 (CGNAT配下の家族利用に支障ない程度に緩め)
+# 管理者トークンの一覧 (対応するセッションに管理画面が出る)。空なら管理機能なし。
+# 自分のトークンはプロフィール欄の #ID ではなく localStorage の wd_token 値
+adminTokens: list[str] = []
 
 # 信頼プロキシ (IP/CIDR)。ここからの接続のみ CF-Connecting-IP / X-Forwarded-For
 # を信用する。Cloudflare Tunnel (cloudflaredは自ホスト発) なら既定のままでよい。
@@ -88,7 +95,9 @@ _INT_KEYS: dict[str, tuple[int, int]] = {
     "trustedLevel": (1, 100),
     "rewardMin": (1, 64),
     "rewardMax": (1, 64),
+    "maxSocketsPerIp": (1, 1000),
 }
+_BOOL_KEYS: frozenset[str] = frozenset({"requireSocketForPlace"})
 _FLOAT_KEYS: dict[str, tuple[float, float]] = {
     "cooldownSec": (0.5, 3600.0),
     "minCooldown": (0.1, 3600.0),
@@ -211,6 +220,28 @@ def validateColorKey(value: object) -> str | None:
     return value.lower()
 
 
+def validateBoolKey(key: str, value: object) -> bool | None:
+    if not isinstance(value, bool):
+        logger.warning("config.jsonc: %s must be true/false, using default", key)
+        return None
+    return value
+
+
+_MAX_TOKEN_LEN = 64
+
+
+def validateTokenList(value: object) -> list[str] | None:
+    if not isinstance(value, list):
+        logger.warning("config.jsonc: adminTokens must be a list, using default")
+        return None
+    out = []
+    for item in value:
+        cleaned = item.strip() if isinstance(item, str) else ""
+        if cleaned and len(cleaned) <= _MAX_TOKEN_LEN and cleaned not in out:
+            out.append(cleaned)
+    return out
+
+
 def validateProxyList(value: object) -> list[str] | None:
     if not isinstance(value, list):
         logger.warning("config.jsonc: trustedProxies must be a list, using default")
@@ -240,19 +271,23 @@ def validateSiteUrl(value: object) -> str | None:
 
 
 def applyConfigKey(
-    validated: dict[str, int | float | str | list[str]], key: str, value: object
+    validated: dict[str, int | float | str | bool | list[str]], key: str, value: object
 ) -> None:
     """1キー分の検証。通れば validated に格納、ダメなら警告。"""
     if key in _INT_KEYS:
-        result: int | float | str | list[str] | None = validateIntKey(key, value)
+        result: int | float | str | bool | list[str] | None = validateIntKey(key, value)
     elif key in _FLOAT_KEYS:
         result = validateFloatKey(key, value)
+    elif key in _BOOL_KEYS:
+        result = validateBoolKey(key, value)
     elif key == "background":
         result = validateColorKey(value)
     elif key == "trustedProxies":
         result = validateProxyList(value)
     elif key == "siteUrl":
         result = validateSiteUrl(value)
+    elif key == "adminTokens":
+        result = validateTokenList(value)
     else:
         logger.warning("config.jsonc: unknown key ignored: %s", key)
         return

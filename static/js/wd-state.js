@@ -83,6 +83,14 @@
   const loginPassword = document.getElementById("loginPassword");
   const loginBtn = document.getElementById("loginBtn");
   const countryChk = document.getElementById("countryChk");
+  const adminBtn = document.getElementById("adminBtn");
+  const adminPanel = document.getElementById("adminPanel");
+  const adminClose = document.getElementById("adminClose");
+  const adminUid = document.getElementById("adminUid");
+  const adminLookupBtn = document.getElementById("adminLookup");
+  const adminResult = document.getElementById("adminResult");
+  const adminRollbackBtn = document.getElementById("adminRollback");
+  const adminBanBtn = document.getElementById("adminBanIp");
   const toolbarEl = document.getElementById("toolbar");
   const chromeToggle = document.getElementById("chromeToggle");
   const fpsVal = document.getElementById("fpsVal");
@@ -165,6 +173,7 @@
   }
   let myUid = "";
   let isDark = false;
+  let isAdmin = false;
 
   let blocked = new Set();
   try {

@@ -61,3 +61,20 @@ class SocketCursor(StrictModel):
     token: str = Field(default="")
     x: int
     y: int
+
+
+class AdminLookupBody(StrictModel):
+    token: str = Field(default="")
+    uid: str = Field(default="")
+
+
+class AdminRollbackBody(StrictModel):
+    token: str = Field(default="")
+    uid: str = Field(default="")
+    limit: int = Field(default=1000)
+
+
+class AdminBanBody(StrictModel):
+    token: str = Field(default="")
+    ip: str = Field(default="")
+    seconds: float = Field(default=86400.0)

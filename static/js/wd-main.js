@@ -10,3 +10,4 @@
   refreshLevelUI();
   refreshUserList();
   refreshDraftUI();
+  refreshAdminUI();

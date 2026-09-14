@@ -18,6 +18,13 @@ from app.services.database import dbLock, getDb
 
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 
+# sid -> 解決済みIP (接続数制限用。再起動で消える)
+socketIps: dict[str, str] = {}
+
+
+def socketsFromIp(ip: str) -> int:
+    return sum(1 for v in socketIps.values() if v == ip)
+
 
 def scopeProxyHeaders(scope: dict) -> tuple[str, str, str]:
     """ASGIスコープのヘッダから CF-Connecting-IP / X-Forwarded-For / CF-IPCountry を抜く。"""
@@ -95,7 +102,14 @@ def parseSocket[T: BaseModel](model: type[T], data: Any) -> T | None:
 
 
 @sio.event
-async def connect(sid: str, environ: Any) -> None:
+async def connect(sid: str, environ: Any) -> bool | None:
+    ip = socketIp(environ if isinstance(environ, dict) else {})
+    socketIps[sid] = ip
+    # 同一IPの同時接続を制限 (ソケット必須化と合わせた多アカウント荒らし対策)。
+    # IP不明時は数えられないため制限しない
+    if ip != "unknown" and socketsFromIp(ip) > max(1, cfg.maxSocketsPerIp):
+        socketIps.pop(sid, None)
+        return False
     await sio.emit(
         "init",
         {
@@ -110,10 +124,12 @@ async def connect(sid: str, environ: Any) -> None:
         },
         to=sid,
     )
+    return True
 
 
 @sio.event
 async def disconnect(sid: str) -> None:
+    socketIps.pop(sid, None)
     token = presence.onlineBySid.pop(sid, None)
     if token and token in presence.presence and token not in presence.onlineBySid.values():
         entry = presence.presence.pop(token, None)
@@ -199,6 +215,7 @@ async def cursor(sid: str, data: Any) -> None:
         "name": user["name"],
         "color": user["color"],
         "uid": user["uid"],
+        "level": user.get("level", 1),
         "country": user.get("country"),
         "showCountry": user.get("showCountry", True),
         "x": payload.x,
@@ -211,6 +228,7 @@ async def cursor(sid: str, data: Any) -> None:
             "uid": user["uid"],
             "name": user["name"],
             "color": user["color"],
+            "level": user.get("level", 1),
             "country": user.get("country") if user.get("showCountry", True) else None,
             "x": payload.x,
             "y": payload.y,

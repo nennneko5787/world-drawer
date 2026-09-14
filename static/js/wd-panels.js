@@ -56,7 +56,7 @@
         who.appendChild(hFlag);
         who.appendChild(document.createTextNode(" "));
       }
-      who.appendChild(document.createTextNode(`${item.name} #${item.uid || "?"}`));
+      who.appendChild(document.createTextNode(`${item.name} #${item.uid || "?"} Lv${item.level ?? "?"}`));
       main.appendChild(who);
       const time = document.createElement("span");
       time.className = "htime";
