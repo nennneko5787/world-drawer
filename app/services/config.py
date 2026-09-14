@@ -16,6 +16,8 @@ staticDir = baseDir / "static"
 dataDir = baseDir / "data"
 dbFile = dataDir / "world.db"
 configFile = baseDir / "config.jsonc"
+# サーバー固有の上書き (Git管理外。pull時の競合回避用)
+localConfigFile = baseDir / "config.local.jsonc"
 # 旧JSON (初回のみSQLiteへ取込)
 canvasFile = dataDir / "canvas.json"
 usersFile = dataDir / "users.json"
@@ -327,20 +329,32 @@ def applyConfigKey(
         validated[key] = result
 
 
-def loadConfigFile() -> None:
-    """config.jsonc を読んで既定値を上書き。不正値は警告して既定維持。"""
-    if not configFile.exists():
-        return
+def readJsoncFile(path: Path) -> dict:
+    """JSONCを辞書で読む。失敗時は警告して空辞書 (既定維持)。"""
     try:
-        raw = json.loads(removeTrailingCommas(stripJsonc(configFile.read_text(encoding="utf-8"))))
+        raw = json.loads(removeTrailingCommas(stripJsonc(path.read_text(encoding="utf-8"))))
     except (OSError, ValueError) as err:
-        logger.warning("config.jsonc parse error, using defaults: %s", err)
-        return
+        logger.warning("%s parse error, using defaults: %s", path.name, err)
+        return {}
     if not isinstance(raw, dict):
-        logger.warning("config.jsonc root must be an object, using defaults")
-        return
+        logger.warning("%s root must be an object, using defaults", path.name)
+        return {}
+    return raw
+
+
+def loadConfigFile() -> None:
+    """config.jsonc → config.local.jsonc の順で読んで既定値を上書き。
+
+    local はGit管理外 (サーバー固有値用) で同形式。後勝ち。
+    不正値は警告して既定維持。
+    """
+    merged: dict = {}
+    if configFile.exists():
+        merged.update(readJsoncFile(configFile))
+    if localConfigFile.exists():
+        merged.update(readJsoncFile(localConfigFile))
     validated: dict[str, int | float | str | list[str]] = {}
-    for key, value in raw.items():
+    for key, value in merged.items():
         applyConfigKey(validated, key, value)
     rewardMinVal = validated.get("rewardMin", rewardMin)
     rewardMaxVal = validated.get("rewardMax", rewardMax)

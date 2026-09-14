@@ -68,6 +68,8 @@ uv run uvicorn main:app --port 5787
 
 `config.jsonc`（コメント付きJSON。末尾カンマ可）でゲームバランスを変更できます。変更はサーバー再起動後に反映されます。不正な値・不明なキーは警告のうえ既定値を使います。
 
+サーバー固有の値（本番のトークン等）は `config.local.jsonc`（Git管理外・同形式・優先）に書いてください。`config.jsonc` を直接書き換えると `git pull` 時に競合します。
+
 | 項目 | 内容 |
 | --- | --- |
 | `cooldownSec` / `minCooldown` / `cooldownDecay` | Lv1の秒数・下限・レベルごとの倍率 |
