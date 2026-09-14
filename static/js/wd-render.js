@@ -1,6 +1,30 @@
 // wd-render.js — キャンバス描画ループ。
 // classic script (defer順に読む。トップレベルスコープ共有、前方参照は実行時解決)。
 "use strict";
+  // ダークモード用の設計図表示色。暗い色は白寄りに持ち上げないと
+  // 暗背景に埋もれるため、輝度不足分だけ混合する (結果はキャッシュ)
+  const draftDarkColorCache = new Map();
+  function draftDisplayColor(hex) {
+    if (!isDark) return hex;
+    const cached = draftDarkColorCache.get(hex);
+    if (cached !== undefined) return cached;
+    let out = hex;
+    const m = /^#([0-9a-fA-F]{6})$/.exec(hex || "");
+    if (m) {
+      const n = parseInt(m[1], 16);
+      const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+      const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      if (lum < 0.35) {
+        const k = 0.55;
+        const mix = (c) => Math.round(c + (255 - c) * k);
+        const hx = (c) => mix(c).toString(16).padStart(2, "0");
+        out = `#${hx(r)}${hx(g)}${hx(b)}`;
+      }
+    }
+    if (draftDarkColorCache.size > 1024) draftDarkColorCache.clear();
+    draftDarkColorCache.set(hex, out);
+    return out;
+  }
   // ---------- render (infinite: visible only) ----------
   function render(now) {
     const time = now / 1000;
@@ -37,12 +61,13 @@
     const y1 = Math.ceil((vh - cam.y) / cam.zoom) + 1;
 
     // 設計図 (自分専用・薄く表示。毎フレームparseしないよう一覧キャッシュを使う)
+    // ダークモードは濃度を上げ＋暗色を持ち上げないと見えない
     if (showDrafts && draftList.length > 0) {
       ctx.save();
-      ctx.globalAlpha = 0.22;
+      ctx.globalAlpha = isDark ? 0.38 : 0.22;
       for (const d of draftList) {
         if (d.x < x0 || d.x > x1 || d.y < y0 || d.y > y1) continue;
-        ctx.fillStyle = d.c;
+        ctx.fillStyle = draftDisplayColor(d.c);
         ctx.fillRect(cam.x + d.x * cam.zoom, cam.y + d.y * cam.zoom, cam.zoom, cam.zoom);
       }
       ctx.restore();
@@ -52,7 +77,7 @@
     if (draftMode && draftPreview) {
       const pv = draftPreview;
       const erasePv = tool === "eraser";
-      const pvColor = erasePv ? "#e33" : paintColor;
+      const pvColor = erasePv ? "#e33" : draftDisplayColor(paintColor);
       const xa = Math.min(pv.x0, pv.x1), xb = Math.max(pv.x0, pv.x1);
       const ya = Math.min(pv.y0, pv.y1), yb = Math.max(pv.y0, pv.y1);
       ctx.save();
@@ -216,7 +241,7 @@
       strokeCellRect(sx, sy);
       if (tool === "pen") {
         ctx.globalAlpha = 0.55;
-        ctx.fillStyle = inkSet.has("rainbow") ? `hsl(${(Date.now() / 10) % 360},100%,55%)` : paintColor;
+        ctx.fillStyle = inkSet.has("rainbow") ? `hsl(${(Date.now() / 10) % 360},100%,55%)` : draftDisplayColor(paintColor);
         fillCellRect(sx, sy);
         ctx.globalAlpha = 1;
       }

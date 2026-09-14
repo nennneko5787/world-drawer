@@ -70,9 +70,25 @@
     canvas.style.cursor = on ? "copy" : "";
   }
   function pickColor(x, y) {
-    const pix = pixels.get(`${x},${y}`);
+    const key = `${x},${y}`;
+    const pix = pixels.get(key);
     if (!pix) {
-      toast(t("emptyCellToast"));
+      // サーバー画素がなければ設計図の色を取る (上に見えている方優先の代替)。
+      // 設計図にインク情報はないため選択中のインクは維持する
+      const dc = drafts.get(key);
+      if (!dc || !/^#[0-9a-fA-F]{6}$/.test(dc)) {
+        toast(t("emptyCellToast"));
+        return;
+      }
+      const dhex = String(dc).toLowerCase();
+      setPaintColor(dhex);
+      pushRecentColor(dhex);
+      toast(t("eyedropGot", { hex: dhex, ink: inkName(inkKey()) }));
+      setEyedropMode(false);
+      tool = "pen";
+      toolPen.classList.add("active");
+      toolEraser.classList.remove("active");
+      refreshColorUI();
       return;
     }
     let hex = pix.c;
