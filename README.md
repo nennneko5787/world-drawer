@@ -257,3 +257,19 @@ server {
   `/api/admin/status` の `redis` 欄で状態を確認できます
 - SQLite はWALモードで複数プロセスから利用します。配置などの
   読み→書きは直列化しています。将来的なボトルネック時は PostgreSQL 化を検討
+
+## 更新手順（本番）
+
+DBマイグレーションは起動時にも走りますが、複数プロセスの同時起動で
+競合するため、デプロイ時は再起動**前**に分離実行してください。
+
+```powershell
+# ワーカーを停止してから
+git pull
+uv sync
+uv run python main.py --migrate
+# ワーカーを起動
+```
+
+サーバー固有値は `config.local.jsonc`（Git管理外）に置けば、
+`pull` 時の競合を避けられます。

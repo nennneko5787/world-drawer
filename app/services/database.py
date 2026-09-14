@@ -7,6 +7,7 @@ import contextlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 import aiosqlite
 
@@ -194,6 +195,9 @@ async def currentVersion(db: aiosqlite.Connection) -> int:
     return int(row[0]) if row else 0
 
 
+_MIGRATE_RETRY_WAIT = (0.0, 2.0, 5.0, 10.0, 20.0, 30.0, 30.0, 30.0, 30.0)
+
+
 async def migrate(db: aiosqlite.Connection) -> None:
     """未適用のマイグレーションを順に適用。Alembicの代わりの軽量実装。"""
     version = await currentVersion(db)
@@ -204,6 +208,28 @@ async def migrate(db: aiosqlite.Connection) -> None:
         await db.execute(f"PRAGMA user_version = {target}")
         await db.commit()
         logger.info("migrated to version %d (%s)", target, name)
+
+
+async def migrateWithRetry(db: aiosqlite.Connection, sleep: Any = None) -> None:
+    """マイグレーションをBUSY再試行付きで実行 (複数プロセスの同時起動対策)。
+
+    index構築中の他プロセスとぶつかっても最大3分弱待つ。各ステップは
+    完了ごとに版数確定するため、再試行は未適用分から再開でき安全。
+    """
+    doSleep = sleep or asyncio.sleep
+    for attempt, waitSec in enumerate(_MIGRATE_RETRY_WAIT):
+        if waitSec > 0:
+            logger.warning("migration busy, retrying in %.0fs (attempt %d)", waitSec, attempt + 1)
+            await doSleep(waitSec)
+        try:
+            await migrate(db)
+        except aiosqlite.OperationalError as err:
+            if "locked" not in str(err).lower():
+                raise
+            continue
+        return
+    msg = "migration still locked after retries"
+    raise aiosqlite.OperationalError(msg)
 
 
 async def beginImmediate(db: aiosqlite.Connection) -> None:
@@ -247,13 +273,26 @@ async def getDb() -> aiosqlite.Connection:
             db = await aiosqlite.connect(str(cfg.dbFile))
             await db.execute("PRAGMA journal_mode=WAL;")
             await db.execute("PRAGMA synchronous=NORMAL;")
-            await db.execute("PRAGMA busy_timeout=5000;")
+            await db.execute("PRAGMA busy_timeout=15000;")
             await db.executescript(SCHEMA)
             await db.commit()
-            await migrate(db)
+            await migrateWithRetry(db)
             await importLegacyJson(db)
             dbLoop = loop
     return db
+
+
+async def runMigrations() -> int:
+    """分離実行用マイグレーション (`python main.py --migrate`)。
+
+    本番デプロイ時はワーカー起動前にこれだけ先に実行する
+    (停止 → pull → sync → migrate → 起動)。適用後バージョンを返す。
+    起動時の自動移行はフォールバックとして残る。
+    """
+    db = await getDb()
+    version = await currentVersion(db)
+    await closeDb()
+    return version
 
 
 def parseLegacyKey(key: object) -> tuple[int, int] | None:

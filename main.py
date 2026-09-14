@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import argparse
+import asyncio
 import contextlib
 from collections.abc import AsyncIterator
 
@@ -65,4 +67,20 @@ api_app = fastapi
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    parser = argparse.ArgumentParser(description="world-drawer")
+    parser.add_argument(
+        "--migrate",
+        action="store_true",
+        help="DBマイグレーションのみ実行して終了 (本番デプロイ時は再起動前に実行)",
+    )
+    args = parser.parse_args()
+    if args.migrate:
+        import logging
+
+        from app.services.database import runMigrations
+
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+        version = asyncio.run(runMigrations())
+        logging.getLogger("world-drawer.migrate").info("migrations applied (version %d)", version)
+    else:
+        uvicorn.run(app, host="127.0.0.1", port=8000)
