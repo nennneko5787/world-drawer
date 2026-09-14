@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator
 
 import socketio
 from fastapi import FastAPI
+from starlette.middleware.gzip import GZipMiddleware
 
 from app.routes import api, pages, staticfiles
 from app.services import realtime, shared
@@ -35,6 +36,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 fastapi = FastAPI(title="world-drawer", lifespan=lifespan)
+# APIのJSON (視野取得などMB級) を圧縮。WS・静的配信には影響しない
+fastapi.add_middleware(GZipMiddleware, minimum_size=1000)
 fastapi.include_router(staticfiles.router)
 fastapi.include_router(pages.router)
 fastapi.include_router(api.router)

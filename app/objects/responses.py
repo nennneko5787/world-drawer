@@ -14,6 +14,8 @@ class PixelEvent(StrictModel):
     t: str
     by: str | None = Field(default=None)
     coats: int = Field(default=1)
+    s: int = Field(default=0)  # シールド残り秒 (0=無保護)
+    e: int = Field(default=0)  # チョーク残り秒 (0=永続)
 
 
 class PresenceItem(StrictModel):

@@ -37,6 +37,8 @@
     document.getElementById("c-glow").textContent = inventory.glow || 0;
     document.getElementById("c-rainbow").textContent = inventory.rainbow || 0;
     document.getElementById("c-ghost").textContent = inventory.ghost || 0;
+    document.getElementById("c-chalk").textContent = inventory.chalk || 0;
+    document.getElementById("c-shield").textContent = inventory.shield || 0;
     document.querySelectorAll(".ink").forEach((btn) => {
       const key = btn.dataset.ink;
       if (key === "normal") return;

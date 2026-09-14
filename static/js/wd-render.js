@@ -43,6 +43,13 @@
     if (z >= 0.5) return 2;
     return 3;
   }
+  // 発光のぼかし量 (設定で変更・全テーマ統一)。中=従来のライト、強=従来のダーク相当
+  function glowBlur(s) {
+    if (glowMode === "off") return 0;
+    if (glowMode === "weak") return Math.max(4, s * 0.4);
+    if (glowMode === "strong") return s * 1.2 + 12;
+    return Math.max(6, s * 0.8);
+  }
   // フレーム毎の確保を避ける再利用バッファ (色→平坦座標配列、特殊リスト)
   // 11k超のピクセル表示でも fillStyle切替・fill呼出・GCを抑えるため
   // 小数ズームの隙間対策: セル矩形をデバイスピクセル境界にスナップする。
@@ -72,6 +79,37 @@
   const staticCanvas = document.createElement("canvas");
   const staticCtx = staticCanvas.getContext("2d");
   const animCache = []; // 毎フレーム動かす虹ピクセル (静的再構築時に更新)
+  const shieldCache = []; // 保護中のシールド印 (期限切れ判定のため毎フレーム見る)
+  let lastChalkSweepT = 0; // 期限切れ掃除は1秒に1回まで
+  const chalkCache = []; // チョーク (減衰・消滅のため毎フレーム見る)
+  // チョークの減衰 (置いた瞬間から全期間でフェード)。非チョークは1。焼き付け時も呼ぶ。
+  // e0 は初見残り秒 (全体長の目安)。同一内容の再取得では引き継ぎ、置き換わりでは更新する
+  function chalkFade(val, nowMs) {
+    const e = val.e || 0;
+    if (e <= 0) return 1;
+    const total = (val.e0 || e) * 1000;
+    if (total <= 0) return 1;
+    const remain = (val.eAt || 0) + e * 1000 - nowMs;
+    if (remain <= 0) return 0;
+    return Math.min(1, remain / total);
+  }
+  // シールド有効判定 (残り秒と受信時刻から。時計ずれには猶予なしでサーバーが正)
+  function shieldActive(val) {
+    const s = val.s || 0;
+    if (s <= 0) return false;
+    return (val.sAt || 0) + s * 1000 > Date.now();
+  }
+  // シールドの青オーバーレイ (保護中の目印。設定でON/OFF)
+  function paintShieldOverlay(t, sx, sy, sw, sh, zoom) {
+    t.fillStyle = "rgba(90,170,255,.35)";
+    t.fillRect(sx, sy, sw, sh);
+    if (zoom >= 8) {
+      t.strokeStyle = "rgba(170,215,255,.9)";
+      t.lineWidth = 1;
+      t.strokeRect(sx + 0.5, sy + 0.5, Math.max(1, sw - 1), Math.max(1, sh - 1));
+    }
+  }
+  let lastEphemeralDrawT = 0; // シールド・チョークのみの再描画の間引き用 (500ms精度で十分)
   // 特殊インク1マス描画 (静的・動的共通。t は描画先)。
   // save/restoreとshadowBlur乱用を避け、必要分だけ設定・復元する
   function paintSpecialTo(t, val, cx, cy, z, time, animateRainbow, glowFx) {
@@ -90,11 +128,12 @@
       const coats = val.coats ?? 1;
       alpha = coats <= 0 ? 1 : 1 - 0.5 / Math.min(Math.max(1, coats), 5);
     }
-    if (hasGlow && glowFx) {
-      // 発光 (ダークモードでは強く輝く)
+    alpha *= chalkFade(val, Date.now());
+    if (hasGlow && glowFx && glowMode !== "off") {
+      // 発光 (強さは設定・全テーマ統一)
       t.globalAlpha = alpha;
       t.shadowColor = base;
-      t.shadowBlur = isDark ? z * 1.2 + 12 : Math.max(6, z * 0.8);
+      t.shadowBlur = glowBlur(z);
       t.fillStyle = base;
       t.fillRect(sx, sy, sw, sh);
       if (isDark) t.fillRect(sx, sy, sw, sh);
@@ -137,11 +176,39 @@
     const hoverRainbow = !!hover && tool === "pen" && inkSet.has("rainbow");
     // 簡易Lv2以上では虹を固定色にするためアニメ用の再描画は不要
     const needAnim = dl < 2 && (rainbowCount > 0 || hoverRainbow);
-    if (!renderDirty && !needAnim) {
+    // シールド印・チョークの期限切れを消すため、ある間は再描画する (転送主体で安い)。
+    // それだけなら500msに間引く
+    const needShield = showShield && shieldCache.length > 0;
+    const needChalk = chalkCache.length > 0;
+    const needEphemeral = needShield || needChalk;
+    // チョーク期限切れの掃除 (1秒に1回まで。スキップ判定より先に行い、削除時は再描画)
+    if (now - lastChalkSweepT > 1000) {
+      lastChalkSweepT = now;
+      let dropped = 0;
+      for (const val of pixels.values()) {
+        const e = val.e || 0;
+        if (e > 0 && (val.eAt || 0) + e * 1000 <= now) {
+          trackPixelWrite(val, null);
+          pixels.delete(`${val.x},${val.y}`);
+          dropped++;
+        }
+      }
+      if (dropped > 0) {
+        staticDirty = true;
+        renderDirty = true;
+      }
+    }
+    if (!renderDirty && !needAnim && !needEphemeral) {
       updateCooldownUI();
       requestAnimationFrame(render);
       return;
     }
+    if (!renderDirty && !needAnim && now - lastShieldDrawT < 500) {
+      updateCooldownUI();
+      requestAnimationFrame(render);
+      return;
+    }
+    if (needEphemeral) lastShieldDrawT = now;
     renderDirty = false;
 
     const x0 = Math.floor(-cam.x / cam.zoom) - 1;
@@ -159,7 +226,11 @@
     }
 
     if (ultra) {
-      // 最高画質: 毎フレーム全量を直接描画 (従来方式)
+      // 最高画質: 毎フレーム全量を直接描画 (従来方式)。
+      // 動的キャッシュは使わないため無効化する (古い参照の二重描画防止)
+      animCache.length = 0;
+      shieldCache.length = 0;
+      chalkCache.length = 0;
       paintStaticTo(ctx, vw, vh, x0, x1, y0, y1, time, dl, true);
     } else {
       // 静的レイヤー方式: 変化時のみ焼き直し、毎フレームは転送＋動く物だけ描く
@@ -252,21 +323,28 @@
           const coats = val.coats ?? 1;
           t.globalAlpha = coats <= 0 ? 1 : 1 - 0.5 / Math.min(Math.max(1, coats), 5);
         }
-        if (hasGlow) {
-          // 発光 (ダークモードでは強く輝く)
+        // チョーク減衰 (残り60秒でフェード)
+        t.globalAlpha = t.globalAlpha * chalkFade(val, Date.now());
+        if (hasGlow && glowMode !== "off") {
+          // 発光 (強さは設定・全テーマ統一)
           t.shadowColor = base;
-          t.shadowBlur = isDark ? s * 1.2 + 12 : Math.max(6, s * 0.8);
+          t.shadowBlur = glowBlur(s);
         }
         t.fillStyle = base;
         t.fillRect(sx, sy, sw, sh);
-        if (hasGlow && isDark) t.fillRect(sx, sy, sw, sh);
+        if (hasGlow && isDark && glowMode !== "off") t.fillRect(sx, sy, sw, sh);
+        if (parts.has("shield") && showShield && shieldActive(val)) {
+          paintShieldOverlay(t, sx, sy, sw, sh, cam.zoom);
+        }
         t.restore();
       }
     } else {
-      // 色バッチ高速描画。動く虹は動的パスに回し、ここでは焼き付けない
+      // 色バッチ高速描画。動く虹・チョークは動的パスに回し、ここでは焼き付けない
       pixelBatchMap.clear();
       specialDrawList.length = 0;
       animCache.length = 0;
+      shieldCache.length = 0;
+      chalkCache.length = 0;
       const hasBlocked = blocked.size > 0;
       const zx = cam.zoom, cx = cam.x, cy = cam.y;
       for (const val of pixels.values()) {
@@ -286,6 +364,8 @@
         } else {
           specialDrawList.push(val);
         }
+        if ((val.s || 0) > 0) shieldCache.push(val);
+        if ((val.e || 0) > 0) chalkCache.push(val);
       }
       if (pixelBatchMap.size > 0) {
         for (const [color, arr] of pixelBatchMap) {
@@ -414,6 +494,33 @@
       for (let ai = 0; ai < animCache.length; ai++) {
         const val = animCache[ai];
         paintSpecialTo(ctx, val, cx, cy, zx, time, true, glowFx);
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+    }
+
+    // シールドの青オーバーレイ (期限切れは自然に消える。焼き付けず毎フレーム判定)
+    if (showShield && shieldCache.length > 0) {
+      const zx = cam.zoom, cx = cam.x, cy = cam.y;
+      for (let qi = 0; qi < shieldCache.length; qi++) {
+        const val = shieldCache[qi];
+        if (!shieldActive(val)) continue;
+        const q = snapCell(cx, cy, val.x, val.y, zx);
+        paintShieldOverlay(ctx, q[0], q[1], q[2], q[3], zx);
+      }
+    }
+
+    // チョーク (減衰つきで上描き。減衰前は焼き付けと同一のため省略。
+    // 虹持ちはアニメ側で描画済みのため重ねない)
+    if (chalkCache.length > 0) {
+      const zx = cam.zoom, cx = cam.x, cy = cam.y;
+      const nowMs = Date.now();
+      const glowFx = dl === 0 && glowCount <= 250 && zx >= 4 && chalkCache.length < 800;
+      for (let ci = 0; ci < chalkCache.length; ci++) {
+        const val = chalkCache[ci];
+        if (chalkFade(val, nowMs) >= 1) continue;
+        if (dl < 2 && String(val.t || "").includes("rainbow")) continue;
+        paintSpecialTo(ctx, val, cx, cy, zx, time, dl < 2, glowFx);
       }
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;

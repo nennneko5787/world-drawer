@@ -29,6 +29,8 @@
   const cursorRateSel = document.getElementById("cursorRateSel");
   const simplifySel = document.getElementById("simplifySel");
   const qualitySel = document.getElementById("qualitySel");
+  const glowSel = document.getElementById("glowSel");
+  const shieldToggle = document.getElementById("shieldToggle");
   const rightClickSel = document.getElementById("rightClickSel");
   const middleClickSel = document.getElementById("middleClickSel");
   const themeSel = document.getElementById("themeSel");
@@ -163,6 +165,14 @@
   function dprCap() {
     return qualityMode === "low" ? 1 : qualityMode === "medium" ? 1.5 : 2;
   }
+  // 発光の強さ (全テーマ統一) とシールド表示。設定パネルから変更
+  let glowMode = "medium"; // "off" | "weak" | "medium" | "strong"
+  let showShield = true;
+  try {
+    const savedGlow = localStorage.getItem("wd_glow");
+    if (["off", "weak", "medium", "strong"].includes(savedGlow)) glowMode = savedGlow;
+    if (localStorage.getItem("wd_showShield") === "0") showShield = false;
+  } catch {}
   // 現在の描画DPR (resize時に設定。セル矩形のスナップ基準に使う)
   let viewDpr = 1;
   let trustedLevel = 5;

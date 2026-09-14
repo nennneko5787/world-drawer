@@ -110,6 +110,15 @@
                 <option value="low" data-i18n="qLow">低</option>
             </select>
         </label>
+        <label class="setRow"><span data-i18n="setGlow">発光の強さ</span>
+            <select id="glowSel" data-i18n-title="setGlow" title="発光の強さ">
+                <option value="off" data-i18n="glowOff">オフ</option>
+                <option value="weak" data-i18n="glowWeak">弱</option>
+                <option value="medium" data-i18n="glowMid">中</option>
+                <option value="strong" data-i18n="glowStrong">強</option>
+            </select>
+        </label>
+        <label class="setRow"><input type="checkbox" id="shieldToggle" checked> <span data-i18n="setShield">シールド表示</span></label>
         <div class="setRow"><span data-i18n="fpsWord">FPS</span> <b id="fpsVal">-</b> ・ <span data-i18n="cacheWord">キャッシュ</span> <b id="cacheVal">-</b> ・ <span data-i18n="drawDetail">描画</span> <b id="drawDetailVal">-</b></div>
         <label class="setRow"><span data-i18n="setTheme">テーマ</span>
             <select id="themeSel" data-i18n-title="setTheme" title="テーマ">
@@ -237,6 +246,8 @@
                 <button data-ink="glow" class="ink" data-i18n-title="inkGlowT" title="発光インク"><i class="bi bi-stars"></i><span data-i18n="inkGlow">発光</span> <b id="c-glow">0</b></button>
                 <button data-ink="rainbow" class="ink" data-i18n-title="inkRainbowT" title="虹色インク"><i class="bi bi-rainbow"></i><span data-i18n="inkRainbow">虹</span> <b id="c-rainbow">0</b></button>
                 <button data-ink="ghost" class="ink" data-i18n-title="inkGhostT" title="ゴーストインク (半透明)"><i class="bi bi-circle-half"></i><span data-i18n="inkGhost">ゴースト</span> <b id="c-ghost">0</b></button>
+                <button data-ink="chalk" class="ink" data-i18n-title="inkChalkT" title="チョークインク (時間で消える)"><i class="bi bi-brush"></i><span data-i18n="inkChalk">チョーク</span> <b id="c-chalk">0</b></button>
+                <button data-ink="shield" class="ink" data-i18n-title="inkShieldT" title="シールドインク (上書き防止)"><i class="bi bi-shield"></i><span data-i18n="inkShield">シールド</span> <b id="c-shield">0</b></button>
             </div>
             <div class="seg">
                 <button id="zoomOut" data-i18n-title="zoomOut" title="縮小"><i class="bi bi-dash"></i></button>

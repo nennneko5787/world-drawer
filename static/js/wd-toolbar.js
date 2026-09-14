@@ -107,7 +107,7 @@
     setPaintColor(hex);
     pushRecentColor(hex);
     // セルのインク集合をそのまま選択に反映（不足分があれば現状維持）
-    const cellParts = pickedParts.filter((p) => ["glow", "rainbow", "ghost"].includes(p));
+    const cellParts = pickedParts.filter((p) => ["glow", "rainbow", "ghost", "chalk", "shield"].includes(p));
     const missing = cellParts.filter((p) => (inventory[p] || 0) <= 0);
     if (missing.length > 0) {
       toast(t("eyedropInkMissing", { hex, ink: missing.map((p) => inkName(p)).join("+") }));
@@ -374,6 +374,28 @@
         localStorage.setItem("wd_quality", qualityMode);
       } catch {}
       resize();
+    };
+  }
+  // 発光の強さ (影の再計算が要るため静的焼き直し)・シールド表示 (動的印のみ)
+  if (glowSel) {
+    glowSel.value = glowMode;
+    glowSel.onchange = () => {
+      const v = glowSel.value;
+      glowMode = ["off", "weak", "medium", "strong"].includes(v) ? v : "medium";
+      try {
+        localStorage.setItem("wd_glow", glowMode);
+      } catch {}
+      markStatic();
+    };
+  }
+  if (shieldToggle) {
+    shieldToggle.checked = showShield;
+    shieldToggle.onchange = () => {
+      showShield = shieldToggle.checked;
+      try {
+        localStorage.setItem("wd_showShield", showShield ? "1" : "0");
+      } catch {}
+      markDirty();
     };
   }
   // 右・中クリックのタップ動作カスタマイズ (ドラッグは常に移動のまま)

@@ -98,15 +98,29 @@ async def rollbackUser(
         await db.execute("UPDATE history SET undone = 1 WHERE id = ?", (rows[0][0],))
         if prev is None:
             await db.execute("DELETE FROM pixels WHERE x = ? AND y = ?", (x, y))
-            events.append({"x": x, "y": y, "c": cfg.background, "t": "normal", "erased": True})
+            events.append(
+                {"x": x, "y": y, "c": cfg.background, "t": "normal", "erased": True, "s": 0, "e": 0}
+            )
         else:
             await db.execute(
-                "INSERT INTO pixels(x, y, c, t, by, coats) VALUES (?, ?, ?, ?, ?, 1)"
+                "INSERT INTO pixels(x, y, c, t, by, coats, shieldUntil)"
+                " VALUES (?, ?, ?, ?, ?, 1, 0)"
                 " ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t,"
-                " by=excluded.by, coats=excluded.coats",
+                " by=excluded.by, coats=excluded.coats, shieldUntil=0, chalkUntil=0",
                 (x, y, prev[2], prev[3], prev[1]),
             )
-            events.append({"x": x, "y": y, "c": prev[2], "t": prev[3], "by": prev[1], "coats": 1})
+            events.append(
+                {
+                    "x": x,
+                    "y": y,
+                    "c": prev[2],
+                    "t": prev[3],
+                    "by": prev[1],
+                    "coats": 1,
+                    "s": 0,
+                    "e": 0,
+                }
+            )
         restored += 1
         xpTaken += int(rxp or 0)
         if rink:
@@ -159,5 +173,7 @@ async def statusSnapshot() -> dict[str, Any]:
             "sessionPerHour": cfg.sessionPerHour,
             "requireSocketForPlace": cfg.requireSocketForPlace,
             "maxSocketsPerIp": cfg.maxSocketsPerIp,
+            "shieldMinutes": cfg.shieldMinutes,
+            "chalkMinutes": cfg.chalkMinutes,
         },
     }

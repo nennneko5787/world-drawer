@@ -58,12 +58,21 @@ async def checkCooldown(user: dict, level: int, now: float) -> None:
         )
 
 
-async def checkRadius(db: aiosqlite.Connection, token: str, level: int, x: int, y: int) -> None:
+async def checkRadius(  # noqa: PLR0913 — 配置判定の引数は削れないため許容
+    db: aiosqlite.Connection,
+    token: str,
+    level: int,
+    x: int,
+    y: int,
+    *,
+    totalPixels: int | None = None,
+) -> None:
     # 荒らし対策1: 低レベルは既存ピクセル/他プレイヤーの半径内のみ
     if level >= cfg.trustedLevel:
         return
-    async with db.execute("SELECT COUNT(*) FROM pixels") as cur:
-        totalPixels = await fetchFirstInt(cur)
+    if totalPixels is None:
+        async with db.execute("SELECT COUNT(*) FROM pixels") as cur:
+            totalPixels = await fetchFirstInt(cur)
     if totalPixels == 0:
         return
     if await nearPixel(db, x, y):
@@ -118,11 +127,11 @@ def resolveComboColor(color: str, need: list[str], existing: Any | None) -> tupl
     - 虹色あり: 表示はアニメ色相のため保存色は維持 (新規は選択色、無ければ仮置き)
     - ゴーストあり: 空きは選択色、既存ゴーストには重ねて濃く (上限あり)、
       静止色の土台には混ぜて焼き付ける (coats=0=不透明描画)
-    - 発光のみ: 選択色
+    - 発光・ラメ・シールドのみ: 選択色 (シールドの保護期限は別途付与)
     """
     wantGhost = "ghost" in need
     chosen: str | None = None
-    if wantGhost or "glow" in need:
+    if wantGhost or "glow" in need or "chalk" in need or "shield" in need:
         if not users.HEX_COLOR.match(color or ""):
             raise PlaceError({"ok": False, "error": "badColor"})
         chosen = color.lower()
@@ -140,8 +149,8 @@ def resolveComboColor(color: str, need: list[str], existing: Any | None) -> tupl
         storeColor = baseC if isHexColor(baseC) else (chosen if chosen is not None else "#ff0000")
         coats = baseCoats if wantGhost else 1
     elif not wantGhost:
-        assert chosen is not None  # noqa: S101 — 虹色・ゴーストなしは発光のみのため検証済み
-        storeColor, coats = chosen, 1  # glow のみ
+        assert chosen is not None  # noqa: S101 — 虹色・ゴーストなしは単色系のため検証済み
+        storeColor, coats = chosen, 1  # glow / chalk / shield のみ
     elif "ghost" in baseParts and baseCoats >= 1:
         assert chosen is not None  # noqa: S101 — ゴーストありのため上で検証済み
         # 重ね塗り: 色を置き換え、不透明度を深める (ゴーストのみ有効)
@@ -166,6 +175,9 @@ async def writePixel(
     - 虹色あり: 表示はアニメ色相のため保存色は維持 (新規は選択色)
     - ゴーストあり: 空きは半透明、既存ゴーストには重ねて濃く (上限あり)、
       静止色の土台には混ぜて焼き付ける (coats=0=不透明描画)
+    - ラメあり: 保存色の上に光の粒を散らす (見た目のみ)
+    - シールドあり: 保護期限を付与 (他人の上書き・消去を拒否)。期限切れ・
+      本人の塗り直し (シールドなし) ・管理者の巻き戻しでは解除される
     - 構成インクを各1消費 (不足が1つでもあれば配置不可)
     """
     x, y, color = place.x, place.y, place.color
@@ -203,6 +215,29 @@ async def writePixel(
     return {"c": storeColor, "t": storeT, "coats": coats}, storeColor, ink
 
 
+async def checkShield(db: aiosqlite.Connection, uid: str, x: int, y: int) -> None:
+    """他人の有効シールドへの上書き・消去を拒否。本人と管理者は対象外。
+
+    本人の取り消し・管理者の巻き戻しは別経路のためここでは見ない。
+    戻り値の remaining は拒否時の残り秒 (トースト表示用)。
+    """
+    async with db.execute(
+        "SELECT by, shieldUntil FROM pixels WHERE x = ? AND y = ?", (x, y)
+    ) as cur:
+        row = await cur.fetchone()
+    if row is None:
+        return
+    by, until = row[0], row[1] or 0.0
+    try:
+        untilF = float(until)
+    except (TypeError, ValueError):
+        return
+    if untilF > time.time() and by != uid:
+        raise PlaceError(
+            {"ok": False, "error": "shielded", "remaining": max(0, int(untilF - time.time()))}
+        )
+
+
 async def consumeIpBucket(ip: str, now: float) -> None:
     # 荒らし対策2: IP共有の配置上限 (成功分のみ計数)
     if not ip or ip == "unknown":
@@ -227,8 +262,14 @@ async def pruneHistoryCells(db: aiosqlite.Connection) -> None:
     )
 
 
-async def executePlace(
-    db: aiosqlite.Connection, place: PlaceInput, ip: str, now: float, countryCode: str | None = None
+async def executePlace(  # noqa: PLR0913 — 配置処理の引数は削れないため許容
+    db: aiosqlite.Connection,
+    place: PlaceInput,
+    ip: str,
+    now: float,
+    countryCode: str | None = None,
+    *,
+    totalPixels: int | None = None,
 ) -> dict:
     token = place.token
     x, y = place.x, place.y
@@ -237,10 +278,34 @@ async def executePlace(
     # 他プロセスの同時配置と直列化 (クールダウン判定→書き込みの間を守る)
     await beginImmediate(db)
     level = users.clampLevel(user.get("level", 1))
+    await checkShield(db, user["uid"], x, y)
     await checkCooldown(user, level, now)
-    await checkRadius(db, token, level, x, y)
+    await checkRadius(db, token, level, x, y, totalPixels=totalPixels)
     inv = user["inventory"]
     applied, histColor, histInk = await writePixel(db, place, ink, inv, user)
+    needParts = parseComboInk(ink) if ink not in ("normal", "erase") else []
+    if "shield" in needParts:
+        shieldLeft = int(cfg.shieldMinutes * 60)
+        await db.execute(
+            "UPDATE pixels SET shieldUntil = ? WHERE x = ? AND y = ?",
+            (now + shieldLeft, x, y),
+        )
+    else:
+        # シールドなしで塗り直したら保護解除 (消去で行が消える場合を含む)
+        await db.execute("UPDATE pixels SET shieldUntil = 0 WHERE x = ? AND y = ?", (x, y))
+        shieldLeft = 0
+    applied["s"] = shieldLeft
+    if "chalk" in needParts:
+        chalkLeft = int(cfg.chalkMinutes * 60)
+        await db.execute(
+            "UPDATE pixels SET chalkUntil = ? WHERE x = ? AND y = ?",
+            (now + chalkLeft, x, y),
+        )
+    else:
+        # チョークなしで塗り直したら時限解除 (消去で行が消える場合を含む)
+        await db.execute("UPDATE pixels SET chalkUntil = 0 WHERE x = ? AND y = ?", (x, y))
+        chalkLeft = 0
+    applied["e"] = chalkLeft
     await consumeIpBucket(ip, now)
     cooldownUntil = now + users.cooldownForLevel(level)
 
@@ -286,6 +351,7 @@ async def executePlace(
     # セル数上限の整理は低頻度で (毎回COUNT走査しない)
     if random.random() < HISTORY_PRUNE_CHANCE:  # noqa: S311 — ゲーム内整理の間引きであり秘密情報ではない
         await pruneHistoryCells(db)
+        await pruneExpiredChalk(db, now)
     await db.commit()
     # presence表示のレベルを新鮮に保つ (一覧での荒らし特定用)
     await shared.ptouch(token, level=level)
@@ -374,15 +440,20 @@ async def checkUndoPrev(db: aiosqlite.Connection, body: UndoBody, lastId: int) -
 
 
 async def restoreUndoPixel(db: aiosqlite.Connection, body: UndoBody, user: dict) -> dict:
+    # 取り消しは本人の直後操作のためシールドを見ない。ついでに保護・時限も外す
     if body.prevEmpty:
         await db.execute("DELETE FROM pixels WHERE x = ? AND y = ?", (body.x, body.y))
-        return {"c": cfg.background, "t": "normal", "erased": True}
+        return {"c": cfg.background, "t": "normal", "erased": True, "s": 0, "e": 0}
     await db.execute(
         "INSERT INTO pixels(x, y, c, t, by, coats) VALUES (?, ?, ?, ?, ?, ?)"
         " ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, coats=excluded.coats",
         (body.x, body.y, body.prevC.lower(), body.prevT, user["uid"], body.prevCoats),
     )
-    return {"c": body.prevC.lower(), "t": body.prevT, "coats": body.prevCoats}
+    await db.execute(
+        "UPDATE pixels SET shieldUntil = 0, chalkUntil = 0 WHERE x = ? AND y = ?",
+        (body.x, body.y),
+    )
+    return {"c": body.prevC.lower(), "t": body.prevT, "coats": body.prevCoats, "s": 0, "e": 0}
 
 
 async def finalizeUndo(
@@ -535,9 +606,11 @@ async def _doPlaceInner(place: PlaceInput, token: str, ip: str, country: str | N
             raise PlaceError(mismatch)
     place = place.model_copy(update={"token": token})
 
+    # 総数 (初手判定用) はロック外でTTLキャッシュから。直列化はBEGIN IMMEDIATEが担う
+    totalPixels = await fetchPixelCount()
     db = await getDb()
     async with dbLock:
-        return await executePlace(db, place, ip, time.time(), country)
+        return await executePlace(db, place, ip, time.time(), country, totalPixels=totalPixels)
 
 
 async def doPlace(place: PlaceInput, *, ip: str = "unknown", country: str | None = None) -> dict:
@@ -737,21 +810,63 @@ async def fetchFirstInt(cur: aiosqlite.Cursor) -> int:
 
 async def fetchBbox(loX: int, hiX: int, loY: int, hiY: int) -> tuple[dict, bool]:
     db = await getDb()
+    now = time.time()
     async with db.execute(
-        "SELECT x, y, c, t, by, coats FROM pixels"
-        " WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ? LIMIT ?",
-        (loX, hiX, loY, hiY, cfg.maxBboxPixels + 1),
+        "SELECT x, y, c, t, by, coats, shieldUntil, chalkUntil FROM pixels"
+        " WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?"
+        " AND (chalkUntil = 0 OR chalkUntil > ?) LIMIT ?",
+        (loX, hiX, loY, hiY, now, cfg.maxBboxPixels + 1),
     ) as cur:
         rows = list(await cur.fetchall())
     truncated = len(rows) > cfg.maxBboxPixels
-    out = {
-        f"{x},{y}": {"c": c, "t": t, "by": by, "coats": coats}
-        for x, y, c, t, by, coats in rows[: cfg.maxBboxPixels]
-    }
+    out: dict[str, dict] = {}
+    for x, y, c, t, by, coats, shieldUntil, chalkUntil in rows[: cfg.maxBboxPixels]:
+        cell: dict = {"c": c, "t": t, "by": by, "coats": coats}
+        try:
+            remain = int(float(shieldUntil or 0) - now)
+        except (TypeError, ValueError):
+            remain = 0
+        if remain > 0:
+            cell["s"] = remain
+        try:
+            remainE = int(float(chalkUntil or 0) - now)
+        except (TypeError, ValueError):
+            remainE = 0
+        if remainE > 0:
+            cell["e"] = remainE
+        out[f"{x},{y}"] = cell
     return out, truncated
 
 
+async def pruneExpiredChalk(db: aiosqlite.Connection, now: float) -> int:
+    """期限切れチョークの掃除。戻り値は削除行数 (間引き呼び出し用)。
+
+    SQLiteのDELETE直にはLIMITを付けられないため副問い合わせで絞る。
+    """
+    async with db.execute(
+        "DELETE FROM pixels WHERE rowid IN ("
+        " SELECT rowid FROM pixels WHERE chalkUntil > 0 AND chalkUntil <= ? LIMIT 500)",
+        (now,),
+    ) as cur:
+        return cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
+
+
+_COUNT_TTL_SEC = 30.0
+_BOUNDS_TTL_SEC = 60.0
+_countCache: dict[str, Any] = {"at": 0.0, "val": 0}
+_boundsCache: dict[str, Any] = {
+    "at": 0.0,
+    "val": {"count": 0, "minX": None, "minY": None, "maxX": None, "maxY": None},
+}
+
+
 async def fetchBounds() -> dict:
+    """全体数+範囲。表示・移動目安のため60秒キャッシュする。"""
+    now = time.time()
+    if now - float(_boundsCache["at"]) < _BOUNDS_TTL_SEC:
+        cached = _boundsCache["val"]
+        assert isinstance(cached, dict)  # noqa: S101 — 内部キャッシュ形状の保証
+        return cached
     db = await getDb()
     async with db.execute("SELECT COUNT(*), MIN(x), MIN(y), MAX(x), MAX(y) FROM pixels") as cur:
         row = await cur.fetchone()
@@ -760,13 +875,23 @@ async def fetchBounds() -> dict:
     count, minX, minY, maxX, maxY = row
     if not count:
         return {"count": 0, "minX": None, "minY": None, "maxX": None, "maxY": None}
-    return {"count": count, "minX": minX, "minY": minY, "maxX": maxX, "maxY": maxY}
+    result = {"count": count, "minX": minX, "minY": minY, "maxX": maxX, "maxY": maxY}
+    _boundsCache["at"] = now
+    _boundsCache["val"] = result
+    return result
 
 
 async def fetchPixelCount() -> int:
+    """総ピクセル数。接続時などの表示用のため30秒キャッシュする。"""
+    now = time.time()
+    if now - float(_countCache["at"]) < _COUNT_TTL_SEC:
+        return int(_countCache["val"])
     db = await getDb()
     async with db.execute("SELECT COUNT(*) FROM pixels") as cur:
-        return await fetchFirstInt(cur)
+        val = await fetchFirstInt(cur)
+    _countCache["at"] = now
+    _countCache["val"] = val
+    return val
 
 
 async def fetchHistoryItems(

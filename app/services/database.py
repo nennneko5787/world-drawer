@@ -135,6 +135,44 @@ async def migrateV5AddCoats(db: aiosqlite.Connection) -> None:
     await db.commit()
 
 
+async def migrateV6AddShield(db: aiosqlite.Connection) -> None:
+    """v6: シールドの保護期限 shieldUntil 列を追加 (既定0=無保護)。
+
+    既存ピクセルは無保護のままなので見た目・挙動は変わらない。
+    """
+    async with db.execute("PRAGMA table_info(pixels)") as cur:
+        cols = {row[1] for row in await cur.fetchall()}
+    if "shieldUntil" not in cols:
+        await db.execute("ALTER TABLE pixels ADD COLUMN shieldUntil REAL NOT NULL DEFAULT 0")
+    await db.commit()
+
+
+async def migrateV7AddChalk(db: aiosqlite.Connection) -> None:
+    """v7: チョークの消滅期限 chalkUntil 列を追加 (既定0=永続)。
+
+    既存ピクセルは永続のままなので見た目・挙動は変わらない。
+    """
+    async with db.execute("PRAGMA table_info(pixels)") as cur:
+        cols = {row[1] for row in await cur.fetchall()}
+    if "chalkUntil" not in cols:
+        await db.execute("ALTER TABLE pixels ADD COLUMN chalkUntil REAL NOT NULL DEFAULT 0")
+    await db.commit()
+
+
+async def migrateV8BoxIndex(db: aiosqlite.Connection) -> None:
+    """v8: 視野取得を index-only scan 化 (数倍速)。
+
+    旧 idx_pixels_xy は主キーと役割が重なるため置き換える。
+    初回のみ index 構築で数秒かかる場合がある。
+    """
+    await db.execute("DROP INDEX IF EXISTS idx_pixels_xy")
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pixels_box"
+        " ON pixels(x, y, c, t, by, coats, shieldUntil, chalkUntil)"
+    )
+    await db.commit()
+
+
 Migration = tuple[int, str, Callable[[aiosqlite.Connection], Awaitable[None]]]
 MIGRATIONS: list[Migration] = [
     (1, "legacy_shapes", migrateV1LegacyShapes),
@@ -142,6 +180,9 @@ MIGRATIONS: list[Migration] = [
     (3, "add_country", migrateV3AddCountry),
     (4, "add_show_country", migrateV4AddShowCountry),
     (5, "add_coats", migrateV5AddCoats),
+    (6, "add_shield", migrateV6AddShield),
+    (7, "add_chalk", migrateV7AddChalk),
+    (8, "box_index", migrateV8BoxIndex),
     # 追加時はここへ (番号は単調増加・各ステップは冪等にすること):
     # (4, "add_xxx", migrateV4AddXxx),
 ]

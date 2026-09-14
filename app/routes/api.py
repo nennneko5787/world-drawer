@@ -223,6 +223,8 @@ async def apiPlace(body: PlaceInput, request: Request):
                 "t": result["pixel"]["t"],
                 "by": result.get("by"),
                 "coats": result["pixel"].get("coats", 1),
+                "s": result["pixel"].get("s", 0),
+                "e": result["pixel"].get("e", 0),
             },
         )
     else:
@@ -230,7 +232,7 @@ async def apiPlace(body: PlaceInput, request: Request):
             status = 400
         elif result.get("error") in ("banned", "noSocket"):
             status = 403
-        elif result.get("error") == "cursorMismatch":
+        elif result.get("error") in ("cursorMismatch", "shielded"):
             status = 409
         else:
             status = 429 if result.get("error") in ("cooldown", "ipBusy") else 400
@@ -251,6 +253,8 @@ async def apiUndo(body: UndoBody, request: Request):
                 "t": result["pixel"]["t"],
                 "by": result.get("by"),
                 "coats": result["pixel"].get("coats", 1),
+                "s": result["pixel"].get("s", 0),
+                "e": result["pixel"].get("e", 0),
             },
         )
         return result

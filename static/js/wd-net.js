@@ -65,9 +65,12 @@
       for (const [key, val] of Object.entries(fresh)) {
         const cur = pixels.get(key);
         const coats = val.coats ?? 1;
-        if (!cur || cur.c !== val.c || cur.t !== val.t || (cur.coats ?? 1) !== coats) {
+        if (!cur || cur.c !== val.c || cur.t !== val.t || (cur.coats ?? 1) !== coats || (cur.s || 0) !== (val.s || 0) || (cur.e || 0) !== (val.e || 0)) {
           const [px, py] = key.split(",").map(Number);
-          const next = { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats };
+          // e0 は初見残り秒として引き継ぐ (置き換わり時は更新)。フェード基準用
+          const same = cur && cur.c === val.c && cur.t === val.t && cur.by === (val.by || null);
+          const e0 = (same && cur.e0) || val.e || 0;
+          const next = { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats, s: val.s || 0, sAt: Date.now(), e: val.e || 0, eAt: Date.now(), e0 };
           trackPixelWrite(cur, next);
           pixels.set(key, next);
           markStatic();
@@ -295,7 +298,7 @@
         trackPixelWrite(prev, null);
         pixels.delete(key);
       } else {
-        const next = { c: p.c, t: p.t, by: p.by || null, x: p.x, y: p.y, coats: p.coats ?? 1 };
+        const next = { c: p.c, t: p.t, by: p.by || null, x: p.x, y: p.y, coats: p.coats ?? 1, s: p.s || 0, sAt: Date.now(), e: p.e || 0, eAt: Date.now(), e0: p.e || 0 };
         trackPixelWrite(prev, next);
         pixels.set(key, next);
       }
@@ -308,6 +311,8 @@
       if (!r.ok && r.error === "cooldown") {
         cooldownUntil = r.cooldownUntil * 1000;
         toast(t("cooldownToast", { s: r.remaining }));
+      } else if (!r.ok && r.error === "shielded") {
+        toast(t("shieldToast", { s: r.remaining ?? 0 }));
       } else if (!r.ok && r.error === "noSocket") {
         toast(t("socketRequiredToast"));
       } else if (!r.ok && r.error === "cursorMismatch") {
@@ -441,6 +446,8 @@
           toast(t("socketRequiredToast"));
         } else if (data.error === "cursorMismatch") {
           toast(t("cursorMismatchToast"));
+        } else if (data.error === "shielded") {
+          toast(t("shieldToast", { s: data.remaining ?? 0 }));
         } else {
           toast(t("placeFailedToast", { error: data.error }));
         }
@@ -451,7 +458,7 @@
         trackPixelWrite(prevPix, null);
         pixels.delete(key);
       } else {
-        const next = { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x, y, coats: data.pixel.coats ?? 1 };
+        const next = { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x, y, coats: data.pixel.coats ?? 1, s: data.pixel.s || 0, sAt: Date.now(), e: data.pixel.e || 0, eAt: Date.now(), e0: data.pixel.e || 0 };
         trackPixelWrite(prevPix, next);
         pixels.set(key, next);
       }
@@ -522,7 +529,7 @@
         trackPixelWrite(prevUndoPix, null);
         pixels.delete(key);
       } else {
-        const next = { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x: target.x, y: target.y, coats: data.pixel.coats ?? 1 };
+        const next = { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x: target.x, y: target.y, coats: data.pixel.coats ?? 1, s: data.pixel.s || 0, sAt: Date.now(), e: data.pixel.e || 0, eAt: Date.now(), e0: 0 };
         trackPixelWrite(prevUndoPix, next);
         pixels.set(key, next);
       }

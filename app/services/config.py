@@ -40,10 +40,14 @@ specialInks: dict[str, str] = {
     "glow": "発光",
     "rainbow": "虹色",
     "ghost": "ゴースト",
+    "chalk": "チョーク",
+    "shield": "シールド",
 }
 rewardChance = 0.30
 rewardMin = 1
 rewardMax = 5
+shieldMinutes = 60  # シールドの保護時間 (分)。切れると上書き可に戻る
+chalkMinutes = 30  # チョークの保持時間 (分)。切れるとマスが消える
 
 # ---- 履歴上限 ----
 maxHistoryPerCell = 20
@@ -112,6 +116,8 @@ _INT_KEYS: dict[str, tuple[int, int]] = {
     "trustedLevel": (1, 100),
     "rewardMin": (1, 64),
     "rewardMax": (1, 64),
+    "shieldMinutes": (1, 1440),
+    "chalkMinutes": (1, 1440),
     "maxSocketsPerIp": (1, 1000),
 }
 _BOOL_KEYS: frozenset[str] = frozenset({"requireSocketForPlace", "forceWebsocket"})

@@ -76,6 +76,8 @@ uv run uvicorn main:app --port 5787
 | `xpPerPlace` / `xpBase` / `xpPow` | 配置ごとの経験値・必要経験値の係数と指数（レベル上限なし） |
 | `background` / `coordLimit` / `maxNameLen` / `maxBboxPixels` | 背景色・座標上限・名前の長さ・視野取得の上限 |
 | `rewardChance` / `rewardMin` / `rewardMax` | 特殊インクの当選確率と付与量 |
+| `shieldMinutes` | シールドの保護時間（分） |
+| `chalkMinutes` | チョークの保持時間（分） |
 | `maxHistoryPerCell` / `maxHistoryCells` | 履歴の保持上限 |
 | `minPasswordLen` / `maxPasswordLen` / `sessionPerHour` / `loginMaxFails` / `loginLockSec` | アカウント関連の制限 |
 | `placePerMinPerIp` / `placeRadius` / `trustedLevel` | 荒らし対策（IP共有上限・低レベルの配置半径・半径制限が外れるレベル） |
