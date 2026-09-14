@@ -145,11 +145,11 @@
   } catch {}
   // 簡易表示 (ズーム連動の描画レベル) と画質 (解像度スケール)。設定パネルから変更
   let simplifyMode = "auto"; // "auto" | "off"
-  let qualityMode = "high"; // "high" | "medium" | "low"
+  let qualityMode = "high"; // "ultra" | "high" | "medium" | "low"
   try {
     if (localStorage.getItem("wd_simplify") === "off") simplifyMode = "off";
     const savedQ = localStorage.getItem("wd_quality");
-    if (savedQ === "medium" || savedQ === "low") qualityMode = savedQ;
+    if (savedQ === "ultra" || savedQ === "medium" || savedQ === "low") qualityMode = savedQ;
   } catch {}
   function dprCap() {
     return qualityMode === "low" ? 1 : qualityMode === "medium" ? 1.5 : 2;
@@ -183,7 +183,7 @@
     try {
       localStorage.setItem("wd_draft", JSON.stringify(Object.fromEntries(drafts)));
     } catch {}
-    markDirty();
+    markStatic();
   }
   let myUid = "";
   let isDark = false;
@@ -207,13 +207,18 @@
     }
     saveBlocked();
     refreshUserList();
-    markDirty();
+    markStatic();
   }
 
   // ---------- render dirty基盤 (変化がなければ描画スキップしてCPU/電池を節約) ----------
   let renderDirty = true;
   function markDirty() {
     renderDirty = true;
+  }
+  let staticDirty = true; // 静的レイヤーの再構築要否 (カメラ・画素・見た目設定の変化)
+  function markStatic() {
+    staticDirty = true;
+    markDirty();
   }
   let rainbowCount = 0; // 手元ピクセルの虹色数 (アニメ継続要否の判定用)
   let glowCount = 0; // 手元ピクセルの発光数 (高負荷時は簡易描画に切替)

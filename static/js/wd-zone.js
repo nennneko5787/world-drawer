@@ -114,9 +114,9 @@
     }
     const rows = vy1 - vy0;
     const step = rows > 300 ? Math.ceil(rows / 300) : 1;
-    // サンプリング行ごとの統合区間 (空行も保持して横線の開閉を検出する)
-    const rowList = [];
-    for (let y = vy0; y <= vy1; y += step) {
+    // 指定行の許可区間 (統合済み)。範囲が画面より大きいと可視端での開閉が
+    // 画面端に張り付く偽線になるため、上下1段外側も評価して真の開閉だけを描く
+    const intervalsAt = (y) => {
       const pairs = [];
       for (let i = 0; i < cand.length; i += 2) {
         if (Math.abs(cand[i + 1] - y) > R) continue;
@@ -124,9 +124,14 @@
         if (b < vx0 - 1 || a > vx1 + 1) continue;
         pairs.push([a, b]);
       }
-      rowList.push({ y, iv: mergeSortedPairs(pairs) });
+      return mergeSortedPairs(pairs);
+    };
+    // サンプリング行ごとの統合区間 (空行も保持して横線の開閉を検出する)
+    const rowList = [];
+    for (let y = vy0; y <= vy1; y += step) {
+      rowList.push({ y, iv: intervalsAt(y) });
     }
-    let prev = [];
+    let prev = intervalsAt(vy0 - step);
     for (const row of rowList) {
       const cur = row.iv;
       // 縦線: 各区間の左右 (step分つなげて途切れさせない)
@@ -145,11 +150,12 @@
       }
       prev = cur;
     }
-    // 一番下の閉じ線
-    if (prev.length > 0) {
-      const bottomY = rowList.length > 0 ? rowList[rowList.length - 1].y + step : vy1 + 1;
-      for (let i = 0; i < prev.length; i += 2) {
-        segs.push({ x1: prev[i], y1: bottomY, x2: prev[i + 1] + 1, y2: bottomY });
+    // 一番下の閉じ線 (画面下に続く部分は引かない)
+    if (prev.length > 0 && rowList.length > 0) {
+      const bottomY = rowList[rowList.length - 1].y + step;
+      const tail = subtractIntervals(prev, intervalsAt(bottomY));
+      for (let i = 0; i < tail.length; i += 2) {
+        segs.push({ x1: tail[i], y1: bottomY, x2: tail[i + 1] + 1, y2: bottomY });
       }
     }
     zoneSegments = segs;

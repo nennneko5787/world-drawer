@@ -10,7 +10,7 @@
   themeSel.onchange = () => {
     if (window.wdTheme) window.wdTheme.set(themeSel.value);
     applyTheme();
-    markDirty();
+    markStatic();
   };
   applyTheme();
 
@@ -48,7 +48,7 @@
     }
     refreshColorUI();
     refreshDraftUI();
-    markDirty();
+    markStatic();
   }
   function setDraftTool(next) {
     if (!["dot", "rect", "line", "circle", "bucket"].includes(next)) return;
@@ -316,12 +316,12 @@
       toast(t("commError"));
     }
   };
-  gridToggle.onchange = () => { showGrid = gridToggle.checked; markDirty(); };
+  gridToggle.onchange = () => { showGrid = gridToggle.checked; markStatic(); };
   cursorToggle.onchange = () => { showCursors = cursorToggle.checked; markDirty(); };
   draftToggle.onchange = () => {
     showDrafts = draftToggle.checked;
     localStorage.setItem("wd_showDraft", showDrafts ? "1" : "0");
-    markDirty();
+    markStatic();
   };
   draftToggle.checked = showDrafts;
   axisToggle.onchange = () => {
@@ -329,7 +329,7 @@
     try {
       localStorage.setItem("wd_showAxes", showAxes ? "1" : "0");
     } catch {}
-    markDirty();
+    markStatic();
   };
   axisToggle.checked = showAxes;
   zoneToggle.onchange = () => {
@@ -337,7 +337,7 @@
     try {
       localStorage.setItem("wd_showZone", showZone ? "1" : "0");
     } catch {}
-    markDirty();
+    markStatic();
   };
   zoneToggle.checked = showZone;
   let cursorMinMs = 80;
@@ -362,14 +362,14 @@
       try {
         localStorage.setItem("wd_simplify", simplifyMode);
       } catch {}
-      markDirty();
+      markStatic();
     };
   }
   if (qualitySel) {
     qualitySel.value = qualityMode;
     qualitySel.onchange = () => {
       const v = qualitySel.value;
-      qualityMode = v === "medium" || v === "low" ? v : "high";
+      qualityMode = v === "ultra" || v === "medium" || v === "low" ? v : "high";
       try {
         localStorage.setItem("wd_quality", qualityMode);
       } catch {}

@@ -44,7 +44,7 @@
       if (seq !== fetchSeq) return; // 古い応答は破棄
       if (canvasData.background && canvasData.background !== background) {
         background = canvasData.background;
-        markDirty();
+        markStatic();
       }
       if (canvasData.cooldown) cooldown = canvasData.cooldown;
       applyZoneData(canvasData);
@@ -56,7 +56,7 @@
           if (x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY && !(key in fresh)) {
             trackPixelWrite(pixels.get(key), null);
             pixels.delete(key);
-            markDirty();
+            markStatic();
           }
         }
       } else {
@@ -70,7 +70,7 @@
           const next = { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats };
           trackPixelWrite(cur, next);
           pixels.set(key, next);
-          markDirty();
+          markStatic();
         }
       }
       pruneFar(box);
@@ -94,7 +94,7 @@
       if (x < box.minX - big || x > box.maxX + big || y < box.minY - big || y > box.maxY + big) {
         trackPixelWrite(pixels.get(key), null);
         pixels.delete(key);
-        markDirty();
+        markStatic();
         if (pixels.size <= maxCache) break;
       }
     }
@@ -234,7 +234,7 @@
     socket.on("init", (d) => {
       if (d.background && d.background !== background) {
         background = d.background;
-        markDirty();
+        markStatic();
       } else {
         background = d.background || background;
       }
@@ -300,7 +300,7 @@
         pixels.set(key, next);
       }
       zoneDirty = true;
-      markDirty();
+      markStatic();
       if (pendingUndo && `${pendingUndo.x},${pendingUndo.y}` === key && p.by !== myUid) cancelUndo();
       if (historyMode && historyKey === key) showHistory(p.x, p.y);
     });
@@ -460,7 +460,7 @@
       applyLevelData(data);
       refreshInkUI();
       zoneDirty = true;
-      markDirty();
+      markStatic();
       armUndo(x, y, prevForUndo);
       if (data.leveledUp) toast(t("levelUpToast", { level: data.level, cooldown: data.cooldown.toFixed(1) }), "reward");
       if (data.reward) toast(t("rewardToast", { ink: inkName(data.reward.ink), amount: data.reward.amount }), "reward");
@@ -530,7 +530,7 @@
       refreshInkUI();
       applyLevelData(data);
       zoneDirty = true;
-      markDirty();
+      markStatic();
       toast(t("undoneToast"));
     } catch {
       toast(t("commError"));

@@ -19,7 +19,7 @@
     canvas.width = Math.floor(viewW() * dpr);
     canvas.height = Math.floor(viewH() * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    markDirty();
+    markStatic();
   }
   window.addEventListener("resize", resize);
   // 後続ファイルの関数のため直接参照せず実行時に解決する
@@ -37,7 +37,7 @@
     if (zoom) cam.zoom = zoom;
     cam.x = viewW() / 2 - cx * cam.zoom;
     cam.y = viewH() / 2 - cy * cam.zoom;
-    markDirty();
+    markStatic();
   }
   centerOn(0, 0, 16);
 

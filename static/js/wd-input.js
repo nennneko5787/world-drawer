@@ -126,7 +126,7 @@
       if (lastPinchMid) {
         cam.x += mid.x - lastPinchMid.x;
         cam.y += mid.y - lastPinchMid.y;
-        markDirty();
+        markStatic();
       }
       lastPinchMid = mid;
       if (pinchDist > 0) {
@@ -177,7 +177,7 @@
       if (moved > tapSlop) {
         cam.x += dx;
         cam.y += dy;
-        markDirty();
+        markStatic();
         // 移動したのでホールド解除。離しても配置しない (パンとして扱う)
         touchHold = null;
         // 右ドラッグ中はFirefoxのcontextmenuが出ないよう抑止期間を延長
@@ -307,7 +307,7 @@
     cam.x = cx - ((cx - cam.x) / old) * next;
     cam.y = cy - ((cy - cam.y) / old) * next;
     cam.zoom = next;
-    markDirty();
+    markStatic();
   }
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
