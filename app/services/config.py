@@ -76,8 +76,15 @@ trustedProxies = ["127.0.0.1", "::1"]
 # 設定すると uvicorn --workers での複数プロセス間で presence・制限・ban を共有し、
 # Socket.IO の中継 (RedisManager) も有効になる。例: "redis://127.0.0.1:6379/0"
 # マルチワーカー時は前段にスティッキーな振り分け (nginx ip_hash 等) が必須。
-# (Cloudflare Tunnel 単体にはスティッキー機能がないため、そのままでは不可)
+# (Cloudflare Tunnel 単体にはスティッキー機能がないため、そのままでは使えない)
+# ただし forceWebsocket を true にすると Socket.IO が WebSocket専用になり、
+# 単一ポートの --workers でもスティッキーなしで動作する
+# (WebSocketを塞ぐ回線では接続できなくなる点に注意)。
+# 例: "redis://127.0.0.1:6379/0"
 redisUrl: str = ""
+# Socket.IO を WebSocket専用にする (polling無効)。マルチワーカーを
+# リバースプロキシなしで動かす場合に使う。false なら polling+websocket
+forceWebsocket: bool = False
 
 # ---- OGP ----
 # 公開URL (og:url / og:image を絶対URLにするため)。空ならリクエストの Host から推定。
@@ -105,7 +112,7 @@ _INT_KEYS: dict[str, tuple[int, int]] = {
     "rewardMax": (1, 64),
     "maxSocketsPerIp": (1, 1000),
 }
-_BOOL_KEYS: frozenset[str] = frozenset({"requireSocketForPlace"})
+_BOOL_KEYS: frozenset[str] = frozenset({"requireSocketForPlace", "forceWebsocket"})
 _FLOAT_KEYS: dict[str, tuple[float, float]] = {
     "cooldownSec": (0.5, 3600.0),
     "minCooldown": (0.1, 3600.0),

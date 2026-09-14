@@ -45,8 +45,25 @@
   }
   // フレーム毎の確保を避ける再利用バッファ (色→平坦座標配列、特殊リスト)
   // 11k超のピクセル表示でも fillStyle切替・fill呼出・GCを抑えるため
-  // 小数ズームでセル間に隙間 (背景の覗き) が出ないよう、セルを全方向に膨らませて描く
-  const PIXEL_BLEED = 0.5;
+  // 小数ズームの隙間対策: セル矩形をデバイスピクセル境界にスナップする。
+  // 右下端は隣セルの左上端と同一式で求めるため、隣接セルが境界ピクセルを
+  // 共有し背景の覗きが出ない。膨張しないので見た目のサイズは不変。最小1デバイスpx
+  function snapCellInto(out, cx, cy, x, y, z) {
+    const d = viewDpr > 0 ? viewDpr : 1;
+    const rx = Math.round((cx + x * z) * d) / d;
+    const ry = Math.round((cy + y * z) * d) / d;
+    out.push(
+      rx, ry,
+      Math.max(1 / d, Math.round((cx + (x + 1) * z) * d) / d - rx),
+      Math.max(1 / d, Math.round((cy + (y + 1) * z) * d) / d - ry),
+    );
+  }
+  const snapTmp = [0, 0, 0, 0];
+  function snapCell(cx, cy, x, y, z) {
+    snapTmp.length = 0;
+    snapCellInto(snapTmp, cx, cy, x, y, z);
+    return snapTmp;
+  }
   const pixelBatchMap = new Map();
   const specialDrawList = [];
   const draftBatchMap = new Map();
@@ -57,13 +74,14 @@
   const animCache = []; // 毎フレーム動かす虹ピクセル (静的再構築時に更新)
   // 特殊インク1マス描画 (静的・動的共通。t は描画先)。
   // save/restoreとshadowBlur乱用を避け、必要分だけ設定・復元する
-  function paintSpecialTo(t, val, sx, sy, s, time, animateRainbow, glowFx) {
+  function paintSpecialTo(t, val, cx, cy, z, time, animateRainbow, glowFx) {
     const vt = val.t || "normal";
     const hasRainbow = vt.includes("rainbow");
     const hasGlow = vt.includes("glow");
     const hasGhost = vt.includes("ghost");
     const x = val.x, y = val.y;
-    const B = PIXEL_BLEED;
+    const q = snapCell(cx, cy, x, y, z);
+    const sx = q[0], sy = q[1], sw = q[2], sh = q[3];
     let base = val.c;
     if (hasRainbow && animateRainbow) base = `hsl(${(x * 7 + y * 13 + time * 90) % 360},100%,55%)`;
     let alpha = 1;
@@ -76,16 +94,16 @@
       // 発光 (ダークモードでは強く輝く)
       t.globalAlpha = alpha;
       t.shadowColor = base;
-      t.shadowBlur = isDark ? s * 1.2 + 12 : Math.max(6, s * 0.8);
+      t.shadowBlur = isDark ? z * 1.2 + 12 : Math.max(6, z * 0.8);
       t.fillStyle = base;
-      t.fillRect(sx - B, sy - B, s + B * 2, s + B * 2);
-      if (isDark) t.fillRect(sx - B, sy - B, s + B * 2, s + B * 2);
+      t.fillRect(sx, sy, sw, sh);
+      if (isDark) t.fillRect(sx, sy, sw, sh);
       t.shadowBlur = 0;
       if (alpha !== 1) t.globalAlpha = 1;
     } else {
       if (alpha !== 1) t.globalAlpha = alpha;
       t.fillStyle = base;
-      t.fillRect(sx - B, sy - B, s + B * 2, s + B * 2);
+      t.fillRect(sx, sy, sw, sh);
       if (alpha !== 1) t.globalAlpha = 1;
     }
   }
@@ -189,7 +207,7 @@
           arr = [];
           draftBatchMap.set(dc, arr);
         }
-        arr.push(dcx + d.x * dz, dcy + d.y * dz);
+        snapCellInto(arr, dcx, dcy, d.x, d.y, dz);
       }
       if (draftBatchMap.size > 0) {
         t.save();
@@ -197,7 +215,7 @@
         for (const [color, arr] of draftBatchMap) {
           t.fillStyle = color;
           t.beginPath();
-          for (let i = 0; i < arr.length; i += 2) t.rect(arr[i] - PIXEL_BLEED, arr[i + 1] - PIXEL_BLEED, dz + PIXEL_BLEED * 2, dz + PIXEL_BLEED * 2);
+          for (let i = 0; i < arr.length; i += 4) t.rect(arr[i], arr[i + 1], arr[i + 2], arr[i + 3]);
           t.fill();
         }
         t.restore();
@@ -213,13 +231,13 @@
         if (x == null || y == null) continue;
         if (x < x0 || x > x1 || y < y0 || y > y1) continue;
         if (val.by && blocked.has(val.by)) continue; // 非表示ID
-        const sx = cam.x + x * cam.zoom - PIXEL_BLEED;
-        const sy = cam.y + y * cam.zoom - PIXEL_BLEED;
-        const s = cam.zoom + PIXEL_BLEED * 2;
+        const q = snapCell(cam.x, cam.y, x, y, cam.zoom);
+        const sx = q[0], sy = q[1], sw = q[2], sh = q[3];
+        const s = cam.zoom;
         const vt = String(val.t || "normal");
         if (vt === "normal") {
           t.fillStyle = val.c;
-          t.fillRect(sx, sy, s, s);
+          t.fillRect(sx, sy, sw, sh);
           continue;
         }
         const parts = new Set(vt.split("+"));
@@ -240,8 +258,8 @@
           t.shadowBlur = isDark ? s * 1.2 + 12 : Math.max(6, s * 0.8);
         }
         t.fillStyle = base;
-        t.fillRect(sx, sy, s, s);
-        if (hasGlow && isDark) t.fillRect(sx, sy, s, s);
+        t.fillRect(sx, sy, sw, sh);
+        if (hasGlow && isDark) t.fillRect(sx, sy, sw, sh);
         t.restore();
       }
     } else {
@@ -262,7 +280,7 @@
             arr = [];
             pixelBatchMap.set(val.c, arr);
           }
-          arr.push(cx + x * zx, cy + y * zx);
+          snapCellInto(arr, cx, cy, x, y, zx);
         } else if (dl < 2 && vt.includes("rainbow")) {
           animCache.push(val);
         } else {
@@ -273,7 +291,7 @@
         for (const [color, arr] of pixelBatchMap) {
           t.fillStyle = color;
           t.beginPath();
-          for (let i = 0; i < arr.length; i += 2) t.rect(arr[i] - PIXEL_BLEED, arr[i + 1] - PIXEL_BLEED, zx + PIXEL_BLEED * 2, zx + PIXEL_BLEED * 2);
+          for (let i = 0; i < arr.length; i += 4) t.rect(arr[i], arr[i + 1], arr[i + 2], arr[i + 3]);
           t.fill();
         }
       }
@@ -282,7 +300,7 @@
         const glowFx = dl === 0 && glowCount <= 250 && zx >= 4 && specialDrawList.length < 800;
         for (let si = 0; si < specialDrawList.length; si++) {
           const val = specialDrawList[si];
-          paintSpecialTo(t, val, cx + val.x * zx, cy + val.y * zx, zx, time, dl < 2, glowFx);
+          paintSpecialTo(t, val, cx, cy, zx, time, dl < 2, glowFx);
         }
         t.globalAlpha = 1;
         t.shadowBlur = 0;
@@ -395,7 +413,7 @@
       const glowFx = dl === 0 && glowCount <= 250 && zx >= 4 && animCache.length < 800;
       for (let ai = 0; ai < animCache.length; ai++) {
         const val = animCache[ai];
-        paintSpecialTo(ctx, val, cx + val.x * zx, cy + val.y * zx, zx, time, true, glowFx);
+        paintSpecialTo(ctx, val, cx, cy, zx, time, true, glowFx);
       }
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;

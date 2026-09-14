@@ -27,6 +27,14 @@ def versionedStaticUrls(body: str) -> str:
     return _STATIC_URL_RE.sub(rf"\1/static/\2?v={ver}", body)
 
 
+def applyWsOnly(body: str) -> str:
+    """forceWebsocket時のみ transports指定metaを立てる (index.htmlのみ保有)。"""
+    if "wd-wsonly" not in body:
+        return body
+    flag = "1" if cfg.forceWebsocket else "0"
+    return body.replace('name="wd-wsonly" content="0"', f'name="wd-wsonly" content="{flag}"')
+
+
 def baseUrlFor(request: Request) -> str:
     if cfg.siteUrl:
         return cfg.siteUrl
@@ -46,6 +54,7 @@ def localizedPage(name: str, page: str, request: Request, lang: str | None) -> H
         queryLang=queryLang or None,
     )
     body = versionedStaticUrls(body)
+    body = applyWsOnly(body)
     return HTMLResponse(
         content=body,
         headers={"vary": "Accept-Language", "cache-control": "public, max-age=300"},

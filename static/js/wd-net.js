@@ -226,7 +226,7 @@
       }, 5000);
       return;
     }
-    socket = io();
+    socket = wsOnly ? io({ transports: ["websocket"] }) : io();
     socket.on("connect", () => {
       socketReady = true;
       socket.emit("hello", { token, name: myName, color: myColor, lang: window.wdI18n.lang, tz: myTz });

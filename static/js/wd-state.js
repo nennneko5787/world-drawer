@@ -4,6 +4,15 @@
 
   const canvas = document.getElementById("board");
   const ctx = canvas.getContext("2d");
+  // forceWebsocket時 (サーバーがWS専用) はpollingを使わない。metaはindexのみ保有
+  const wsOnly = (() => {
+    try {
+      const m = document.querySelector('meta[name="wd-wsonly"]');
+      return !!m && m.content === "1";
+    } catch {
+      return false;
+    }
+  })();
   const coordsEl = document.getElementById("coords");
   const cooldownEl = document.getElementById("cooldown");
   const levelEl = document.getElementById("level");
@@ -154,6 +163,8 @@
   function dprCap() {
     return qualityMode === "low" ? 1 : qualityMode === "medium" ? 1.5 : 2;
   }
+  // 現在の描画DPR (resize時に設定。セル矩形のスナップ基準に使う)
+  let viewDpr = 1;
   let trustedLevel = 5;
   let placeRadius = 1000;
   let hover = null;

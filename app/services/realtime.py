@@ -18,15 +18,29 @@ from app.services import canvas, shared, users
 from app.services import config as cfg
 from app.services.database import dbLock, getDb
 
+
+def _wsTransports() -> list[str]:
+    """許可トランスポート。WS専用時はpollingを拒否 (400) する。"""
+    if cfg.forceWebsocket:
+        return ["websocket"]
+    return ["polling", "websocket"]
+
+
 if shared.useRedis():
     # マルチワーカー時の中継 (他ワーカー配下のクライアントへのemit・to=sid等に対応)。
-    # 前段にスティッキーな振り分け (nginx ip_hash等) が必須 (polling併用のため)。
+    # polling併用時は前段にスティッキーな振り分け (nginx ip_hash等) が必須。
+    # forceWebsocket時は単一ポートの --workers でも動作する (固着不要)。
     _manager = socketio.AsyncRedisManager(shared.redisUrl())
     sio = socketio.AsyncServer(
-        async_mode="asgi", cors_allowed_origins="*", client_manager=_manager
+        async_mode="asgi",
+        cors_allowed_origins="*",
+        client_manager=_manager,
+        transports=_wsTransports(),
     )
 else:
-    sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+    sio = socketio.AsyncServer(
+        async_mode="asgi", cors_allowed_origins="*", transports=_wsTransports()
+    )
 
 # sid -> heartbeatタスク (Redis時の生存通知用)。切断時に取り消す
 _hbTasks: dict[str, asyncio.Task[None]] = {}

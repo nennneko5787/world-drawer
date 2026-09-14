@@ -17,10 +17,40 @@
 ## セットアップ
 
 ```powershell
+# 取得
+git clone https://github.com/nennneko5787/world-drawer.git
+cd world-drawer
+
+# 依存導入
 uv sync
 ```
 
 初回起動時に `data/world.db`（SQLite）が自動作成されます。旧JSON保存（`data/canvas.json` 等）があれば初回のみ自動取り込みします。
+
+`config.jsonc` は無記入のままで動きます。公開する場合は `siteUrl`、
+管理画面を使う場合は `adminTokens` を設定してください（詳細は下の
+設定表・公開例を参照）。
+
+### 多人数向けの追加セットアップ（Redis・nginx）
+
+単体動作には不要です。マルチワーカーにする場合のみ用意します。
+
+```powershell
+# Redis (例: Docker)
+docker run -d --name wd-redis -p 6379:6379 --restart always redis
+```
+
+```jsonc
+// config.jsonc に追記
+"redisUrl": "redis://127.0.0.1:6379/0",
+```
+
+- DockerなしWindows: WSL2 上で `sudo apt install redis-server` などでも可
+- 起動ログに `redis connected` と出れば連携OK（出なければ
+  `/api/admin/status` の `redis` 欄が `ok: false` のまま縮退動作します）
+- nginx は公式サイトの Windows 版zipを展開し、下の `nginx` 例を
+  `conf/nginx.conf` に反映して `nginx.exe` を起動します
+  （`alias` のパス等は環境に合わせて変更してください）
 
 ## 起動
 
@@ -105,16 +135,37 @@ Redis で共有されるため、ワーカーを跨いでも壊れません。
 
 ```powershell
 # Redisを用意し、config.jsonc に設定（例: "redisUrl": "redis://127.0.0.1:6379/0"）
+```
+
+## 方式A: WebSocket専用（簡単・推奨）
+
+`config.jsonc` で `"forceWebsocket": true` にすると Socket.IO が
+WebSocket専用になり、振り分けの固着が不要になります。
+プロキシ追加なしで単一ポートのマルチワーカーが動きます。
+
+```powershell
+uv run uvicorn main:app --port 5787 --workers 8
+cloudflared tunnel --url http://127.0.0.1:5787
+```
+
+- 代償：WebSocketを塞ぐ回線（厳しい社内・学内LAN等）では接続できません
+- 通常（`false`）は polling+websocket の併用で互換性優先です
+
+## 方式B: polling併用＋nginx（互換維持）
+
+`forceWebsocket` を使わない場合は**前段にスティッキーな振り分けが
+必須**です（Socket.IO の polling のため）。`--workers` の単一ポートでは
+OSが振り分けて固着しないため、別ポート起動＋リバースプロキシでの
+振り分けにします。
+
+```powershell
 # ワーカーを別ポートで複数起動
 uv run uvicorn main:app --port 5781
 uv run uvicorn main:app --port 5782
 # … 必要な数だけ
 ```
 
-- **前段にスティッキーな振り分けが必須**です（Socket.IO の polling
-  併用のため）。`--workers` の単一ポートではOSが振り分けて
-  固着しないため、別ポート起動＋リバースプロキシでの振り分けにします。
-  nginx の例:
+nginx の例:
 
 ```nginx
 upstream world_drawer {
@@ -140,8 +191,62 @@ server {
 - 公開は `cloudflared tunnel --url http://127.0.0.1:5787` のように
   nginx に向ける（`CF-Connecting-IP` はそのまま透過するため、
   既定の `trustedProxies` のままでクライアントIPを取得できます）
-- Cloudflare Tunnel 単体にはスティッキー機能がないため、
-  `cloudflared → nginx(ip_hash) → uvicorn --workers` の構成にしてください
+- Cloudflare Tunnel 単体にはスティッキー機能がないため、polling併用時は
+  `cloudflared → nginx(ip_hash) → 各ワーカー` の構成にしてください
+  （方式Aなら `cloudflared` 直結で可）
+
+## 3分離（大規模向け・任意）
+
+静的配信・WS・APIを別々にすると、負荷箇所ごとに台数を変えられます。
+WS専用（`forceWebsocket` 推奨。polling併用時は ip_hash 側へ）・
+API+ページの2種プールと、nginx での静的直配信の例:
+
+```powershell
+# WSプール (Socket.IOのみ)
+uv run uvicorn main:ws_app --port 5791
+uv run uvicorn main:ws_app --port 5792
+# APIプール (ページ・REST・OGP画像)
+uv run uvicorn main:api_app --port 5781
+uv run uvicorn main:api_app --port 5782
+```
+
+```nginx
+upstream world_ws {
+    # 方式A (WS専用) なら固着不要。方式Bならここも ip_hash にする
+    server 127.0.0.1:5791;
+    server 127.0.0.1:5792;
+}
+upstream world_api {
+    server 127.0.0.1:5781;
+    server 127.0.0.1:5782;
+}
+server {
+    listen 5787;
+    # 静的ファイルはnginxから直配信 (版クエリ ?v= 付きのため長期キャッシュ可)
+    location /static/ {
+        alias C:/path/to/world-drawer/static/;
+        expires 1h;
+    }
+    location /socket.io/ {
+        proxy_pass http://world_ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 86400;
+    }
+    location / {
+        proxy_pass http://world_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+- WS・APIどちらのプールも同じ `config.jsonc`（`redisUrl` 必須）を使います。
+  配置イベント等は Redis 中継で全ワーカーに届きます
+- `alias` のパスは配置先に合わせて変更してください（`~` や相対パスは不可）
 - `redisUrl` が空のまま `--workers` を付けると、プレイヤー一覧・制限が
   ワーカーごとに分断されるため推奨しません（単体動作のままが無難です）
 - Redis障害時は可用性優先で縮退します（制限は緩め・一覧は空）。

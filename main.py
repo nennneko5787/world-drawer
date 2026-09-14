@@ -41,6 +41,24 @@ fastapi.include_router(api.router)
 
 app = socketio.ASGIApp(realtime.sio, other_asgi_app=fastapi)
 
+
+async def _wsStartup() -> None:
+    await getDb()
+    await shared.connect()
+
+
+async def _wsShutdown() -> None:
+    with contextlib.suppress(Exception):
+        await realtime.sio.shutdown()
+    await shared.close()
+    await closeDb()
+
+
+# 分離運用向け: WS専用とAPI+ページ。nginxで /socket.io/*→ws、/static/*→直配信、
+# その他→api に振り分ける。単体・結合運用は app のまま
+ws_app = socketio.ASGIApp(realtime.sio, on_startup=_wsStartup, on_shutdown=_wsShutdown)
+api_app = fastapi
+
 if __name__ == "__main__":
     import uvicorn
 

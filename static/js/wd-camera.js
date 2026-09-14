@@ -16,6 +16,7 @@
   }
   function resize() {
     const dpr = Math.min(dprCap(), window.devicePixelRatio || 1);
+    viewDpr = dpr;
     canvas.width = Math.floor(viewW() * dpr);
     canvas.height = Math.floor(viewH() * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

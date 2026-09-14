@@ -76,4 +76,9 @@
   // マルチワーカー時は前段にスティッキーな振り分け (nginx ip_hash 等) が必須。
   // Cloudflare Tunnel 単体にはスティッキー機能がないため、そのままでは使えない。
   "redisUrl": "",
+
+  // forceWebsocket: true で Socket.IO を WebSocket専用にする (polling無効)。
+  // 単一ポートの --workers でもスティッキーなしで動作する。WebSocketを塞ぐ
+  // 回線では接続できなくなるため、通常は false のまま。
+  "forceWebsocket": false,
 }
