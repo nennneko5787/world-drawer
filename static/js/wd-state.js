@@ -202,11 +202,16 @@
     renderDirty = true;
   }
   let rainbowCount = 0; // 手元ピクセルの虹色数 (アニメ継続要否の判定用)
+  let glowCount = 0; // 手元ピクセルの発光数 (高負荷時は簡易描画に切替)
   function trackPixelWrite(prevVal, nextVal) {
-    const wasRainbow = !!prevVal && String(prevVal.t || "normal").split("+").includes("rainbow");
-    const isRainbow = !!nextVal && String(nextVal.t || "normal").split("+").includes("rainbow");
+    const wasRainbow = !!prevVal && String(prevVal.t || "normal").includes("rainbow");
+    const isRainbow = !!nextVal && String(nextVal.t || "normal").includes("rainbow");
     if (wasRainbow && !isRainbow) rainbowCount = Math.max(0, rainbowCount - 1);
     else if (isRainbow && !wasRainbow) rainbowCount++;
+    const wasGlow = !!prevVal && String(prevVal.t || "normal").includes("glow");
+    const isGlow = !!nextVal && String(nextVal.t || "normal").includes("glow");
+    if (wasGlow && !isGlow) glowCount = Math.max(0, glowCount - 1);
+    else if (isGlow && !wasGlow) glowCount++;
   }
 
   // トークンはサーバー発行 (secrets使用) のみ。クライアント側生成はしない。

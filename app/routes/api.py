@@ -14,6 +14,7 @@ from app.objects.requests import (
     AdminBanBody,
     AdminLookupBody,
     AdminRollbackBody,
+    AdminTokenBody,
     PlaceInput,
     ProfileBody,
     UndoBody,
@@ -251,6 +252,13 @@ async def apiUndo(body: UndoBody, request: Request):
 
 def _adminError() -> JSONResponse:
     return JSONResponse(status_code=403, content={"ok": False, "error": "forbidden"})
+
+
+@router.post("/api/admin/status")
+async def apiAdminStatus(body: AdminTokenBody):
+    if not admin.isAdminToken(body.token):
+        return _adminError()
+    return admin.statusSnapshot()
 
 
 @router.post("/api/admin/lookup")

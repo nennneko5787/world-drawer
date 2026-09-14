@@ -62,6 +62,14 @@ async def helpPage(request: Request, lang: str | None = None) -> HTMLResponse:
     return localizedPage("help.html", "help", request, lang)
 
 
+@router.get("/admin")
+async def adminPage(request: Request, lang: str | None = None) -> HTMLResponse:
+    """管理者用の操作ページ (API側でトークン検証。機微情報を扱うため保存抑止)。"""
+    resp = localizedPage("admin.html", "admin", request, lang)
+    resp.headers["cache-control"] = "no-store"
+    return resp
+
+
 @router.get("/og-image.png")
 async def ogImage(request: Request) -> Response:
     """原点付近の実キャンバス + 右下ロゴ (TTLキャッシュ + ETag)。"""

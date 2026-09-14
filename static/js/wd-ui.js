@@ -103,7 +103,14 @@
         label.appendChild(flagEl);
         label.appendChild(document.createTextNode(" "));
       }
-      label.appendChild(document.createTextNode(`${u.name} #${u.uid || "?"} Lv${u.level ?? "?"}`));
+      const nameEl = document.createElement("span");
+      nameEl.className = "nname";
+      nameEl.textContent = u.name;
+      label.appendChild(nameEl);
+      const metaEl = document.createElement("span");
+      metaEl.className = "nmeta";
+      metaEl.textContent = `#${u.uid || "?"} Lv${u.level ?? "?"}`;
+      label.appendChild(metaEl);
       li.appendChild(label);
       if (u.self) {
         const me = document.createElement("span");

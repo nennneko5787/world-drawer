@@ -81,6 +81,13 @@ OG_TEXTS: dict[str, dict[str, tuple[str, str]]] = {
             "歷史、帳號遷移、防破壞措施。",
         ),
     },
+    "admin": {
+        "ja": ("管理 - The world drawer", "管理者用の操作ページ。"),
+        "en": ("Admin - The world drawer", "Admin operations page."),
+        "ko": ("관리 - The world drawer", "관리자용 작업 페이지."),
+        "zh-CN": ("管理 - The world drawer", "管理员操作页面。"),
+        "zh-TW": ("管理 - The world drawer", "管理員操作頁面。"),
+    },
 }
 
 OGP_START = "<!-- OGP-START -->"

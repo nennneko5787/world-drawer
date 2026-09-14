@@ -56,7 +56,14 @@
         who.appendChild(hFlag);
         who.appendChild(document.createTextNode(" "));
       }
-      who.appendChild(document.createTextNode(`${item.name} #${item.uid || "?"} Lv${item.level ?? "?"}`));
+      const whoName = document.createElement("span");
+      whoName.className = "nname";
+      whoName.textContent = item.name;
+      who.appendChild(whoName);
+      const whoMeta = document.createElement("span");
+      whoMeta.className = "nmeta";
+      whoMeta.textContent = `#${item.uid || "?"} Lv${item.level ?? "?"}`;
+      who.appendChild(whoMeta);
       main.appendChild(who);
       const time = document.createElement("span");
       time.className = "htime";

@@ -63,6 +63,10 @@ class SocketCursor(StrictModel):
     y: int
 
 
+class AdminTokenBody(StrictModel):
+    token: str = Field(default="")
+
+
 class AdminLookupBody(StrictModel):
     token: str = Field(default="")
     uid: str = Field(default="")

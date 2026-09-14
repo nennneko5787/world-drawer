@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import random
 import time
@@ -516,14 +515,6 @@ async def checkCursorProximity(token: str, x: int, y: int) -> dict | None:
     return {"ok": False, "error": "cursorMismatch"}
 
 
-def _chargeAttempt(ip: str) -> None:
-    """拒否した試行もIPバケツに計上 (無限プローブ対策)。超過時は無視する。"""
-    if not ip or ip == "unknown":
-        return
-    with contextlib.suppress(PlaceError):
-        consumeIpBucket(ip, time.time())
-
-
 async def _doPlaceInner(place: PlaceInput, token: str, ip: str, country: str | None) -> dict:
     if not inBounds(place.x, place.y):
         raise PlaceError({"ok": False, "error": "outOfBounds"})
@@ -535,14 +526,14 @@ async def _doPlaceInner(place: PlaceInput, token: str, ip: str, country: str | N
     users.notePlaceIp(ip, token)
     if users.ipBanRemaining(ip) > 0:
         raise PlaceError({"ok": False, "error": "banned"})
+    # 拒否は成功バケツを消費しない (壊れたクライアントやプローブが
+    # 正規配置の分を食い潰して全員巻き添えになるのを防ぐ)
     if cfg.requireSocketForPlace:
         if token not in presence.onlineBySid.values():
             # socket未接続のREST直叩きを拒否。通常クライアントは常時接続のため影響なし
-            _chargeAttempt(ip)
             raise PlaceError({"ok": False, "error": "noSocket"})
         mismatch = await checkCursorProximity(token, place.x, place.y)
         if mismatch is not None:
-            _chargeAttempt(ip)
             raise PlaceError(mismatch)
     place = place.model_copy(update={"token": token})
 

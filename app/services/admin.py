@@ -14,6 +14,7 @@ import aiosqlite
 
 from app.services import config as cfg
 from app.services import presence, users
+from app.services.realtime import socketIps
 
 ROLLBACK_DEFAULT_LIMIT = 1000
 ROLLBACK_MAX_LIMIT = 5000
@@ -165,3 +166,35 @@ def banStatus() -> list[dict[str, Any]]:
             continue
         out.append({"ip": ip, "until": until})
     return out
+
+
+def _topHits(
+    hits: dict[str, list[float]], windowSec: float, limit: int = 10
+) -> list[dict[str, Any]]:
+    """429切り分け用: 直近window内の試行が多いIP順。"""
+    now = time.time()
+    ranked = []
+    for ip, arr in hits.items():
+        n = sum(1 for t in arr if now - t < windowSec)
+        if n > 0:
+            ranked.append({"ip": ip, "n": n})
+    ranked.sort(key=lambda e: e["n"], reverse=True)
+    return ranked[:limit]
+
+
+def statusSnapshot() -> dict[str, Any]:
+    """429切り分け用の現在値 (管理者のみ)。"""
+    return {
+        "ok": True,
+        "presence": len(presence.presence),
+        "sockets": len(socketIps),
+        "banned": banStatus(),
+        "topPlaceIps": _topHits(users.ipPlaceHits, 60.0),
+        "topSessionIps": _topHits(users.sessionHits, 3600.0),
+        "config": {
+            "placePerMinPerIp": cfg.placePerMinPerIp,
+            "sessionPerHour": cfg.sessionPerHour,
+            "requireSocketForPlace": cfg.requireSocketForPlace,
+            "maxSocketsPerIp": cfg.maxSocketsPerIp,
+        },
+    }

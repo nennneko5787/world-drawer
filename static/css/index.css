@@ -115,7 +115,9 @@ button.pill.clickable { cursor: pointer; font: inherit; }
 #userList, #historyList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 #userList li, #historyList li { display: flex; align-items: center; gap: 8px; }
 #userList .dot, .hwho .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); flex: none; display: inline-block; }
-#userList .uname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+#userList .uname { flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; gap: 4px; }
+#userList .uname .nname, #historyList .hwho .nname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#userList .uname .nmeta, #historyList .hwho .nmeta { flex: none; color: var(--hint); font-size: 12px; }
 .flag { width: 18px; height: auto; border-radius: 3px; flex: none; vertical-align: middle; }
 .flagFallback { font-size: 11px; font-weight: 700; color: var(--hint); border: 1px solid var(--border); border-radius: 3px; padding: 0 3px; flex: none; }
 .hwho .flag { width: 16px; }
@@ -251,7 +253,7 @@ button.pill.clickable { cursor: pointer; font: inherit; }
   align-items: center; justify-content: center; font-size: 13px;
 }
 #historyList .hmain { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-#historyList .hwho { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+#historyList .hwho { display: flex; align-items: center; gap: 5px; font-size: 12px; min-width: 0; }
 #historyList .htime { font-size: 11px; color: var(--hint); }
 #historyList .muted { color: var(--hint); }
 
