@@ -58,27 +58,27 @@ OG_TEXTS: dict[str, dict[str, tuple[str, str]]] = {
         "ja": (
             "ヘルプ - The world drawer",
             "The world drawer の遊び方。基本操作・インク・レベルとクールダウン・"
-            "設計図・履歴・アカウント引っ越し・荒らし対策を解説。",
+            "設計図・履歴・アカウント引っ越し・荒らし対策・ルールを解説。",
         ),
         "en": (
             "Help - The world drawer",
             "How to play The world drawer: basics, inks, levels and cooldowns, "
-            "blueprints, history, account transfer, and anti-grief measures.",
+            "blueprints, history, account transfer, anti-grief measures, and rules.",
         ),
         "ko": (
             "도움말 - The world drawer",
             "The world drawer 플레이 방법: 기본 조작·잉크·레벨과 쿨다운·설계도·"
-            "기록·계정 이전·어뷰징 대책 안내.",
+            "기록·계정 이전·어뷰징 대책·규칙 안내.",
         ),
         "zh-CN": (
             "帮助 - The world drawer",
             "The world drawer 玩法说明：基本操作、墨水、等级与冷却、设计图、"  # noqa: RUF001
-            "历史、账号迁移、防破坏措施。",
+            "历史、账号迁移、防破坏措施、规则。",
         ),
         "zh-TW": (
             "說明 - The world drawer",
             "The world drawer 玩法說明：基本操作、墨水、等級與冷卻、設計圖、"  # noqa: RUF001
-            "歷史、帳號遷移、防破壞措施。",
+            "歷史、帳號遷移、防破壞措施、規則。",
         ),
     },
     "admin": {
