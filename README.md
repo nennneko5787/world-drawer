@@ -71,7 +71,9 @@ uv run ruff format .     # 整形
 uv run ty check          # 型チェック
 ```
 
-JSの構文確認は `node --check static/js/index.js` で行えます。
+JSの構文確認は `node --check` で行えます（対象: `static/js/wd-*.js`）。
+フロントは機能別の classic script 分割（`wd-state` → … → `wd-main` の順に読込、トップレベルスコープ共有）です。
+後続ファイルの関数をトップレベルで直接参照せず、実行時解決（`(...a) => f(...a)`）にしてください。
 
 ## 注意
 

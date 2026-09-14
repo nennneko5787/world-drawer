@@ -116,8 +116,9 @@ async def connect(sid: str, environ: Any) -> None:
 async def disconnect(sid: str) -> None:
     token = presence.onlineBySid.pop(sid, None)
     if token and token in presence.presence and token not in presence.onlineBySid.values():
-        presence.presence.pop(token, None)
-        await sio.emit("leave", {"token": token})
+        entry = presence.presence.pop(token, None)
+        # token は送らない。uid で通知する
+        await sio.emit("leave", {"uid": (entry or {}).get("uid")})
         await sio.emit("presence", presence.presenceList())
 
 
@@ -207,7 +208,6 @@ async def cursor(sid: str, data: Any) -> None:
     await sio.emit(
         "cursor",
         {
-            "token": token,
             "uid": user["uid"],
             "name": user["name"],
             "color": user["color"],

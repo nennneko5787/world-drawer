@@ -37,7 +37,18 @@
     <script src="/static/js/theme.js"></script>
     <script src="/static/js/i18n.js" defer></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" defer></script>
-    <script src="/static/js/index.js" defer></script>
+    <script src="/static/js/wd-state.js" defer></script>
+    <script src="/static/js/wd-drafts.js" defer></script>
+    <script src="/static/js/wd-camera.js" defer></script>
+    <script src="/static/js/wd-net.js" defer></script>
+    <script src="/static/js/wd-zone.js" defer></script>
+    <script src="/static/js/wd-render.js" defer></script>
+    <script src="/static/js/wd-ui.js" defer></script>
+    <script src="/static/js/wd-input.js" defer></script>
+    <script src="/static/js/wd-picker.js" defer></script>
+    <script src="/static/js/wd-toolbar.js" defer></script>
+    <script src="/static/js/wd-panels.js" defer></script>
+    <script src="/static/js/wd-main.js" defer></script>
 </head>
 <body>
     <canvas id="board"></canvas>
@@ -67,6 +78,18 @@
                 <option value="30" data-i18n="rateSmooth">なめらか</option>
                 <option value="15" data-i18n="rateVerySmooth">とてもなめらか</option>
                 <option value="5" data-i18n="rateUltra">超なめらか</option>
+            </select>
+        </label>
+        <label class="setRow"><span data-i18n="setRightClick">右クリック</span>
+            <select id="rightClickSel" data-i18n-title="setRightClickT" title="右クリックのタップ動作（ドラッグは常に移動）">
+                <option value="pan" data-i18n="rcMove">移動のみ</option>
+                <option value="erase" data-i18n="rcErase">消しゴム</option>
+            </select>
+        </label>
+        <label class="setRow"><span data-i18n="setMiddleClick">中クリック</span>
+            <select id="middleClickSel" data-i18n-title="setMiddleClickT" title="中クリックのタップ動作（ドラッグは常に移動）">
+                <option value="pan" data-i18n="mcMove">移動のみ</option>
+                <option value="eyedrop" data-i18n="mcEyedrop">スポイト</option>
             </select>
         </label>
         <div class="setRow"><span data-i18n="fpsWord">FPS</span> <b id="fpsVal">-</b> ・ <span data-i18n="cacheWord">キャッシュ</span> <b id="cacheVal">-</b></div>
@@ -158,6 +181,9 @@
         <div class="cpCodeRow"><span data-i18n="cpCode">コード</span><span class="cpHash">#</span><input id="cpHex" maxlength="7" spellcheck="false" autocomplete="off" placeholder="ff0000"></div>
         <div class="cpPalTitle" data-i18n="cpBasic">基本</div>
         <div id="cpBasicGrid"></div>
+        <div class="cpPalTitle" data-i18n="cpRecent">履歴</div>
+        <div id="cpRecentEmpty" class="cpRecentEmpty" data-i18n="cpRecentEmpty">まだ履歴がありません</div>
+        <div id="cpRecentGrid"></div>
         <div class="cpFoot"><span id="cpPreview"></span><button id="cpOk" data-i18n="close">閉じる</button></div>
     </aside>
 
@@ -185,6 +211,19 @@
                 <button id="zoomOut" data-i18n-title="zoomOut" title="縮小"><i class="bi bi-dash"></i></button>
                 <button id="zoomOrigin" data-i18n-title="zoomOrigin" title="原点(0,0)へ移動"><i class="bi bi-crosshair"></i></button>
                 <button id="zoomIn" data-i18n-title="zoomIn" title="拡大"><i class="bi bi-plus"></i></button>
+            </div>
+        </div>
+        <div class="row hidden" id="draftBar">
+            <div class="seg" data-i18n-aria="draftAria" aria-label="設計図ツール">
+                <button id="draftDot" data-drafttool="dot" class="active" data-i18n-title="draftDotT" title="点で描く（ドラッグで連続描画）"><i class="bi bi-dot"></i><span data-i18n="draftDot">点</span></button>
+                <button id="draftRect" data-drafttool="rect" data-i18n-title="draftRectT" title="矩形を塗りつぶす（ドラッグで範囲指定）"><i class="bi bi-square"></i><span data-i18n="draftRect">矩形</span></button>
+                <button id="draftLine" data-drafttool="line" data-i18n-title="draftLineT" title="直線を引く（ドラッグで範囲指定）"><i class="bi bi-slash-lg"></i><span data-i18n="draftLine">直線</span></button>
+                <button id="draftCircle" data-drafttool="circle" data-i18n-title="draftCircleT" title="円を塗りつぶす（ドラッグで範囲指定）"><i class="bi bi-circle"></i><span data-i18n="draftCircle">円</span></button>
+                <button id="draftBucket" data-drafttool="bucket" data-i18n-title="draftBucketT" title="つながった同色範囲を塗りつぶす（タップ）"><i class="bi bi-paint-bucket"></i><span data-i18n="draftBucket">バケツ</span></button>
+            </div>
+            <div class="seg">
+                <button id="draftUndo" data-i18n-title="draftUndoT" title="設計図を1手戻す"><i class="bi bi-arrow-counterclockwise"></i><span data-i18n="draftUndo">戻す</span></button>
+                <button id="draftClear" data-i18n-title="draftClearT" title="設計図をすべて消す（戻すで復元可）"><i class="bi bi-trash"></i><span data-i18n="draftClear">全消し</span></button>
             </div>
         </div>
         <div class="row hint" data-i18n="hintRow">左クリックで配置 ・ ドラッグ/右ドラッグで移動 ・ 色ボタンで詳細指定</div>

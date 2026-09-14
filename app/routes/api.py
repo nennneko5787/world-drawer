@@ -140,8 +140,19 @@ async def apiMe(request: Request, token: str = "", lang: str = "", tz: str = "")
 
 
 @router.get("/api/users")
-async def apiUsers() -> dict:
-    return {"online": presence.presenceList(), "count": len(presence.presenceList())}
+async def apiUsers(limit: int = 200) -> dict:
+    """オンライン一覧 (socket.io 不可時のフォールバック専用・5秒ポーリング)。
+
+    人数分の件数をそのまま返すと重くなるため上限で打ち切る。
+    全体数は count、打ち切り有無は truncated で返す。
+    """
+    limit = max(1, min(1000, limit or 200))
+    full = presence.presenceList()
+    return {
+        "online": full[:limit],
+        "count": len(full),
+        "truncated": len(full) > limit,
+    }
 
 
 @router.post("/api/session")

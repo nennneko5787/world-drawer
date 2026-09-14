@@ -182,11 +182,13 @@ button.pill.clickable { cursor: pointer; font: inherit; }
   padding: 5px 8px; font-size: 12px; width: 90px;
 }
 .cpPalTitle { font-size: 12px; color: var(--hint); margin: 0 2px; }
-#cpBasicGrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
-#cpBasicGrid button {
+#cpBasicGrid, #cpRecentGrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+#cpBasicGrid button, #cpRecentGrid button {
   aspect-ratio: 1; border-radius: 5px; border: 1px solid rgba(0,0,0,.25);
   padding: 0; cursor: pointer;
 }
+.cpRecentEmpty { font-size: 12px; color: var(--hint); margin: 0 2px 4px; }
+.cpRecentEmpty.hidden { display: none; }
 .cpFoot { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
 #cpPreview { width: 34px; height: 26px; border-radius: 7px; border: 1px solid var(--border); }
 #cpOk {
@@ -277,6 +279,9 @@ button.pill.clickable { cursor: pointer; font: inherit; }
 }
 #toolbar.collapsed { padding-bottom: 2px; }
 #toolbar.collapsed .row, #toolbar.collapsed .hint { display: none; }
+#draftBar.hidden { display: none; }
+#draftBar { justify-content: center; }
+#draftUndo:disabled { opacity: .45; cursor: not-allowed; }
 body.chromeHidden #undoBtn { bottom: 12px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
 #colorBtn {

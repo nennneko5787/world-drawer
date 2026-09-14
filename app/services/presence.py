@@ -11,14 +11,15 @@ PRESENCE_TTL_SEC = 30.0
 
 
 def presenceList() -> list[dict]:
+    # 注意: セッショントークンは絶対に含めない (全員に公開される情報のため)。
+    # 相関IDには公開前提の uid を使う。サーバー内部の辞書キーは token のまま。
     now = time.time()
     out = []
-    for token, item in presence.items():
+    for item in presence.values():
         if now - float(item.get("updatedAt", 0)) > PRESENCE_TTL_SEC:
             continue
         out.append(
             {
-                "token": token,
                 "uid": item.get("uid", "?"),
                 "name": item.get("name", "ななし"),
                 "color": item.get("color", "#22aa66"),
