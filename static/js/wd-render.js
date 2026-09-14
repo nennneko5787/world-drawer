@@ -33,6 +33,16 @@
     const lum = (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
     return lum > 0.6 ? "#111" : "#fff";
   }
+  // ズーム連動の描画詳細度 (簡易表示)。0=フル 〜 3=最小。
+  // 1: 発光の影を省略 / 2: +虹アニメ停止・ゾーン境界非表示 / 3: +カーソル名札非表示
+  function detailLevel() {
+    if (simplifyMode === "off") return 0;
+    const z = cam.zoom;
+    if (z >= 4) return 0;
+    if (z >= 1.5) return 1;
+    if (z >= 0.5) return 2;
+    return 3;
+  }
   // フレーム毎の確保を避ける再利用バッファ (色→平坦座標配列、特殊リスト)
   // 11k超のピクセル表示でも fillStyle切替・fill呼出・GCを抑えるため
   const pixelBatchMap = new Map();
@@ -50,17 +60,22 @@
       }
     }
     fpsLastT = now;
+    const dl = detailLevel();
     if (now - fpsShownAt > 500) {
       fpsShownAt = now;
       if (fpsVal) fpsVal.textContent = String(Math.round(fpsEma));
       if (cacheVal) cacheVal.textContent = String(pixels.size);
+      if (drawDetailVal) {
+        drawDetailVal.textContent = dl >= 3 ? t("qdL3") : dl === 2 ? t("qdL2") : dl === 1 ? t("qdL1") : t("qdFull");
+      }
     }
     isDark = document.documentElement.dataset.theme === "dark";
     const vw = viewW(), vh = viewH();
     // 変化なし・虹色アニメなしなら描画スキップ (DOM表示の更新だけ継続)
     // vsync駆動 (rAF) で毎フレーム描画。アニメ抑制はしない
     const hoverRainbow = !!hover && tool === "pen" && inkSet.has("rainbow");
-    const needAnim = rainbowCount > 0 || hoverRainbow;
+    // 簡易Lv2以上では虹を固定色にするためアニメ用の再描画は不要
+    const needAnim = dl < 2 && (rainbowCount > 0 || hoverRainbow);
     if (!renderDirty && !needAnim) {
       updateCooldownUI();
       requestAnimationFrame(render);
@@ -183,7 +198,7 @@
     if (specialDrawList.length > 0) {
       // 発光の shadowBlur は激重のため、発光が多い・縮小表示・特殊が多い時は簡易描画
       const zx = cam.zoom, cx = cam.x, cy = cam.y;
-      const glowFx = glowCount <= 250 && zx >= 4 && specialDrawList.length < 800;
+      const glowFx = dl === 0 && glowCount <= 250 && zx >= 4 && specialDrawList.length < 800;
       for (let si = 0; si < specialDrawList.length; si++) {
         const val = specialDrawList[si];
         const x = val.x, y = val.y;
@@ -193,7 +208,7 @@
         const hasGlow = vt.includes("glow");
         const hasGhost = vt.includes("ghost");
         let base = val.c;
-        if (hasRainbow) base = `hsl(${(x * 7 + y * 13 + time * 90) % 360},100%,55%)`;
+        if (hasRainbow && dl < 2) base = `hsl(${(x * 7 + y * 13 + time * 90) % 360},100%,55%)`;
         const sx = cx + x * zx, sy = cy + y * zx;
         let alpha = 1;
         if (hasGhost) {
@@ -222,8 +237,8 @@
       ctx.shadowBlur = 0;
     }
 
-    // 配置可能ゾーンの境界線 (Lv制限中のみ。サーバー判定と一致する正確な線)
-    if (showZone && myLevel < trustedLevel && pixels.size > 0) {
+    // 配置可能ゾーンの境界線 (Lv制限中のみ。簡易Lv2以上では非表示)
+    if (showZone && dl < 2 && myLevel < trustedLevel && pixels.size > 0) {
       if (zoneDirty && !panning && Date.now() - zoneBuiltAt > 800) {
         rebuildZoneIndex();
         rebuildZoneSegments(x0, x1, y0, y1);
@@ -292,6 +307,8 @@
         ctx.strokeStyle = cur.color || "#22aa66";
         ctx.lineWidth = 2.5;
         strokeCellRect(sx, sy);
+        // 簡易Lv3では名札を省略 (枠のみ。小さすぎて読めないため)
+        if (dl >= 3) continue;
         const label = cur.name || t("anon");
         ctx.font = "12px system-ui, sans-serif";
         const w = ctx.measureText(label).width + 12;
@@ -313,7 +330,10 @@
       strokeCellRect(sx, sy);
       if (tool === "pen") {
         ctx.globalAlpha = 0.55;
-        ctx.fillStyle = inkSet.has("rainbow") ? `hsl(${(Date.now() / 10) % 360},100%,55%)` : draftDisplayColor(paintColor);
+        // 簡易Lv2以上では虹プレビューも固定色 (アニメ用の再描画を抑える)
+        ctx.fillStyle = inkSet.has("rainbow")
+          ? (dl < 2 ? `hsl(${(Date.now() / 10) % 360},100%,55%)` : `hsl(${(hover.x * 7 + hover.y * 13) % 360},100%,55%)`)
+          : draftDisplayColor(paintColor);
         fillCellRect(sx, sy);
         ctx.globalAlpha = 1;
       }

@@ -354,6 +354,28 @@
       localStorage.setItem("wd_cursorRate", String(cursorMinMs));
     } catch {}
   };
+  // 簡易表示 (ズーム連動) と画質 (解像度スケール)。変更は即時反映・端末に保存
+  if (simplifySel) {
+    simplifySel.value = simplifyMode;
+    simplifySel.onchange = () => {
+      simplifyMode = simplifySel.value === "off" ? "off" : "auto";
+      try {
+        localStorage.setItem("wd_simplify", simplifyMode);
+      } catch {}
+      markDirty();
+    };
+  }
+  if (qualitySel) {
+    qualitySel.value = qualityMode;
+    qualitySel.onchange = () => {
+      const v = qualitySel.value;
+      qualityMode = v === "medium" || v === "low" ? v : "high";
+      try {
+        localStorage.setItem("wd_quality", qualityMode);
+      } catch {}
+      resize();
+    };
+  }
   // 右・中クリックのタップ動作カスタマイズ (ドラッグは常に移動のまま)
   let rightErase = false;
   let middleEyedrop = false;

@@ -18,6 +18,8 @@
   const axisToggle = document.getElementById("axisToggle");
   const zoneToggle = document.getElementById("zoneToggle");
   const cursorRateSel = document.getElementById("cursorRateSel");
+  const simplifySel = document.getElementById("simplifySel");
+  const qualitySel = document.getElementById("qualitySel");
   const rightClickSel = document.getElementById("rightClickSel");
   const middleClickSel = document.getElementById("middleClickSel");
   const themeSel = document.getElementById("themeSel");
@@ -95,6 +97,7 @@
   const chromeToggle = document.getElementById("chromeToggle");
   const fpsVal = document.getElementById("fpsVal");
   const cacheVal = document.getElementById("cacheVal");
+  const drawDetailVal = document.getElementById("drawDetailVal");
   const t = (key, params) => window.wdI18n.t(key, params);
   // 重ねがけ ("ghost+glow") は各名を合成表示
   const inkName = (k) => String(k || "").split("+").map((p) => t("inkL_" + p)).join("+");
@@ -140,6 +143,17 @@
     if (localStorage.getItem("wd_showAxes") === "0") showAxes = false;
     if (localStorage.getItem("wd_showZone") === "0") showZone = false;
   } catch {}
+  // 簡易表示 (ズーム連動の描画レベル) と画質 (解像度スケール)。設定パネルから変更
+  let simplifyMode = "auto"; // "auto" | "off"
+  let qualityMode = "high"; // "high" | "medium" | "low"
+  try {
+    if (localStorage.getItem("wd_simplify") === "off") simplifyMode = "off";
+    const savedQ = localStorage.getItem("wd_quality");
+    if (savedQ === "medium" || savedQ === "low") qualityMode = savedQ;
+  } catch {}
+  function dprCap() {
+    return qualityMode === "low" ? 1 : qualityMode === "medium" ? 1.5 : 2;
+  }
   let trustedLevel = 5;
   let placeRadius = 1000;
   let hover = null;

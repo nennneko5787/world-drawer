@@ -1,4 +1,4 @@
-"""動的OGP画像 (/og-image.png)。原点付近の実キャンバス + 右下ロゴ。
+"""動的OGP画像 (/og-image.png)。画像いっぱいの実キャンバス + 右下ロゴ。
 
 言語非依存 (全言語で同一画像) のため、HTML 側の言語別 meta とは別に
 TTL 付きでサーバー側キャッシュする。クローラは画像もキャッシュするので
@@ -71,7 +71,12 @@ def blend(fg: tuple[int, int, int], bg: tuple[int, int, int], alpha: float) -> t
 def windowForBounds(
     count: int, minX: int | None, minY: int | None, maxX: int | None, maxY: int | None
 ) -> tuple[int, int, int]:
-    """原点中心の表示範囲 (halfW, halfH) とセルpxを決める。"""
+    """原点中心の表示範囲 (halfW, halfH) とセルpxを決める。
+
+    セル数は絵が収まる大きさで決め、画像いっぱいになるよう表示範囲だけ
+    広げる (アートは中央に残り、余白はグリッドで埋まる)。はみ出しは描画時に
+    クリップされる。
+    """
     if not count or minX is None or minY is None or maxX is None or maxY is None:
         halfW, halfH = MIN_HALF_W, MIN_HALF_H
     else:
@@ -79,6 +84,8 @@ def windowForBounds(
         halfH = min(MAX_HALF_H, max(abs(minY), abs(maxY), MIN_HALF_H) + PAD_CELLS)
     cellsW, cellsH = halfW * 2 + 1, halfH * 2 + 1
     cell = max(MIN_CELL, min(MAX_CELL, WIDTH // cellsW, HEIGHT // cellsH))
+    halfW = max(halfW, -(-WIDTH // (2 * cell)))
+    halfH = max(halfH, -(-HEIGHT // (2 * cell)))
     return halfW, halfH, cell
 
 

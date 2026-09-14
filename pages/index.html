@@ -95,7 +95,20 @@
                 <option value="eyedrop" data-i18n="mcEyedrop">スポイト</option>
             </select>
         </label>
-        <div class="setRow"><span data-i18n="fpsWord">FPS</span> <b id="fpsVal">-</b> ・ <span data-i18n="cacheWord">キャッシュ</span> <b id="cacheVal">-</b></div>
+        <label class="setRow"><span data-i18n="setSimplify">簡易表示</span>
+            <select id="simplifySel" data-i18n-title="setSimplify" title="簡易表示">
+                <option value="auto" data-i18n="simpAuto">自動（ズーム連動）</option>
+                <option value="off" data-i18n="simpOff">オフ（常にフル描画）</option>
+            </select>
+        </label>
+        <label class="setRow"><span data-i18n="setQuality">画質</span>
+            <select id="qualitySel" data-i18n-title="setQuality" title="画質">
+                <option value="high" data-i18n="qHigh">高</option>
+                <option value="medium" data-i18n="qMed">中</option>
+                <option value="low" data-i18n="qLow">低</option>
+            </select>
+        </label>
+        <div class="setRow"><span data-i18n="fpsWord">FPS</span> <b id="fpsVal">-</b> ・ <span data-i18n="cacheWord">キャッシュ</span> <b id="cacheVal">-</b> ・ <span data-i18n="drawDetail">描画</span> <b id="drawDetailVal">-</b></div>
         <label class="setRow"><span data-i18n="setTheme">テーマ</span>
             <select id="themeSel" data-i18n-title="setTheme" title="テーマ">
                 <option value="auto" data-i18n="themeAuto">自動</option>
