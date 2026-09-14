@@ -14,7 +14,7 @@ import socketio
 from fastapi import FastAPI
 
 from app.routes import api, pages, staticfiles
-from app.services import realtime
+from app.services import realtime, shared
 from app.services.database import closeDb, getDb
 
 
@@ -26,9 +26,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     "Application shutdown complete" の後にプロセスが固まる。
     """
     await getDb()
+    await shared.connect()
     yield
     with contextlib.suppress(Exception):
         await realtime.sio.shutdown()
+    await shared.close()
     await closeDb()
 
 

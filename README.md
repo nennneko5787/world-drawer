@@ -47,6 +47,7 @@ uv run uvicorn main:app --port 5787
 | `maxHistoryPerCell` / `maxHistoryCells` | 履歴の保持上限 |
 | `minPasswordLen` / `maxPasswordLen` / `sessionPerHour` / `loginMaxFails` / `loginLockSec` | アカウント関連の制限 |
 | `placePerMinPerIp` / `placeRadius` / `trustedLevel` | 荒らし対策（IP共有上限・低レベルの配置半径・半径制限が外れるレベル） |
+| `redisUrl` | 空なら単体動作。設定するとマルチワーカー対応（下記） |
 
 ## 構成
 
@@ -95,3 +96,55 @@ cloudflared tunnel --url http://127.0.0.1:5787
   `X-Forwarded-For` を信用し、直結リクエストのヘッダは偽装可能なため無視します
 - 別構成のリバースプロキシを使う場合は、その出口IP/CIDRを `trustedProxies`
   （`config.jsonc`）に追加してください
+
+## マルチワーカー（多人数向け）
+
+1ワーカーで捌き切れなくなったら（502・タイムアウト増）、Redis連携で
+ワーカーを増やせます。プレイヤー一覧・カーソル・レート制限・ban は
+Redis で共有されるため、ワーカーを跨いでも壊れません。
+
+```powershell
+# Redisを用意し、config.jsonc に設定（例: "redisUrl": "redis://127.0.0.1:6379/0"）
+# ワーカーを別ポートで複数起動
+uv run uvicorn main:app --port 5781
+uv run uvicorn main:app --port 5782
+# … 必要な数だけ
+```
+
+- **前段にスティッキーな振り分けが必須**です（Socket.IO の polling
+  併用のため）。`--workers` の単一ポートではOSが振り分けて
+  固着しないため、別ポート起動＋リバースプロキシでの振り分けにします。
+  nginx の例:
+
+```nginx
+upstream world_drawer {
+    ip_hash;  # 同一IPを同一ワーカーへ (Socket.IOのpollingに必須)
+    server 127.0.0.1:5781;
+    server 127.0.0.1:5782;
+}
+server {
+    listen 5787;
+    location / {
+        proxy_pass http://world_drawer;
+        proxy_http_version 1.1;
+        # WebSocket用
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 86400;
+    }
+}
+```
+
+- 公開は `cloudflared tunnel --url http://127.0.0.1:5787` のように
+  nginx に向ける（`CF-Connecting-IP` はそのまま透過するため、
+  既定の `trustedProxies` のままでクライアントIPを取得できます）
+- Cloudflare Tunnel 単体にはスティッキー機能がないため、
+  `cloudflared → nginx(ip_hash) → uvicorn --workers` の構成にしてください
+- `redisUrl` が空のまま `--workers` を付けると、プレイヤー一覧・制限が
+  ワーカーごとに分断されるため推奨しません（単体動作のままが無難です）
+- Redis障害時は可用性優先で縮退します（制限は緩め・一覧は空）。
+  `/api/admin/status` の `redis` 欄で状態を確認できます
+- SQLite はWALモードで複数プロセスから利用します。配置などの
+  読み→書きは直列化しています。将来的なボトルネック時は PostgreSQL 化を検討

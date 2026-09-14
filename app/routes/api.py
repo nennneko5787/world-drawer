@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
-import time
 
+import aiosqlite
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -19,7 +20,7 @@ from app.objects.requests import (
     ProfileBody,
     UndoBody,
 )
-from app.services import admin, canvas, presence, users
+from app.services import admin, canvas, shared, users
 from app.services import config as cfg
 from app.services.database import dbLock, getDb
 from app.services.realtime import sio
@@ -151,7 +152,7 @@ async def apiUsers(limit: int = 200) -> dict:
     全体数は count、打ち切り有無は truncated で返す。
     """
     limit = max(1, min(1000, limit or 200))
-    full = presence.presenceList()
+    full = await shared.presenceList()
     return {
         "online": full[:limit],
         "count": len(full),
@@ -163,7 +164,7 @@ async def apiUsers(limit: int = 200) -> dict:
 async def apiSession(request: Request, lang: str = "", tz: str = ""):
     """サーバー発行のセッショントークンを新規作成 (secrets使用)。規定名は作成者のロケールで固定。"""
     ip = clientIp(request)
-    if not users.checkRate(users.sessionHits, ip, cfg.sessionPerHour, 3600.0):
+    if not await shared.rateAllow("session", ip, cfg.sessionPerHour, 3600.0):
         return JSONResponse(status_code=429, content={"ok": False, "error": "rateLimited"})
     db = await getDb()
     async with dbLock:
@@ -171,17 +172,24 @@ async def apiSession(request: Request, lang: str = "", tz: str = ""):
             token = secrets.token_urlsafe(32)
             if await users.fetchUser(db, token) is None:
                 break
-        user = await users.insertUser(
-            db,
-            users.NewUser(
-                token=token,
-                uid=await users.newUidDb(db),
-                name=users.defaultNameFor(lang or None, request.headers.get("accept-language", "")),
-                color=users.randomUserColor(),
-                inventory=users.newInventory(),
-                country=headerCountry(request, tz),
-            ),
-        )
+        try:
+            user = await users.insertUser(
+                db,
+                users.NewUser(
+                    token=token,
+                    uid=await users.newUidDb(db),
+                    name=users.defaultNameFor(
+                        lang or None, request.headers.get("accept-language", "")
+                    ),
+                    color=users.randomUserColor(),
+                    inventory=users.newInventory(),
+                    country=headerCountry(request, tz),
+                ),
+            )
+        except aiosqlite.IntegrityError:
+            # 別ワーカーとの同時発行の競合 → やり直す
+            await db.rollback()
+            return await apiSession(request, lang, tz)
         await db.commit()
     return {"ok": True, **canvas.userPayload(user, token)}
 
@@ -198,7 +206,7 @@ async def apiProfile(body: ProfileBody, request: Request):
     )
     if not result.get("ok"):
         return JSONResponse(status_code=400, content=result)
-    await sio.emit("presence", presence.presenceList())
+    await sio.emit("presence", await shared.presenceList())
     return result
 
 
@@ -258,7 +266,7 @@ def _adminError() -> JSONResponse:
 async def apiAdminStatus(body: AdminTokenBody):
     if not admin.isAdminToken(body.token):
         return _adminError()
-    return admin.statusSnapshot()
+    return await admin.statusSnapshot()
 
 
 @router.post("/api/admin/lookup")
@@ -291,7 +299,7 @@ async def apiAdminRollback(body: AdminRollbackBody):
 async def apiAdminBan(body: AdminBanBody):
     if not admin.isAdminToken(body.token):
         return _adminError()
-    result = admin.banIp(body.ip, body.seconds)
+    result = await shared.setBan(body.ip, body.seconds)
     if not result.get("ok"):
         return JSONResponse(status_code=400, content=result)
     return result
@@ -314,7 +322,7 @@ async def apiAccountIssue(body: AccountIssueBody, request: Request):
         code = await users.newTransferCodeDb(db)
         await db.execute(
             "UPDATE users SET transferCode = ?, passwordHash = ? WHERE token = ?",
-            (code, users.hashPassword(password), token),
+            (code, await asyncio.to_thread(users.hashPassword, password), token),
         )
         await db.commit()
     return {"ok": True, "code": code}
@@ -328,9 +336,7 @@ async def apiAccountLogin(body: AccountLoginBody, request: Request):
     履歴/ピクセルの帰属付け替え) してから切り替える。未指定・同一・不存在なら切替のみ。
     """
     ip = clientIp(request)
-    now = time.time()
-    fails = [t for t in users.loginFails.get(ip, []) if now - t < cfg.loginLockSec]
-    if len(fails) >= cfg.loginMaxFails:
+    if not await shared.rateAllow("login", ip, cfg.loginMaxFails, cfg.loginLockSec, record=False):
         return JSONResponse(status_code=429, content={"ok": False, "error": "locked"})
     code = (body.code or "").strip().upper()
     password = body.password or ""
@@ -342,16 +348,17 @@ async def apiAccountLogin(body: AccountLoginBody, request: Request):
     ) as cur:
         row = await cur.fetchone()
     user = users.rowToUser(row) if row else None
+    storedHash = (row[9] if row else None) or ""
+    passwordOk = await asyncio.to_thread(users.verifyPassword, password, storedHash)
     if (
         row is None
         or user is None
         or not user.get("transferCode")
-        or not users.verifyPassword(password, row[9] or "")
+        or not passwordOk
     ):
-        fails.append(now)
-        users.loginFails[ip] = fails
+        await shared.rateAllow("login", ip, cfg.loginMaxFails, cfg.loginLockSec)
         return JSONResponse(status_code=401, content={"ok": False, "error": "badLogin"})
-    users.loginFails.pop(ip, None)
+    await shared.rateReset("login", ip)
     merged = False
     fromToken = (body.fromToken or "").strip()[:64]
     if fromToken and fromToken != user["token"]:
@@ -361,7 +368,7 @@ async def apiAccountLogin(body: AccountLoginBody, request: Request):
         # 統合元・統合先トークンで接続中の全タブに再読み込みを促す。
         # 放置すると古いトークンのタブが空アカウントを復活させたり、
         # 古い名前で上書きしたりするため。
-        for sid in presence.sidsForTokens({user["token"], fromToken}):
+        for sid in await shared.sidsForTokens({user["token"], fromToken}):
             await sio.emit("accountMerged", {"token": user["token"]}, to=sid)
-        await sio.emit("presence", presence.presenceList())
+        await sio.emit("presence", await shared.presenceList())
     return {"ok": True, "merged": merged, **canvas.userPayload(user, user["token"])}

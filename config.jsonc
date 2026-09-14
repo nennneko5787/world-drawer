@@ -68,4 +68,12 @@
   // Cloudflare Tunnel (cloudflaredは自ホスト発) なら既定のまま。
   // 直結公開のリクエストヘッダは偽装可能なため無視し、ソケットIPを使う。
   "trustedProxies": ["127.0.0.1", "::1"],
+
+  // ---- マルチワーカー ----
+  // redisUrl: 空なら単体動作。設定すると uvicorn --workers での複数プロセス間で
+  // presence・レート制限・ban を共有し、Socket.IO の中継も有効になる。
+  // 例: "redis://127.0.0.1:6379/0"
+  // マルチワーカー時は前段にスティッキーな振り分け (nginx ip_hash 等) が必須。
+  // Cloudflare Tunnel 単体にはスティッキー機能がないため、そのままでは使えない。
+  "redisUrl": "",
 }

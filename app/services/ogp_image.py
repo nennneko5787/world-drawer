@@ -198,7 +198,8 @@ async def getOgpImage() -> tuple[bytes, str, float, bool]:
             bounds.get("maxY"),
         )
         pixels, _truncated = await canvas.fetchBbox(-halfW, halfW, -halfH, halfH)
-        png = renderPng(pixels, halfW, halfH, cell)
+        # PIL描画はCPUバウンドのため別スレッドで (イベントループを塞いで502を出さない)
+        png = await asyncio.to_thread(renderPng, pixels, halfW, halfH, cell)
         etag = f'"{hashlib.sha256(png).hexdigest()[:32]}"'
         _cache.png, _cache.etag, _cache.renderedAt = png, etag, now
         return png, etag, now, False

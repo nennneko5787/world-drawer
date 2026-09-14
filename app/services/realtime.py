@@ -2,28 +2,45 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import secrets
 import time
 from typing import Any
 
+import aiosqlite
 import socketio
 from pydantic import BaseModel, ValidationError
 
 from app.objects.requests import PlaceInput, SocketCursor, SocketHello
 from app.objects.responses import PixelEvent
-from app.services import canvas, presence, users
+from app.services import canvas, shared, users
 from app.services import config as cfg
 from app.services.database import dbLock, getDb
 
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+if shared.useRedis():
+    # マルチワーカー時の中継 (他ワーカー配下のクライアントへのemit・to=sid等に対応)。
+    # 前段にスティッキーな振り分け (nginx ip_hash等) が必須 (polling併用のため)。
+    _manager = socketio.AsyncRedisManager(shared.redisUrl())
+    sio = socketio.AsyncServer(
+        async_mode="asgi", cors_allowed_origins="*", client_manager=_manager
+    )
+else:
+    sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 
-# sid -> 解決済みIP (接続数制限用。再起動で消える)
-socketIps: dict[str, str] = {}
+# sid -> heartbeatタスク (Redis時の生存通知用)。切断時に取り消す
+_hbTasks: dict[str, asyncio.Task[None]] = {}
 
 
-def socketsFromIp(ip: str) -> int:
-    return sum(1 for v in socketIps.values() if v == ip)
+async def _sidBeat(sid: str) -> None:
+    try:
+        while True:
+            await asyncio.sleep(shared.SID_BEAT_SEC)
+            await shared.sidRefresh(sid)
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        return
 
 
 def scopeProxyHeaders(scope: dict) -> tuple[str, str, str]:
@@ -104,12 +121,17 @@ def parseSocket[T: BaseModel](model: type[T], data: Any) -> T | None:
 @sio.event
 async def connect(sid: str, environ: Any) -> bool | None:
     ip = socketIp(environ if isinstance(environ, dict) else {})
-    socketIps[sid] = ip
+    await shared.sidSet(sid, ip)
     # 同一IPの同時接続を制限 (ソケット必須化と合わせた多アカウント荒らし対策)。
     # IP不明時は数えられないため制限しない
-    if ip != "unknown" and socketsFromIp(ip) > max(1, cfg.maxSocketsPerIp):
-        socketIps.pop(sid, None)
+    if ip != "unknown" and await shared.socketsFromIp(ip) > max(1, cfg.maxSocketsPerIp):
+        await shared.sidPop(sid)
         return False
+    if shared.useRedis():
+        old = _hbTasks.pop(sid, None)
+        if old is not None:
+            old.cancel()
+        _hbTasks[sid] = asyncio.get_running_loop().create_task(_sidBeat(sid))
     await sio.emit(
         "init",
         {
@@ -120,7 +142,7 @@ async def connect(sid: str, environ: Any) -> bool | None:
             "trustedLevel": cfg.trustedLevel,
             "placeRadius": cfg.placeRadius,
             "pixelCount": await canvas.fetchPixelCount(),
-            "online": presence.presenceList(),
+            "online": await shared.presenceList(),
         },
         to=sid,
     )
@@ -129,13 +151,16 @@ async def connect(sid: str, environ: Any) -> bool | None:
 
 @sio.event
 async def disconnect(sid: str) -> None:
-    socketIps.pop(sid, None)
-    token = presence.onlineBySid.pop(sid, None)
-    if token and token in presence.presence and token not in presence.onlineBySid.values():
-        entry = presence.presence.pop(token, None)
-        # token は送らない。uid で通知する
-        await sio.emit("leave", {"uid": (entry or {}).get("uid")})
-        await sio.emit("presence", presence.presenceList())
+    old = _hbTasks.pop(sid, None)
+    if old is not None:
+        old.cancel()
+    token = await shared.sidPop(sid)
+    if token and not await shared.tokenHasLiveSid(token):
+        entry = await shared.ppop(token)
+        if entry is not None:
+            # token は送らない。uid で通知する
+            await sio.emit("leave", {"uid": entry.get("uid")})
+            await sio.emit("presence", await shared.presenceList())
 
 
 @sio.event
@@ -155,17 +180,25 @@ async def hello(sid: str, data: Any) -> None:
             if user is None:
                 # トークンだけ残って行がない (DB初期化等) → 持ち込み名で作り直す
                 anonFallback = users.defaultNameFor(payload.lang, "")
-                user = await users.insertUser(
-                    db,
-                    users.NewUser(
-                        token=token,
-                        uid=await users.newUidDb(db),
-                        name=users.cleanName(payload.name or anonFallback, anonFallback),
-                        color=users.cleanColor(payload.color or "", users.randomUserColor()),
-                        inventory=users.newInventory(),
-                        country=sidCountry(sid, payload.tz),
-                    ),
-                )
+                try:
+                    user = await users.insertUser(
+                        db,
+                        users.NewUser(
+                            token=token,
+                            uid=await users.newUidDb(db),
+                            name=users.cleanName(payload.name or anonFallback, anonFallback),
+                            color=users.cleanColor(payload.color or "", users.randomUserColor()),
+                            inventory=users.newInventory(),
+                            country=sidCountry(sid, payload.tz),
+                        ),
+                    )
+                except aiosqlite.IntegrityError:
+                    # 別ワーカーとの同時作成の競合 → 勝者の行を読む
+                    await db.rollback()
+                    user = await users.fetchUser(db, token)
+                    if user is None:
+                        await sio.emit("helloOk", {"ok": False, "error": "busy"}, to=sid)
+                        return
             else:
                 code = sidCountry(sid, payload.tz)
                 if code and code != user.get("country"):
@@ -180,22 +213,29 @@ async def hello(sid: str, data: Any) -> None:
                 token = secrets.token_urlsafe(32)
                 if await users.fetchUser(db, token) is None:
                     break
-            user = await users.insertUser(
-                db,
-                users.NewUser(
-                    token=token,
-                    uid=await users.newUidDb(db),
-                    name=users.cleanName(payload.name or anonFallback, anonFallback),
-                    color=users.cleanColor(payload.color or "", users.randomUserColor()),
-                    inventory=users.newInventory(),
-                    country=sidCountry(sid),
-                ),
-            )
+            try:
+                user = await users.insertUser(
+                    db,
+                    users.NewUser(
+                        token=token,
+                        uid=await users.newUidDb(db),
+                        name=users.cleanName(payload.name or anonFallback, anonFallback),
+                        color=users.cleanColor(payload.color or "", users.randomUserColor()),
+                        inventory=users.newInventory(),
+                        country=sidCountry(sid),
+                    ),
+                )
+            except aiosqlite.IntegrityError:
+                # 別ワーカーとの同時作成の競合 → やり直す
+                await db.rollback()
+                await hello(sid, data)
+                return
             await db.commit()
-    presence.onlineBySid[sid] = token
-    presence.presence[token] = presence.presenceEntry(token, user)
+    prev = await shared.pget(token)
+    await shared.sidBind(sid, token)
+    await shared.pset(token, shared.buildEntry(token, user, prev))
     await sio.emit("helloOk", {"token": token, **canvas.userPayload(user, token)}, to=sid)
-    await sio.emit("presence", presence.presenceList())
+    await sio.emit("presence", await shared.presenceList())
 
 
 @sio.event
@@ -210,18 +250,21 @@ async def cursor(sid: str, data: Any) -> None:
     user = await users.fetchUser(db, token)
     if user is None:
         return
-    presence.onlineBySid[sid] = token
-    presence.presence[token] = {
-        "name": user["name"],
-        "color": user["color"],
-        "uid": user["uid"],
-        "level": user.get("level", 1),
-        "country": user.get("country"),
-        "showCountry": user.get("showCountry", True),
-        "x": payload.x,
-        "y": payload.y,
-        "updatedAt": time.time(),
-    }
+    await shared.sidBind(sid, token)
+    await shared.pset(
+        token,
+        {
+            "name": user["name"],
+            "color": user["color"],
+            "uid": user["uid"],
+            "level": user.get("level", 1),
+            "country": user.get("country"),
+            "showCountry": user.get("showCountry", True),
+            "x": payload.x,
+            "y": payload.y,
+            "updatedAt": time.time(),
+        },
+    )
     await sio.emit(
         "cursor",
         {

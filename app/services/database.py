@@ -165,6 +165,16 @@ async def migrate(db: aiosqlite.Connection) -> None:
         logger.info("migrated to version %d (%s)", target, name)
 
 
+async def beginImmediate(db: aiosqlite.Connection) -> None:
+    """書き込みトランザクションを即時開始 (プロセスまたぎの直列化用)。
+
+    読み→書きの判定 (クールダウン等) を他プロセスの書き込みから守る。
+    既に開いている稀な経路では何もしない (単体では dbLock が直列化する)。
+    """
+    with contextlib.suppress(aiosqlite.Error):
+        await db.execute("BEGIN IMMEDIATE")
+
+
 async def closeDb() -> None:
     """共有コネクションを閉じる。
 

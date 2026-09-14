@@ -71,6 +71,14 @@ adminTokens: list[str] = []
 # 直結公開のヘッダは偽装可能なため無視し、ソケットIPを使う
 trustedProxies = ["127.0.0.1", "::1"]
 
+# ---- マルチワーカー ----
+# RedisのURL。空なら単体動作 (従来どおりプロセス内記憶)。
+# 設定すると uvicorn --workers での複数プロセス間で presence・制限・ban を共有し、
+# Socket.IO の中継 (RedisManager) も有効になる。例: "redis://127.0.0.1:6379/0"
+# マルチワーカー時は前段にスティッキーな振り分け (nginx ip_hash 等) が必須。
+# (Cloudflare Tunnel 単体にはスティッキー機能がないため、そのままでは不可)
+redisUrl: str = ""
+
 # ---- OGP ----
 # 公開URL (og:url / og:image を絶対URLにするため)。空ならリクエストの Host から推定。
 # 例: "https://example.com"
@@ -270,6 +278,21 @@ def validateSiteUrl(value: object) -> str | None:
     return text
 
 
+def validateRedisUrl(value: object) -> str | None:
+    if not isinstance(value, str):
+        logger.warning("config.jsonc: redisUrl must be a string, using default")
+        return None
+    text = value.strip()
+    if not text:
+        return ""
+    if not re.match(r"^(redis|rediss|unix)://\S+$", text):
+        logger.warning(
+            "config.jsonc: redisUrl must be like redis://127.0.0.1:6379/0, using default"
+        )
+        return None
+    return text
+
+
 def applyConfigKey(
     validated: dict[str, int | float | str | bool | list[str]], key: str, value: object
 ) -> None:
@@ -286,6 +309,8 @@ def applyConfigKey(
         result = validateProxyList(value)
     elif key == "siteUrl":
         result = validateSiteUrl(value)
+    elif key == "redisUrl":
+        result = validateRedisUrl(value)
     elif key == "adminTokens":
         result = validateTokenList(value)
     else:

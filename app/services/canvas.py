@@ -12,8 +12,8 @@ import aiosqlite
 
 from app.objects.requests import PlaceInput, UndoBody
 from app.services import config as cfg
-from app.services import presence, users
-from app.services.database import dbLock, getDb
+from app.services import shared, users
+from app.services.database import beginImmediate, dbLock, getDb
 
 
 def inBounds(x: int, y: int) -> bool:
@@ -68,7 +68,7 @@ async def checkRadius(db: aiosqlite.Connection, token: str, level: int, x: int, 
         return
     if await nearPixel(db, x, y):
         return
-    if nearOtherPresence(token, x, y):
+    if await nearOtherPresence(token, x, y):
         return
     raise PlaceError({"ok": False, "error": "tooFar", "radius": cfg.placeRadius})
 
@@ -203,16 +203,12 @@ async def writePixel(
     return {"c": storeColor, "t": storeT, "coats": coats}, storeColor, ink
 
 
-def consumeIpBucket(ip: str, now: float) -> None:
+async def consumeIpBucket(ip: str, now: float) -> None:
     # 荒らし対策2: IP共有の配置上限 (成功分のみ計数)
     if not ip or ip == "unknown":
         return
-    arr = [t for t in users.ipPlaceHits.get(ip, []) if now - t < IP_BUCKET_WINDOW_SEC]
-    if len(arr) >= cfg.placePerMinPerIp:
-        users.ipPlaceHits[ip] = arr
+    if not await shared.rateAllow("place", ip, cfg.placePerMinPerIp, IP_BUCKET_WINDOW_SEC):
         raise PlaceError({"ok": False, "error": "ipBusy"})
-    arr.append(now)
-    users.ipPlaceHits[ip] = arr
 
 
 async def pruneHistoryCells(db: aiosqlite.Connection) -> None:
@@ -238,12 +234,14 @@ async def executePlace(
     x, y = place.x, place.y
     ink = place.ink or place.inkType or "normal"
     user = await users.ensureUser(db, token, users.defaultNameFor(place.lang, ""))
+    # 他プロセスの同時配置と直列化 (クールダウン判定→書き込みの間を守る)
+    await beginImmediate(db)
     level = users.clampLevel(user.get("level", 1))
     await checkCooldown(user, level, now)
     await checkRadius(db, token, level, x, y)
     inv = user["inventory"]
     applied, histColor, histInk = await writePixel(db, place, ink, inv, user)
-    consumeIpBucket(ip, now)
+    await consumeIpBucket(ip, now)
     cooldownUntil = now + users.cooldownForLevel(level)
 
     # 経験値付与とレベルアップ (上限なし。複数段上がりに対応。必要値>=1のため必ず停止)
@@ -290,9 +288,7 @@ async def executePlace(
         await pruneHistoryCells(db)
     await db.commit()
     # presence表示のレベルを新鮮に保つ (一覧での荒らし特定用)
-    entry = presence.presence.get(token)
-    if entry is not None:
-        entry["level"] = level
+    await shared.ptouch(token, level=level)
 
     return {
         "ok": True,
@@ -428,6 +424,8 @@ async def executeUndo(
     user = await users.fetchUser(db, token)
     if user is None:
         raise PlaceError({"ok": False, "error": "noUndo"})
+    # 他プロセスの同時取り消しと直列化
+    await beginImmediate(db)
     last = await fetchUndoLast(db, body.x, body.y)
     if last is None:
         raise PlaceError({"ok": False, "error": "noUndo"})
@@ -490,8 +488,8 @@ CURSOR_MAX_DIST = 16
 CURSOR_WAIT_SEC = 0.35
 
 
-def _cursorMatches(token: str, x: int, y: int) -> bool:
-    entry = presence.presence.get(token)
+async def _cursorMatches(token: str, x: int, y: int) -> bool:
+    entry = await shared.pget(token)
     if entry is None:
         return False
     cx, cy = entry.get("x"), entry.get("y")
@@ -507,10 +505,10 @@ def _cursorMatches(token: str, x: int, y: int) -> bool:
 
 async def checkCursorProximity(token: str, x: int, y: int) -> dict | None:
     """一致すれば None、不一致ならエラーボディ。"""
-    if _cursorMatches(token, x, y):
+    if await _cursorMatches(token, x, y):
         return None
     await asyncio.sleep(CURSOR_WAIT_SEC)
-    if _cursorMatches(token, x, y):
+    if await _cursorMatches(token, x, y):
         return None
     return {"ok": False, "error": "cursorMismatch"}
 
@@ -523,13 +521,13 @@ async def _doPlaceInner(place: PlaceInput, token: str, ip: str, country: str | N
         raise PlaceError({"ok": False, "error": "unknownInk"})
     if not token:
         raise PlaceError({"ok": False, "error": "missingToken"})
-    users.notePlaceIp(ip, token)
-    if users.ipBanRemaining(ip) > 0:
+    await shared.noteLastIp(ip, token)
+    if await shared.banRemaining(ip) > 0:
         raise PlaceError({"ok": False, "error": "banned"})
     # 拒否は成功バケツを消費しない (壊れたクライアントやプローブが
     # 正規配置の分を食い潰して全員巻き添えになるのを防ぐ)
     if cfg.requireSocketForPlace:
-        if token not in presence.onlineBySid.values():
+        if not await shared.tokenHasLiveSid(token):
             # socket未接続のREST直叩きを拒否。通常クライアントは常時接続のため影響なし
             raise PlaceError({"ok": False, "error": "noSocket"})
         mismatch = await checkCursorProximity(token, place.x, place.y)
@@ -550,9 +548,9 @@ async def doPlace(place: PlaceInput, *, ip: str = "unknown", country: str | None
         return err.result
 
 
-def nearOtherPresence(token: str, x: int, y: int) -> bool:
+async def nearOtherPresence(token: str, x: int, y: int) -> bool:
     radius = cfg.placeRadius
-    for tok, item in presence.presence.items():
+    for tok, item in (await shared.pall()).items():
         if tok == token:
             continue
         ix, iy = item.get("x"), item.get("y")
@@ -594,13 +592,14 @@ async def doProfile(
             (newName, newColor, int(newShow), newCountry, token),
         )
         await db.commit()
-    item = presence.presence.get(token)
-    if item is not None:
-        item["name"] = newName
-        item["color"] = newColor
-        item["showCountry"] = newShow
-        item["country"] = newCountry
-        item["updatedAt"] = time.time()
+    await shared.ptouch(
+        token,
+        name=newName,
+        color=newColor,
+        showCountry=newShow,
+        country=newCountry,
+        updatedAt=time.time(),
+    )
     return {
         "ok": True,
         "profile": {
@@ -651,6 +650,8 @@ async def mergeAccounts(
     dstToken = target.get("token", "")
     if not srcToken or not dstToken or srcToken == dstToken:
         return target, False
+    # 他プロセスの同時統合と直列化
+    await beginImmediate(db)
     src = await users.fetchUser(db, srcToken)
     if src is None:
         return target, False
@@ -658,7 +659,7 @@ async def mergeAccounts(
         # 万が一 uid が同じでもトークンが違えば旧行だけ消す
         await db.execute("DELETE FROM users WHERE token = ?", (srcToken,))
         await db.commit()
-        presence.presence.pop(srcToken, None)
+        await shared.ppop(srcToken)
         return target, False
 
     total = totalEarnedFor(target.get("level", 1), target.get("xp", 0)) + totalEarnedFor(
@@ -702,7 +703,7 @@ async def mergeAccounts(
     await db.execute("UPDATE pixels SET by = ? WHERE by = ?", (target["uid"], src["uid"]))
     await db.execute("DELETE FROM users WHERE token = ?", (srcToken,))
     await db.commit()
-    presence.presence.pop(srcToken, None)
+    await shared.ppop(srcToken)
     refreshed = await users.fetchUser(db, dstToken)
     assert refreshed is not None  # noqa: S101 — 直前にUPDATEした行のため存在保証
     return refreshed, True

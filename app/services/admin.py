@@ -7,14 +7,13 @@ rollback は指定 uid が最後に触ったマスを、ひとつ前の履歴状
 from __future__ import annotations
 
 import json
-import time
 from typing import Any
 
 import aiosqlite
 
 from app.services import config as cfg
-from app.services import presence, users
-from app.services.realtime import socketIps
+from app.services import shared, users
+from app.services.database import beginImmediate
 
 ROLLBACK_DEFAULT_LIMIT = 1000
 ROLLBACK_MAX_LIMIT = 5000
@@ -51,8 +50,8 @@ async def lookupUser(db: aiosqlite.Connection, uid: str) -> dict | None:
         "inventory": dict(user["inventory"]),
         "country": user.get("country"),
         "touchedCells": int(touchedRow[0]) if touchedRow else 0,
-        "lastIp": users.ipForToken(user["token"]),
-        "online": user["token"] in presence.presence,
+        "lastIp": await shared.lastIp(user["token"]),
+        "online": (await shared.pget(user["token"])) is not None,
     }
 
 
@@ -64,6 +63,8 @@ async def rollbackUser(
     limit = max(1, min(ROLLBACK_MAX_LIMIT, int(limit or ROLLBACK_DEFAULT_LIMIT)))
     if not uid:
         return {"ok": False, "error": "badUid"}
+    # 他プロセスの同時巻き戻しと直列化
+    await beginImmediate(db)
     async with db.execute(
         "SELECT token, level, xp, inventory FROM users WHERE uid = ?", (uid,)
     ) as cur:
@@ -125,9 +126,7 @@ async def rollbackUser(
         (_dumpInventory(inv), level, xp, uid),
     )
     await db.commit()
-    entry = presence.presence.get(targetToken)
-    if entry is not None:
-        entry["level"] = level
+    await shared.ptouch(targetToken, level=level)
     return {
         "ok": True,
         "uid": uid,
@@ -145,52 +144,16 @@ def _dumpInventory(inv: dict[str, int]) -> str:
     return json.dumps({k: inv.get(k, 0) for k in cfg.specialInks}, ensure_ascii=False)
 
 
-def banIp(ip: str, seconds: float) -> dict:
-    """IP禁止 (seconds<=0 で解除)。不正IPは badIp。"""
-    norm = users.parseClientIp(ip)
-    if norm is None:
-        return {"ok": False, "error": "badIp"}
-    if seconds <= 0:
-        users.banIp(norm, 0)
-        return {"ok": True, "ip": norm, "banned": False, "until": 0.0}
-    until = users.banIp(norm, seconds)
-    return {"ok": True, "ip": norm, "banned": True, "until": until}
-
-
-def banStatus() -> list[dict[str, Any]]:
-    now = time.time()
-    out = []
-    for ip, until in list(users.bannedIps.items()):
-        if until <= now:
-            users.bannedIps.pop(ip, None)
-            continue
-        out.append({"ip": ip, "until": until})
-    return out
-
-
-def _topHits(
-    hits: dict[str, list[float]], windowSec: float, limit: int = 10
-) -> list[dict[str, Any]]:
-    """429切り分け用: 直近window内の試行が多いIP順。"""
-    now = time.time()
-    ranked = []
-    for ip, arr in hits.items():
-        n = sum(1 for t in arr if now - t < windowSec)
-        if n > 0:
-            ranked.append({"ip": ip, "n": n})
-    ranked.sort(key=lambda e: e["n"], reverse=True)
-    return ranked[:limit]
-
-
-def statusSnapshot() -> dict[str, Any]:
+async def statusSnapshot() -> dict[str, Any]:
     """429切り分け用の現在値 (管理者のみ)。"""
     return {
         "ok": True,
-        "presence": len(presence.presence),
-        "sockets": len(socketIps),
-        "banned": banStatus(),
-        "topPlaceIps": _topHits(users.ipPlaceHits, 60.0),
-        "topSessionIps": _topHits(users.sessionHits, 3600.0),
+        "presence": await shared.pcount(),
+        "sockets": await shared.liveSocketCount(),
+        "banned": await shared.banList(),
+        "topPlaceIps": await shared.rateTop("place", 60.0),
+        "topSessionIps": await shared.rateTop("session", 3600.0),
+        "redis": {"enabled": shared.useRedis(), "ok": shared.redisOk()},
         "config": {
             "placePerMinPerIp": cfg.placePerMinPerIp,
             "sessionPerHour": cfg.sessionPerHour,
