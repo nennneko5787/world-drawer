@@ -21,12 +21,18 @@ const COORD_LIMIT: i32 = 1_000_000;
 /// 視野取得。Edgeキャッシュなし (no-store)。常にDB直読み。
 pub async fn bbox(State(state): State<AppState>, Query(q): Query<Bbox>) -> Response {
     let Some((lox, hix, loy, hiy)) = normalize(q) else {
-        // bbox無しは全量返さない (Python互換)
+        // bbox無しは全量返さない。metaのみ (フロントの初回取得用)
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pixels")
             .fetch_one(&state.pool)
             .await
             .unwrap_or(0);
-        let body = serde_json::json!({"pixels": {}, "truncated": false, "pixelCount": count});
+        let body = serde_json::json!({
+            "pixels": {}, "truncated": false, "pixelCount": count,
+            "background": state.cfg.background,
+            "cooldown": state.cfg.cooldown_sec,
+            "trustedLevel": state.cfg.trusted_level,
+            "placeRadius": state.cfg.place_radius,
+        });
         return json_no_store(&body);
     };
     let max = state.cfg.max_bbox_pixels;

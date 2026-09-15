@@ -56,6 +56,18 @@ pub struct Config {
     pub cooldown_decay: f64,
     #[serde(default = "d100k", alias = "max_bbox_pixels")]
     pub max_bbox_pixels: usize,
+    #[serde(default = "d1i", alias = "xp_per_place")]
+    pub xp_per_place: i64,
+    #[serde(default = "d3f", alias = "xp_base")]
+    pub xp_base: f64,
+    #[serde(default = "d15", alias = "xp_pow")]
+    pub xp_pow: f64,
+    #[serde(default = "dffffff")]
+    pub background: String,
+    #[serde(default = "d5i", alias = "trusted_level")]
+    pub trusted_level: i64,
+    #[serde(default = "d1000i", alias = "place_radius")]
+    pub place_radius: i32,
 }
 
 fn d5() -> f64 {
@@ -69,6 +81,24 @@ fn d087() -> f64 {
 }
 fn d100k() -> usize {
     100000
+}
+fn d1i() -> i64 {
+    1
+}
+fn d3f() -> f64 {
+    3.0
+}
+fn d15() -> f64 {
+    1.5
+}
+fn dffffff() -> String {
+    "#ffffff".to_string()
+}
+fn d5i() -> i64 {
+    5
+}
+fn d1000i() -> i32 {
+    1000
 }
 
 impl Config {

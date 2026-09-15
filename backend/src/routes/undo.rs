@@ -158,7 +158,7 @@ pub async fn undo(
     let mut xp = u.get::<i32, _>(7) as i64 - xp_grant;
     while xp < 0 && level > 1 {
         level -= 1;
-        xp += users::xp_needed_for_level(level, 3.0, 1.5);
+        xp += users::xp_needed_for_level(level, state.cfg.xp_base, state.cfg.xp_pow);
     }
     xp = xp.max(0);
     let inv_raw: String = u.get(4);
@@ -183,10 +183,14 @@ pub async fn undo(
     if tx.commit().await.is_err() {
         return err(StatusCode::SERVICE_UNAVAILABLE, "busy");
     }
+    state.tiles.bump(body.x, body.y);
     let _ = state.hub.pixel_tx.send(
         serde_json::json!({"kind": "pixel", "x": body.x, "y": body.y, "c": body.prev_c, "t": body.prev_t, "by": uid}).to_string(),
     );
-    let out = serde_json::json!({"ok": true, "x": body.x, "y": body.y, "level": level, "xp": xp, "inventory": inv});
+    let out = serde_json::json!({"ok": true, "x": body.x, "y": body.y,
+        "level": level, "xp": xp,
+        "xpNeeded": users::xp_needed_for_level(level, state.cfg.xp_base, state.cfg.xp_pow),
+        "inventory": inv});
     (StatusCode::OK, axum::Json(out)).into_response()
 }
 

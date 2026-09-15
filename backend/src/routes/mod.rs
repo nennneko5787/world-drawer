@@ -4,6 +4,7 @@ use axum::Router;
 use sqlx::PgPool;
 
 use crate::config::Config;
+use crate::tiles::TileVersions;
 use crate::ws::Hub;
 
 pub mod admin;
@@ -15,6 +16,7 @@ pub mod profile;
 pub mod account;
 pub mod session;
 pub mod ticket;
+pub mod tiles;
 pub mod undo;
 pub mod users;
 
@@ -24,6 +26,7 @@ pub struct AppState {
     pub pool: PgPool,
     pub redis: redis::aio::ConnectionManager,
     pub hub: Hub,
+    pub tiles: TileVersions,
 }
 
 impl AppState {
@@ -33,6 +36,7 @@ impl AppState {
             pool,
             redis,
             hub: Hub::new(),
+            tiles: TileVersions::default(),
         }
     }
 }
@@ -40,6 +44,7 @@ impl AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/canvas", axum::routing::get(canvas::bbox))
+        .route("/api/tiles", axum::routing::get(tiles::tiles))
         .route("/api/bounds", axum::routing::get(canvas::bounds))
         .route("/api/me", axum::routing::get(me::me))
         .route("/api/session", axum::routing::post(session::create))

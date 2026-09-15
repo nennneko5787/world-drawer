@@ -39,53 +39,85 @@
     };
   }
 
+  // タイル差分同期: 視野のタイルだけ要求し、版が変わった分だけ受け取る。
+  // 全量bbox取得はしない (MB級JSONの根絶)。消去の取りこぼしはタイル単位で照合する
+  const TILE = 128, MAX_TILES = 256;
+  const tileVers = new Map(); // "tx,ty" -> v
+  const tileCells = new Map(); // "tx,ty" -> Set("x,y")
+  async function fetchMeta() {
+    try {
+      const meta = await (await fetch(`${apiBase()}/api/canvas`)).json();
+      if (meta.background && meta.background !== background) {
+        background = meta.background;
+        markStatic();
+      }
+      if (meta.cooldown) cooldown = meta.cooldown;
+      applyZoneData(meta);
+    } catch (err) {
+      console.error(err);
+    }
+  }
   let fetchSeq = 0;
   async function fetchViewport() {
     const seq = ++fetchSeq;
     const box = visibleBbox();
+    const tx0 = Math.floor(box.minX / TILE), tx1 = Math.floor(box.maxX / TILE);
+    const ty0 = Math.floor(box.minY / TILE), ty1 = Math.floor(box.maxY / TILE);
+    const need = [];
+    for (let tx = tx0; tx <= tx1; tx++) {
+      for (let ty = ty0; ty <= ty1; ty++) need.push(`${tx},${ty}`);
+    }
+    if (need.length > MAX_TILES) {
+      toast(t("zoomOutToast"));
+      return;
+    }
+    const known = [];
+    for (const k of need) {
+      if (tileVers.has(k)) known.push(`${k}:${tileVers.get(k)}`);
+    }
     try {
-      const url = `${apiBase()}/api/canvas?minX=${box.minX}&minY=${box.minY}&maxX=${box.maxX}&maxY=${box.maxY}`;
-      const canvasData = await (await fetch(url)).json();
+      const url = `${apiBase()}/api/tiles?need=${encodeURIComponent(need.join(";"))}&known=${encodeURIComponent(known.join(";"))}`;
+      const data = await (await fetch(url)).json();
       if (seq !== fetchSeq) return; // 古い応答は破棄
-      if (canvasData.background && canvasData.background !== background) {
-        background = canvasData.background;
-        markStatic();
-      }
-      if (canvasData.cooldown) cooldown = canvasData.cooldown;
-      applyZoneData(canvasData);
-      const fresh = canvasData.pixels || {};
-      if (!canvasData.truncated) {
-        // 取得範囲内にサーバー側で存在しないキャッシュは消去 (消しゴムの取りこぼし対策)
-        for (const key of [...pixels.keys()]) {
-          const [x, y] = key.split(",").map(Number);
-          if (x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY && !(key in fresh)) {
-            trackPixelWrite(pixels.get(key), null);
-            pixels.delete(key);
-            markStatic();
-          }
-        }
-      } else {
+      if (data.truncated) {
         toast(t("zoomOutToast"));
+        return;
       }
-      for (const [key, val] of Object.entries(fresh)) {
-        const cur = pixels.get(key);
-        const coats = val.coats ?? 1;
-        if (!cur || cur.c !== val.c || cur.t !== val.t || (cur.coats ?? 1) !== coats || (cur.s || 0) !== (val.s || 0) || (cur.e || 0) !== (val.e || 0)) {
-          const [px, py] = key.split(",").map(Number);
-          // e0 は初見残り秒として引き継ぐ (置き換わり時は更新)。フェード基準用
-          const same = cur && cur.c === val.c && cur.t === val.t && cur.by === (val.by || null);
-          const e0 = (same && cur.e0) || val.e || 0;
-          const next = { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats, s: val.s || 0, sAt: Date.now(), e: val.e || 0, eAt: Date.now(), e0 };
-          trackPixelWrite(cur, next);
-          pixels.set(key, next);
-          markStatic();
-        }
+      for (const [tkey, tile] of Object.entries(data.tiles || {})) {
+        if (tile.pixels) applyTile(tkey, tile.v, tile.pixels);
+        else if (tile.v != null) tileVers.set(tkey, tile.v);
       }
       pruneFar(box);
       zoneDirty = true;
     } catch (err) {
       console.error(err);
     }
+  }
+  function applyTile(tkey, v, fresh) {
+    const had = tileCells.get(tkey) || new Set();
+    const next = new Set();
+    for (const [key, val] of Object.entries(fresh)) {
+      next.add(key);
+      const cur = pixels.get(key);
+      const coats = val.coats ?? 1;
+      if (!cur || cur.c !== val.c || cur.t !== val.t || (cur.coats ?? 1) !== coats) {
+        const [px, py] = key.split(",").map(Number);
+        const cell = { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats, s: 0, sAt: Date.now(), e: 0, eAt: Date.now(), e0: 0 };
+        trackPixelWrite(cur, cell);
+        pixels.set(key, cell);
+        markStatic();
+      }
+    }
+    // タイル内にサーバー側で存在しないキャッシュは消去 (消しゴムの取りこぼし対策)
+    for (const key of had) {
+      if (!next.has(key)) {
+        trackPixelWrite(pixels.get(key), null);
+        pixels.delete(key);
+        markStatic();
+      }
+    }
+    tileCells.set(tkey, next);
+    tileVers.set(tkey, v);
   }
 
   let fetchTimer = 0;
@@ -102,6 +134,12 @@
       if (x < box.minX - big || x > box.maxX + big || y < box.minY - big || y > box.maxY + big) {
         trackPixelWrite(pixels.get(key), null);
         pixels.delete(key);
+        const tk = `${Math.floor(x / TILE)},${Math.floor(y / TILE)}`;
+        const set = tileCells.get(tk);
+        if (set) {
+          set.delete(key);
+          if (set.size === 0) tileCells.delete(tk);
+        }
         markStatic();
         if (pixels.size <= maxCache) break;
       }
@@ -174,7 +212,8 @@
   async function loadInitial() {
     try {
       await ensureToken();
-      await fetchViewport(); // 視野+余白だけ取得
+      await fetchMeta();
+      await fetchViewport(); // 視野タイルだけ取得
       const me = await (await fetch(`${apiBase()}/api/me`, { headers: authHeaders() })).json();
       inventory = { ...inventory, ...me.inventory };
       cooldownUntil = me.cooldownUntil ? me.cooldownUntil * 1000 : 0;
@@ -326,13 +365,26 @@
   function onPixel(p) {
       const key = `${p.x},${p.y}`;
       const prev = pixels.get(key) || null;
+      const tkey = `${Math.floor(p.x / TILE)},${Math.floor(p.y / TILE)}`;
+      const touchTile = (add) => {
+        let set = tileCells.get(tkey);
+        if (add) {
+          if (!set) { set = new Set(); tileCells.set(tkey, set); }
+          set.add(key);
+        } else if (set) {
+          set.delete(key);
+          if (set.size === 0) tileCells.delete(tkey);
+        }
+      };
       if (p.t === "normal" && String(p.c).toLowerCase() === background.toLowerCase()) {
         trackPixelWrite(prev, null);
         pixels.delete(key);
+        touchTile(false);
       } else {
         const next = { c: p.c, t: p.t, by: p.by || null, x: p.x, y: p.y, coats: p.coats ?? 1, s: p.s || 0, sAt: Date.now(), e: p.e || 0, eAt: Date.now(), e0: p.e || 0 };
         trackPixelWrite(prev, next);
         pixels.set(key, next);
+        touchTile(true);
       }
       zoneDirty = true;
       markStatic();

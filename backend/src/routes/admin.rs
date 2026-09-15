@@ -190,6 +190,9 @@ pub async fn rollback(
         )
             .into_response();
     }
+    for (x, y) in cells.iter().take(limit as usize) {
+        state.tiles.bump(*x, *y);
+    }
     for ev in &events {
         let _ = state.hub.pixel_tx.send(ev.to_string());
     }

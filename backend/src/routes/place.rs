@@ -172,16 +172,19 @@ pub async fn place(
         state.cfg.cooldown_decay,
     );
     let cd_new = now + cooldown;
-    let mut xp: i64 = u.get::<i32, _>(7) as i64 + 1;
+    let mut xp: i64 = u.get::<i32, _>(7) as i64 + state.cfg.xp_per_place;
     let mut lv = level;
+    let mut leveled_up = false;
     loop {
-        let need = users::xp_needed_for_level(lv, 3.0, 1.5);
+        let need = users::xp_needed_for_level(lv, state.cfg.xp_base, state.cfg.xp_pow);
         if xp < need {
             break;
         }
         xp -= need;
         lv += 1;
+        leveled_up = true;
     }
+    let xp_needed = users::xp_needed_for_level(lv, state.cfg.xp_base, state.cfg.xp_pow);
     let inv_json = serde_json::to_string(&inv).unwrap_or_default();
     let _ = sqlx::query(
         "UPDATE users SET inventory = $1, cooldownUntil = $2, level = $3, xp = $4 WHERE token = $5",
@@ -215,6 +218,7 @@ pub async fn place(
     if tx.commit().await.is_err() {
         return err(StatusCode::SERVICE_UNAVAILABLE, "busy");
     }
+    state.tiles.bump(body.x, body.y);
 
     // broadcast (lag時は捨てる)。"kind"で識別 ("t"はインク種別で使うため)
     let _ = state.hub.pixel_tx.send(
@@ -223,7 +227,9 @@ pub async fn place(
     let body = serde_json::json!({
         "ok": true, "x": body.x, "y": body.y,
         "pixel": {"c": store_c, "t": store_t, "coats": coats},
-        "by": uid, "cooldownUntil": cd_new, "level": lv, "xp": xp,
+        "by": uid, "cooldownUntil": cd_new, "cooldown": cooldown,
+        "inventory": inv, "reward": null,
+        "level": lv, "xp": xp, "xpNeeded": xp_needed, "leveledUp": leveled_up,
     });
     (StatusCode::OK, axum::Json(body)).into_response()
 }

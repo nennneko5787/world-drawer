@@ -38,14 +38,18 @@ pub async fn me(
         "shield".into(),
     ];
     let _ = peer;
+    let level = users::clamp_level(r.get::<i32, _>(6) as i64);
     let body = serde_json::json!({
         "token": token,
         "uid": r.get::<String, _>(1),
         "profile": {"name": r.get::<String, _>(2), "color": r.get::<String, _>(3)},
         "inventory": users::parse_inventory(&inv, &keys),
         "cooldownUntil": r.get::<f64, _>(5),
-        "level": users::clamp_level(r.get::<i32, _>(6) as i64),
+        "cooldown": users::cooldown_for_level(
+            level, state.cfg.cooldown_sec, state.cfg.min_cooldown, state.cfg.cooldown_decay),
+        "level": level,
         "xp": r.get::<i32, _>(7) as i64,
+        "xpNeeded": users::xp_needed_for_level(level, state.cfg.xp_base, state.cfg.xp_pow),
         "hasAccount": r.get::<Option<String>, _>(9).is_some(),
         "country": r.get::<Option<String>, _>(10),
         "showCountry": r.get::<i32, _>(11) != 0,

@@ -14,6 +14,7 @@ mod ip;
 mod place_logic;
 mod rate;
 mod routes;
+mod tiles;
 mod turnstile;
 mod users;
 mod ws;

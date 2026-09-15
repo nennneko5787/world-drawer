@@ -82,6 +82,13 @@ pub async fn create(
                 let body = serde_json::json!({
                     "ok": true, "token": token, "uid": uid,
                     "profile": {"name": name, "color": color},
+                    "inventory": {"glow":0,"rainbow":0,"ghost":0,"chalk":0,"shield":0},
+                    "cooldownUntil": 0.0,
+                    "cooldown": state.cfg.cooldown_sec,
+                    "level": 1, "xp": 0,
+                    "xpNeeded": users::xp_needed_for_level(
+                        1, state.cfg.xp_base, state.cfg.xp_pow),
+                    "hasAccount": false, "country": null, "showCountry": true,
                 });
                 return (StatusCode::OK, axum::Json(body)).into_response();
             }
