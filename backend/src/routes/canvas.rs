@@ -29,24 +29,46 @@ pub async fn bbox(State(state): State<AppState>, Query(q): Query<Bbox>) -> Respo
         let body = serde_json::json!({"pixels": {}, "truncated": false, "pixelCount": count});
         return json_no_store(&body);
     };
-    let limit = state.cfg.max_bbox_pixels + 1;
+    let max = state.cfg.max_bbox_pixels;
     let now = chrono::Utc::now().timestamp() as f64;
-    let rows = sqlx::query(
-        "SELECT x, y, c, t, by, coats FROM pixels
+    // 件数だけ先に数える (index-only)。上限超えは10万行を取らず truncated で返す。
+    // ズームアウト時の全走査 (1〜6秒/回) の対策。フロントは truncated でズームインを促す。
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pixels
          WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4
-         AND (chalkUntil = 0 OR chalkUntil > $5) LIMIT $6",
+         AND (chalkUntil = 0 OR chalkUntil > $5)",
     )
     .bind(lox)
     .bind(hix)
     .bind(loy)
     .bind(hiy)
     .bind(now)
-    .bind(limit as i64)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap_or(i64::MAX);
+    if count > max as i64 {
+        let body = serde_json::json!({
+            "pixels": {},
+            "truncated": true,
+            "bounds": {"minX": lox, "minY": loy, "maxX": hix, "maxY": hiy},
+        });
+        return json_no_store(&body);
+    }
+    let rows = sqlx::query(
+        "SELECT x, y, c, t, by, coats FROM pixels
+         WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4
+         AND (chalkUntil = 0 OR chalkUntil > $5)",
+    )
+    .bind(lox)
+    .bind(hix)
+    .bind(loy)
+    .bind(hiy)
+    .bind(now)
     .fetch_all(&state.pool)
     .await
     .unwrap_or_default();
 
-    let truncated = rows.len() > state.cfg.max_bbox_pixels;
+    let truncated = false;
     let mut pixels = serde_json::Map::new();
     for r in rows.iter().take(state.cfg.max_bbox_pixels) {
         use sqlx::Row;
