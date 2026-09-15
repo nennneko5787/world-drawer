@@ -105,7 +105,9 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
         let body = serde_json::json!({"tiles": out, "truncated": false});
         return (StatusCode::OK, axum::Json(body)).into_response();
     }
-    // 陳腐タイルだけの外接矩形を1クエリで取得して振り分ける
+    // 陳腐タイルだけの外接矩形を1クエリで取得して振り分ける。
+    // 行数上限付き (散らばった濃密タイルの大量要求でメモリを食い潰さないため)
+    const ROW_CAP: i64 = 100001;
     let (mut lox, mut hix, mut loy, mut hiy) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
     for (tx, ty) in &stale {
         lox = lox.min(tx * TILE);
@@ -117,16 +119,22 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
     let rows = sqlx::query(
         "SELECT x, y, c, t, by, coats FROM pixels
          WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4
-         AND (chalkUntil = 0 OR chalkUntil > $5)",
+         AND (chalkUntil = 0 OR chalkUntil > $5) LIMIT $6",
     )
     .bind(lox)
     .bind(hix)
     .bind(loy)
     .bind(hiy)
     .bind(now)
+    .bind(ROW_CAP)
     .fetch_all(&state.pool)
     .await
     .unwrap_or_default();
+    if rows.len() as i64 >= ROW_CAP {
+        //  capped → ズームインを促す (旧bboxと同じ契約)
+        let body = serde_json::json!({"tiles": {}, "truncated": true});
+        return (StatusCode::OK, axum::Json(body)).into_response();
+    }
 
     let mut bucket: HashMap<(i32, i32), serde_json::Map<String, serde_json::Value>> =
         HashMap::new();

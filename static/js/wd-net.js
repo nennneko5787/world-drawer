@@ -129,8 +129,9 @@
   function pruneFar(box) {
     if (pixels.size <= maxCache) return;
     const big = fetchMargin * 4 + 512;
-    for (const key of [...pixels.keys()]) {
-      const [x, y] = key.split(",").map(Number);
+    // 値はx/yを持つのでキー文字列の分解はしない (15万件のsplit回避)
+    for (const [key, val] of [...pixels.entries()]) {
+      const x = val.x, y = val.y;
       if (x < box.minX - big || x > box.maxX + big || y < box.minY - big || y > box.maxY + big) {
         trackPixelWrite(pixels.get(key), null);
         pixels.delete(key);
@@ -437,7 +438,11 @@
       if (!u || !u.uid || u.uid === myUid) return; // 自分は除外
       seen.add(u.uid);
       const cur = remotes.get(u.uid) || {};
-      remotes.set(u.uid, { ...cur, uid: u.uid, name: u.name, color: u.color, level: u.level ?? cur.level ?? 1, country: u.country ?? cur.country, x: u.x ?? cur.x, y: u.y ?? cur.y, updatedAt: Date.now() });
+      // /api/usersはuidのみ返すため、無い項目は既存値を維持 (名前消去防止)
+      remotes.set(u.uid, { ...cur, uid: u.uid,
+        name: u.name ?? cur.name, color: u.color ?? cur.color,
+        level: u.level ?? cur.level ?? 1, country: u.country ?? cur.country,
+        x: u.x ?? cur.x, y: u.y ?? cur.y, updatedAt: Date.now() });
     });
     for (const uid of [...remotes.keys()]) {
       // myUid 確定前に紛れた自分自身もここで掃除する

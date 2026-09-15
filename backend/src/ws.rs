@@ -36,4 +36,10 @@ impl Hub {
         }
         Some(token)
     }
+
+    /// 失効チケット掃除 (未使用のまま残った分。60秒毎に呼ぶ)
+    pub fn gc_tickets(&self) {
+        let now = chrono::Utc::now().timestamp();
+        self.tickets.retain(|_, (_, exp)| *exp > now);
+    }
 }

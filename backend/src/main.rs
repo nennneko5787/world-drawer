@@ -46,6 +46,16 @@ async fn main() -> anyhow::Result<()> {
     let listen: SocketAddr = cfg.listen.parse()?;
     let cors = cfg.cors_origins();
     let state = routes::AppState::new(cfg.clone(), pool, redis);
+    // 失効チケット掃除 (未使用残骸の無制限増殖防止)
+    {
+        let hub = state.hub.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                hub.gc_tickets();
+            }
+        });
+    }
 
     let app = Router::new()
         .merge(routes::router(state))
