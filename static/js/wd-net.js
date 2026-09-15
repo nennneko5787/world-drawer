@@ -379,12 +379,14 @@
 
   let lastCursorSent = 0;
   let lastCursorCell = "";
-  function sendCursor(x, y) {
+  function sendCursor(x, y, force) {
     if (!socket || !socketReady) return;
     const key = `${x},${y}`;
     const nowMs = Date.now();
-    if (key === lastCursorCell && nowMs - lastCursorSent < 800) return;
-    if (nowMs - lastCursorSent < cursorMinMs) return;
+    if (!force) {
+      if (key === lastCursorCell && nowMs - lastCursorSent < 800) return;
+      if (nowMs - lastCursorSent < cursorMinMs) return;
+    }
     lastCursorSent = nowMs;
     lastCursorCell = key;
     socket.emit("cursor", { token, x, y });

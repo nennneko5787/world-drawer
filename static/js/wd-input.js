@@ -238,6 +238,8 @@
         const cell = downCell;
         hover = cell;
         coordsEl.textContent = formatCoords(cell);
+        // 配置直前の確定位置を必ず送る (抑制で古いカーソルが残ると配置が弾かれるため)
+        sendCursor(cell.x, cell.y, true);
         if (rightTap) {
           // 右消去は履歴・スポイトより優先 (ドラッグは移動のまま)
           if (draftMode) draftEraseOne(cell.x, cell.y);

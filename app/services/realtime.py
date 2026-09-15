@@ -43,6 +43,27 @@ else:
 # sid -> heartbeatタスク (Redis時の生存通知用)。切断時に取り消す
 _hbTasks: dict[str, asyncio.Task[None]] = {}
 
+# token -> (x, y, ts): カーソル中継の最終送信 (増幅抑止用。presence記録とは別)。
+# 1人あたり秒間N回のカーソルが全員へ増幅されるため、中継だけ間引く。
+# presence自体は毎回更新するので配置照合には影響しない
+_lastCursorBc: dict[str, tuple[int, int, float]] = {}
+CURSOR_BC_MIN_SEC = 0.2
+_CURSOR_BC_CAP = 20000
+
+
+def cursorBcAllowed(token: str, x: int, y: int, now: float) -> bool:
+    """中継してよいか。同一セル連打は常に止め、移動も0.2秒に1回まで。"""
+    if len(_lastCursorBc) > _CURSOR_BC_CAP:
+        _lastCursorBc.clear()
+    prev = _lastCursorBc.get(token)
+    if prev is not None:
+        if prev[0] == x and prev[1] == y:
+            return False
+        if now - prev[2] < CURSOR_BC_MIN_SEC:
+            return False
+    _lastCursorBc[token] = (x, y, now)
+    return True
+
 
 async def _sidBeat(sid: str) -> None:
     try:
@@ -286,19 +307,21 @@ async def cursor(sid: str, data: Any) -> None:
             "updatedAt": time.time(),
         },
     )
-    await sio.emit(
-        "cursor",
-        {
-            "uid": user["uid"],
-            "name": user["name"],
-            "color": user["color"],
-            "level": user.get("level", 1),
-            "country": user.get("country") if user.get("showCountry", True) else None,
-            "x": payload.x,
-            "y": payload.y,
-        },
-        skip_sid=sid,
-    )
+    # 中継は間引き (同一セル連打・高頻度を抑制)。presence記録は毎回行う
+    if cursorBcAllowed(token, payload.x, payload.y, time.time()):
+        await sio.emit(
+            "cursor",
+            {
+                "uid": user["uid"],
+                "name": user["name"],
+                "color": user["color"],
+                "level": user.get("level", 1),
+                "country": user.get("country") if user.get("showCountry", True) else None,
+                "x": payload.x,
+                "y": payload.y,
+            },
+            skip_sid=sid,
+        )
 
 
 @sio.event
