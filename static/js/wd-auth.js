@@ -35,9 +35,9 @@
       headers: authHeaders({ "Content-Type": "application/json", ...(o.headers || {}) }),
     });
   }
-  // Turnstile: ページ表示の度に1トークン取得 (invisible managed)。
-  // ウィジェット未読込・鍵なし時は空文字 (サーバがenforceなら弾かれる)。
-  let _tsWidgetId = null;
+  // Turnstile: 1呼び出し=1ウィジェット=1トークン。直列化して潰し合いを防ぐ。
+  // (共有slotのinnerHTML消去が実行中widgetを殺して全滅する事故の対策)
+  let _tsChain = Promise.resolve();
   function ensureTurnstileSlot() {
     let el = document.getElementById("ts-slot");
     if (el) return el;
@@ -47,31 +47,44 @@
     return el;
   }
   function getTurnstileToken() {
+    _tsChain = _tsChain.catch(() => {}).then(_mintTurnstileToken);
+    return _tsChain;
+  }
+  function _mintTurnstileToken() {
     const key = turnstileSiteKey();
-    if (!key) return Promise.resolve("");
-    if (typeof turnstile === "undefined") return Promise.resolve("");
+    if (!key || typeof turnstile === "undefined") return Promise.resolve("");
     return new Promise((resolve) => {
+      let done = false;
+      let id = null;
+      let timer = 0;
+      const host = ensureTurnstileSlot();
+      const slot = document.createElement("div");
+      host.appendChild(slot);
+      const finish = (tok) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        try {
+          if (id !== null) turnstile.remove(id);
+        } catch {}
+        try { slot.remove(); } catch {}
+        resolve(tok || "");
+      };
       try {
-        const slot = ensureTurnstileSlot();
-        slot.innerHTML = "";
         const dark = document.documentElement.dataset.theme === "dark";
-        const id = turnstile.render(slot, {
+        id = turnstile.render(slot, {
           sitekey: key,
           theme: dark ? "dark" : "light",
-          callback: (tok) => {
-            try { turnstile.remove(id); } catch {}
-            slot.innerHTML = "";
-            resolve(tok || "");
-          },
-          "expired-callback": () => resolve(""),
-          "error-callback": () => resolve(""),
+          callback: finish,
+          "expired-callback": () => finish(""),
+          "error-callback": () => finish(""),
         });
-        // invisible時は自動実行、checkbox時はユーザ操作待ち (10秒で諦め)
-        try { turnstile.execute(id); } catch {}
-        setTimeout(() => resolve(""), 15000);
       } catch {
-        resolve("");
+        finish("");
+        return;
       }
+      // checkbox時はユーザ操作待ち (15秒で諦め)
+      timer = setTimeout(() => finish(""), 15000);
     });
   }
   async function fetchWsTicket() {
