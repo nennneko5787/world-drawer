@@ -182,7 +182,7 @@ pub mod ws_route {
         let uid: String = r.get(0);
         let name: String = r.get(1);
         let color: String = r.get(2);
-        let level: i64 = r.get(3);
+        let level: i64 = r.get::<i32, _>(3) as i64;
 
         let sid = uuid::Uuid::new_v4().simple().to_string();
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(64);

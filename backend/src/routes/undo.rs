@@ -153,9 +153,9 @@ pub async fn undo(
         .execute(&mut *tx)
         .await;
     // 経験値巻戻し (簡易: xp付与分1を引く)
-    let xp_grant: i64 = h.get(6);
-    let mut level = users::clamp_level(u.get::<i64, _>(6));
-    let mut xp = u.get::<i64, _>(7) - xp_grant;
+    let xp_grant: i64 = h.get::<i32, _>(6) as i64;
+    let mut level = users::clamp_level(u.get::<i32, _>(6) as i64);
+    let mut xp = u.get::<i32, _>(7) as i64 - xp_grant;
     while xp < 0 && level > 1 {
         level -= 1;
         xp += users::xp_needed_for_level(level, 3.0, 1.5);

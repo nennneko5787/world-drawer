@@ -89,7 +89,7 @@ pub async fn place(
     };
     use sqlx::Row;
     let uid: String = u.get(1);
-    let level = users::clamp_level(u.get::<i64, _>(6));
+    let level = users::clamp_level(u.get::<i32, _>(6) as i64);
     let cd_until: f64 = u.get(5);
     if cd_until > now {
         let remain = (cd_until - now).max(0.0);
@@ -172,7 +172,7 @@ pub async fn place(
         state.cfg.cooldown_decay,
     );
     let cd_new = now + cooldown;
-    let mut xp: i64 = u.get::<i64, _>(7) + 1;
+    let mut xp: i64 = u.get::<i32, _>(7) as i64 + 1;
     let mut lv = level;
     loop {
         let need = users::xp_needed_for_level(lv, 3.0, 1.5);

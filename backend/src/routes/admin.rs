@@ -67,8 +67,8 @@ pub async fn lookup(
     use sqlx::Row;
     let out = serde_json::json!({"ok": true, "user": {
         "uid": r.get::<String, _>(0), "name": r.get::<String, _>(1),
-        "color": r.get::<String, _>(2), "level": r.get::<i64, _>(3),
-        "xp": r.get::<i64, _>(4),
+        "color": r.get::<String, _>(2), "level": r.get::<i32, _>(3) as i64,
+        "xp": r.get::<i32, _>(4) as i64,
     }});
     (StatusCode::OK, axum::Json(out)).into_response()
 }
@@ -137,7 +137,7 @@ pub async fn rollback(
             continue;
         }
         let rid: i64 = rows[0].get(0);
-        let rxp: i64 = rows[0].get(4);
+        let rxp: i64 = rows[0].get::<i32, _>(4) as i64;
         let _ = sqlx::query("UPDATE history SET undone = 1 WHERE id = $1")
             .bind(rid)
             .execute(&mut *tx)
@@ -170,8 +170,8 @@ pub async fn rollback(
         restored += 1;
         xp_taken += rxp;
     }
-    let mut level: i64 = tg.get::<i64, _>(0).max(1);
-    let mut xp = tg.get::<i64, _>(1) - xp_taken;
+    let mut level: i64 = (tg.get::<i32, _>(0) as i64).max(1);
+    let mut xp = tg.get::<i32, _>(1) as i64 - xp_taken;
     while xp < 0 && level > 1 {
         level -= 1;
         xp += crate::users::xp_needed_for_level(level, 3.0, 1.5);

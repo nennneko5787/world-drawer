@@ -63,7 +63,7 @@ pub async fn history(State(state): State<AppState>, Query(q): Query<Q>) -> Respo
                 "name": r.get::<String, _>(2), "userColor": r.get::<String, _>(3),
                 "c": r.get::<String, _>(4), "t": r.get::<String, _>(5),
                 "at": r.get::<f64, _>(6), "country": r.get::<Option<String>, _>(7),
-                "level": r.get::<i64, _>(8),
+                "level": r.get::<i32, _>(8) as i64,
             })
         })
         .collect();
