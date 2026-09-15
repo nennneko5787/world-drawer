@@ -127,6 +127,33 @@
         btn.title = isBlocked ? t("blockTitle") : t("unblockTitle");
         btn.onclick = () => toggleBlock(u.uid);
         li.appendChild(btn);
+        // 管理者向け: 照会・巻き戻し (管理パネルと同等の操作)
+        if (typeof isAdmin !== "undefined" && isAdmin) {
+          const lookupBtn = document.createElement("button");
+          lookupBtn.className = "blockBtn";
+          lookupBtn.textContent = t("adminLookup");
+          lookupBtn.title = t("adminLookup");
+          lookupBtn.onclick = () => {
+            try {
+              if (typeof adminUid !== "undefined" && adminUid) adminUid.value = u.uid;
+              if (typeof adminLookup === "function") adminLookup();
+              if (typeof openModal === "function" && typeof adminPanel !== "undefined" && adminPanel) openModal(adminPanel);
+            } catch {}
+          };
+          li.appendChild(lookupBtn);
+          const rbBtn = document.createElement("button");
+          rbBtn.className = "blockBtn";
+          rbBtn.textContent = t("adminRollback");
+          rbBtn.title = t("adminRollback");
+          rbBtn.onclick = async () => {
+            try {
+              if (typeof adminUid !== "undefined" && adminUid) adminUid.value = u.uid;
+              if (typeof adminLookup === "function") await adminLookup();
+              if (typeof adminRollback === "function") adminRollback();
+            } catch {}
+          };
+          li.appendChild(rbBtn);
+        }
       }
       userList.appendChild(li);
     }

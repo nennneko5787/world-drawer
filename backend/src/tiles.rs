@@ -1,13 +1,16 @@
 //! タイル差分同期用バージョン管理。
-//! 全量ポーリング (bbox毎回MB級) の代替。64x64セル単位で版を持ち、
+//! 全量ポーリング (bbox毎回MB級) の代替。128x128セル単位で版を持ち、
 //! 書込時にだけ版を上げる。読取は変わったタイルだけ返す。
 
 use dashmap::DashMap;
 use std::sync::Arc;
 
 pub const TILE: i32 = 128;
-/// 1回の /api/tiles で要求できるタイル数上限 (ズームアウトしすぎは拒否)
-pub const MAX_TILES_PER_REQ: usize = 256;
+/// 1回の /api/tiles でDBから起こす陳腐タイル数の目安。
+/// truncatedは廃止: 残りは版を進めず次回以降に回す (欠けなし・促しトーストなし)
+pub const MAX_STALE_PER_REQ: usize = 256;
+/// needの解析上限 (濫用防止の外枠)
+pub const MAX_NEED_TILES: usize = 4096;
 
 pub fn tile_of(x: i32, y: i32) -> (i32, i32) {
     (x.div_euclid(TILE), y.div_euclid(TILE))

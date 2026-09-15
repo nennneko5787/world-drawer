@@ -1,5 +1,5 @@
 use crate::routes::AppState;
-use crate::tiles::{self, MAX_TILES_PER_REQ, TILE};
+use crate::tiles::{self, MAX_NEED_TILES, MAX_STALE_PER_REQ, TILE};
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -74,15 +74,13 @@ fn parse_known(s: &str) -> HashMap<(i32, i32), u64> {
 
 /// タイル差分取得。変わったタイルだけpixels付きで返す。
 /// no-store (版で差分判定するためキャッシュ不要)。
+/// truncatedは廃止: 読める分だけ返し、残りは版を進めず次回以降に回す。
+/// 応答のpendingは未取得の陳腐タイル数 (0なら収束)。
 pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Response {
     let need_src = q.need.as_deref().unwrap_or("");
-    let need = parse_tiles(need_src, MAX_TILES_PER_REQ + 1);
-    if need.len() > MAX_TILES_PER_REQ {
-        let body = serde_json::json!({"tiles": {}, "truncated": true});
-        return (StatusCode::OK, axum::Json(body)).into_response();
-    }
+    let need = parse_tiles(need_src, MAX_NEED_TILES);
     if need.is_empty() {
-        let body = serde_json::json!({"tiles": {}, "truncated": false});
+        let body = serde_json::json!({"tiles": {}, "pending": 0});
         return (StatusCode::OK, axum::Json(body)).into_response();
     }
     let known = parse_known(q.known.as_deref().unwrap_or(""));
@@ -102,39 +100,43 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
         for (k, v) in &fresh {
             out.insert(format!("{},{}", k.0, k.1), serde_json::json!({"v": v}));
         }
-        let body = serde_json::json!({"tiles": out, "truncated": false});
+        let body = serde_json::json!({"tiles": out, "pending": 0});
         return (StatusCode::OK, axum::Json(body)).into_response();
     }
-    // 陳腐タイルだけの外接矩形を1クエリで取得して振り分ける。
-    // 行数上限付き (散らばった濃密タイルの大量要求でメモリを食い潰さないため)
+    // 1回にDBから起こすのは先頭MAX_STALE_PER_REQタイルまで。
+    // 外接矩形が濃密すぎる (ROW_CAP到達) 場合は半分ずつ削る。
+    // 1タイル (128四方=最大16384行) まで削れば必ず収まるので、
+    // serving分は常に完全 (欠けなし)。削り落とした分は版を進めない。
     const ROW_CAP: i64 = 100001;
-    let (mut lox, mut hix, mut loy, mut hiy) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
-    for (tx, ty) in &stale {
-        lox = lox.min(tx * TILE);
-        hix = hix.max(tx * TILE + TILE - 1);
-        loy = loy.min(ty * TILE);
-        hiy = hiy.max(ty * TILE + TILE - 1);
-    }
-    let now = chrono::Utc::now().timestamp() as f64;
-    let rows = sqlx::query(
-        "SELECT x, y, c, t, by, coats FROM pixels
-         WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4
-         AND (chalkUntil = 0 OR chalkUntil > $5) LIMIT $6",
-    )
-    .bind(lox)
-    .bind(hix)
-    .bind(loy)
-    .bind(hiy)
-    .bind(now)
-    .bind(ROW_CAP)
-    .fetch_all(&state.pool)
-    .await
-    .unwrap_or_default();
-    if rows.len() as i64 >= ROW_CAP {
-        //  capped → ズームインを促す (旧bboxと同じ契約)
-        let body = serde_json::json!({"tiles": {}, "truncated": true});
-        return (StatusCode::OK, axum::Json(body)).into_response();
-    }
+    let mut n = stale.len().min(MAX_STALE_PER_REQ);
+    let rows = loop {
+        let (mut lox, mut hix, mut loy, mut hiy) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
+        for (tx, ty) in &stale[..n] {
+            lox = lox.min(tx * TILE);
+            hix = hix.max(tx * TILE + TILE - 1);
+            loy = loy.min(ty * TILE);
+            hiy = hiy.max(ty * TILE + TILE - 1);
+        }
+        let now = chrono::Utc::now().timestamp() as f64;
+        let rows = sqlx::query(
+            "SELECT x, y, c, t, by, coats FROM pixels
+             WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4
+             AND (chalkUntil = 0 OR chalkUntil > $5) LIMIT $6",
+        )
+        .bind(lox)
+        .bind(hix)
+        .bind(loy)
+        .bind(hiy)
+        .bind(now)
+        .bind(ROW_CAP)
+        .fetch_all(&state.pool)
+        .await
+        .unwrap_or_default();
+        if (rows.len() as i64) < ROW_CAP || n == 1 {
+            break rows;
+        }
+        n = (n / 2).max(1);
+    };
 
     let mut bucket: HashMap<(i32, i32), serde_json::Map<String, serde_json::Value>> =
         HashMap::new();
@@ -152,15 +154,17 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
         bucket.entry(k).or_default().insert(format!("{x},{y}"), cell);
     }
     let mut out = serde_json::Map::new();
+    let served: HashSet<(i32, i32)> = stale[..n].iter().copied().collect();
     for (tx, ty) in &need {
         let v = fresh[&(*tx, *ty)];
         if known.get(&(*tx, *ty)) == Some(&v) {
             out.insert(format!("{tx},{ty}"), serde_json::json!({"v": v}));
-        } else {
+        } else if served.contains(&(*tx, *ty)) {
+            // serving分は完全 (空タイルも空pixelsで版確定)。版未確定分は送らない
             let pixels = bucket.remove(&(*tx, *ty)).unwrap_or_default();
             out.insert(format!("{tx},{ty}"), serde_json::json!({"v": v, "pixels": pixels}));
         }
     }
-    let body = serde_json::json!({"tiles": out, "truncated": false});
+    let body = serde_json::json!({"tiles": out, "pending": stale.len().saturating_sub(served.len())});
     (StatusCode::OK, axum::Json(body)).into_response()
 }

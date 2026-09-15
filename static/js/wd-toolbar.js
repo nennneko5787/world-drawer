@@ -431,6 +431,7 @@
   };
   settingsBtn.onclick = () => openModal(settingsPanel);
   if (settingsClose) settingsClose.onclick = () => closeAllModals();
+  if (userClose) userClose.onclick = () => closeAllModals();
   // saveProfile は後続ファイルのため実行時に解決する
   profileSave.onclick = (...args) => saveProfile(...args);
   profileName.addEventListener("keydown", (e) => {

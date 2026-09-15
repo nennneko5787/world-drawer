@@ -126,7 +126,7 @@ button.pill.clickable { cursor: pointer; font: inherit; }
   border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg);
   border-radius: 8px; padding: 3px 8px; font-size: 11px; cursor: pointer; flex: none;
 }
-#historyClose, #accountClose, #adminClose, #colorClose, #settingsClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
+#historyClose, #accountClose, #adminClose, #colorClose, #settingsClose, #userClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
 
 #undoBtn {
   position: fixed; right: 10px; bottom: 178px; z-index: 25;

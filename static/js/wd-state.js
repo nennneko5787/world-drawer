@@ -53,6 +53,7 @@
   const myUidEl = document.getElementById("myUid");
   const userPanel = document.getElementById("userPanel");
   const userList = document.getElementById("userList");
+  const userClose = document.getElementById("userClose");
   const historyPanel = document.getElementById("historyPanel");
   const historyTitle = document.getElementById("historyTitle");
   const historyList = document.getElementById("historyList");

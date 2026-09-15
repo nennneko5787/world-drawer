@@ -46,6 +46,16 @@
     document.body.appendChild(el);
     return el;
   }
+  // Turnstile表示中は背景もすりガラスにする (操作ブロック兼用)
+  function ensureTsBackdrop() {
+    let el = document.getElementById("ts-backdrop");
+    if (el) return el;
+    el = document.createElement("div");
+    el.id = "ts-backdrop";
+    el.className = "hidden";
+    document.body.appendChild(el);
+    return el;
+  }
   function getTurnstileToken() {
     _tsChain = _tsChain.catch(() => {}).then(_mintTurnstileToken);
     return _tsChain;
@@ -53,6 +63,8 @@
   function _mintTurnstileToken() {
     const key = turnstileSiteKey();
     if (!key || typeof turnstile === "undefined") return Promise.resolve("");
+    const backdrop = ensureTsBackdrop();
+    backdrop.classList.remove("hidden");
     return new Promise((resolve) => {
       let done = false;
       let id = null;
@@ -64,6 +76,7 @@
         if (done) return;
         done = true;
         clearTimeout(timer);
+        backdrop.classList.add("hidden");
         try {
           if (id !== null) turnstile.remove(id);
         } catch {}

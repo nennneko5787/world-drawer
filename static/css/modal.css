@@ -15,6 +15,15 @@
   overflow-y: auto !important;
 }
 .wd-modal.hidden { display: none !important; }
+/* プレイヤーリストは他モーダルより一回り大きく (管理ボタンが並ぶため) */
+#userPanel.wd-modal {
+  width: min(520px, calc(100vw - 24px)) !important;
+  max-height: min(80vh, 720px) !important;
+}
+#userPanel.wd-modal #userList {
+  max-height: calc(min(80vh, 720px) - 64px);
+  overflow-y: auto;
+}
 /* 設定タブ */
 .wd-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
 .wd-tabs button {
@@ -26,6 +35,14 @@
 :root[data-theme="dark"] .wd-tabs button.active { background: #f0f0f2; color: #111; }
 .wd-tabpane.hidden { display: none; }
 /* Turnstile枠: 中身のサイズは触らず、中央+すりガラスだけ */
+/* Turnstile表示中は背景もすりガラス (modal-overlayより上、widgetより下) */
+#ts-backdrop {
+  position: fixed; inset: 0; z-index: 55;
+  background: rgba(10, 10, 14, .38);
+  backdrop-filter: blur(7px) saturate(1.05);
+  -webkit-backdrop-filter: blur(7px) saturate(1.05);
+}
+#ts-backdrop.hidden { display: none; }
 #ts-slot:empty { display: none; }
 #ts-slot {
   position: fixed; left: 50%; top: 50%;

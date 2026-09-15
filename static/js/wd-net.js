@@ -41,7 +41,11 @@
 
   // タイル差分同期: 視野のタイルだけ要求し、版が変わった分だけ受け取る。
   // 全量bbox取得はしない (MB級JSONの根絶)。消去の取りこぼしはタイル単位で照合する
-  const TILE = 128, MAX_TILES = 256;
+  // truncatedは廃止: サーバは読める分だけ返し、残りはpendingで知らせる。促しトーストなし
+  const TILE = 128;
+  const WATCH_CAP = 512; // サーバのwatch保持上限に合わせる
+  const TILE_REQ_CAP = 4096; // サーバのneed解析上限に合わせる
+  const CHASE_MAX = 3; // 1パンでの追いかけ再取得の上限
   const tileVers = new Map(); // "tx,ty" -> v
   const tileCells = new Map(); // "tx,ty" -> Set("x,y")
   async function fetchMeta() {
@@ -59,7 +63,8 @@
   }
   let fetchSeq = 0;
   let lastWatchSent = "";
-  async function fetchViewport() {
+  async function fetchViewport(chase) {
+    chase = chase || 0;
     const seq = ++fetchSeq;
     const box = visibleBbox();
     const tx0 = Math.floor(box.minX / TILE), tx1 = Math.floor(box.maxX / TILE);
@@ -68,15 +73,15 @@
     for (let tx = tx0; tx <= tx1; tx++) {
       for (let ty = ty0; ty <= ty1; ty++) need.push(`${tx},${ty}`);
     }
-    if (need.length > MAX_TILES) {
-      toast(t("zoomOutToast"));
-      return;
-    }
-    // 購読タイルをWSへ通知 (interest管理。変わった時だけ)
+    // 購読タイルをWSへ通知 (ズームアウト時も止めない。サーバ上限に収める)
     const watchKey = need.join(";");
     if (socket && socketReady && socket.readyState === 1 && watchKey !== lastWatchSent) {
       lastWatchSent = watchKey;
-      try { socket.send(JSON.stringify({ t: "watch", tiles: need })); } catch {}
+      try { socket.send(JSON.stringify({ t: "watch", tiles: need.slice(0, WATCH_CAP) })); } catch {}
+    }
+    if (need.length > TILE_REQ_CAP) {
+      // 濫用防止の外枠。購読は上で送ったので実況は止まらない
+      return;
     }
     const known = [];
     for (const k of need) {
@@ -86,16 +91,20 @@
       const url = `${apiBase()}/api/tiles?need=${encodeURIComponent(need.join(";"))}&known=${encodeURIComponent(known.join(";"))}`;
       const data = await (await fetch(url)).json();
       if (seq !== fetchSeq) return; // 古い応答は破棄
-      if (data.truncated) {
-        toast(t("zoomOutToast"));
-        return;
-      }
+      let progressed = false;
       for (const [tkey, tile] of Object.entries(data.tiles || {})) {
-        if (tile.pixels) applyTile(tkey, tile.v, tile.pixels);
-        else if (tile.v != null) tileVers.set(tkey, tile.v);
+        if (tile.pixels) {
+          applyTile(tkey, tile.v, tile.pixels);
+          progressed = true;
+        } else if (tile.v != null) tileVers.set(tkey, tile.v);
       }
       pruneFar(box);
       zoneDirty = true;
+      // 残りがあれば視野が変わらないうちは追いかける (上限付きで自然収束)
+      const pending = typeof data.pending === "number" ? data.pending : 0;
+      if (pending > 0 && progressed && chase < CHASE_MAX && seq === fetchSeq) {
+        fetchViewport(chase + 1);
+      }
     } catch (err) {
       console.error(err);
     }
