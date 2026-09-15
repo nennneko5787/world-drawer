@@ -120,7 +120,9 @@
       const cur = pixels.get(key);
       const coats = val.coats ?? 1;
       if (!cur || cur.c !== val.c || cur.t !== val.t || (cur.coats ?? 1) !== coats) {
-        const [px, py] = key.split(",").map(Number);
+        // キー分解はsplitより手割り (巨大取得時の主スレッド停止を短縮)
+        const ci = key.indexOf(",");
+        const px = +key.slice(0, ci), py = +key.slice(ci + 1);
         const cell = { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats, s: 0, sAt: Date.now(), e: 0, eAt: Date.now(), e0: 0 };
         trackPixelWrite(cur, cell);
         pixels.set(key, cell);

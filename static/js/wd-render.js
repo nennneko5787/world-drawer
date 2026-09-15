@@ -181,16 +181,22 @@
     const needShield = showShield && shieldCache.length > 0;
     const needChalk = chalkCache.length > 0;
     const needEphemeral = needShield || needChalk;
-    // チョーク期限切れの掃除 (1秒に1回まで。スキップ判定より先に行い、削除時は再描画)
+    // チョーク期限切れの掃除 (1秒に1回まで。chalkKeysだけ見る。全走査しない)
     if (now - lastChalkSweepT > 1000) {
       lastChalkSweepT = now;
       let dropped = 0;
-      for (const val of pixels.values()) {
-        const e = val.e || 0;
-        if (e > 0 && (val.eAt || 0) + e * 1000 <= now) {
-          trackPixelWrite(val, null);
-          pixels.delete(`${val.x},${val.y}`);
-          dropped++;
+      if (chalkKeys.size > 0) {
+        for (const key of [...chalkKeys]) {
+          const val = pixels.get(key);
+          const e = val ? (val.e || 0) : 0;
+          if (!val || e <= 0 || (val.eAt || 0) + e * 1000 <= now) {
+            if (val) {
+              trackPixelWrite(val, null);
+              pixels.delete(key);
+              dropped++;
+            }
+            chalkKeys.delete(key);
+          }
         }
       }
       if (dropped > 0) {

@@ -244,6 +244,7 @@
   }
   let rainbowCount = 0; // 手元ピクセルの虹色数 (アニメ継続要否の判定用)
   let glowCount = 0; // 手元ピクセルの発光数 (高負荷時は簡易描画に切替)
+  const chalkKeys = new Set(); // e>0セルのキー ("x,y")。期限切れ掃除はここだけ見る (全走査しない)
   function trackPixelWrite(prevVal, nextVal) {
     const wasRainbow = !!prevVal && String(prevVal.t || "normal").includes("rainbow");
     const isRainbow = !!nextVal && String(nextVal.t || "normal").includes("rainbow");
@@ -253,6 +254,9 @@
     const isGlow = !!nextVal && String(nextVal.t || "normal").includes("glow");
     if (wasGlow && !isGlow) glowCount = Math.max(0, glowCount - 1);
     else if (isGlow && !wasGlow) glowCount++;
+    // 全pixels.set/deleteはここを経由する前提 (現状すべて満たす)
+    if (prevVal && prevVal.x != null) chalkKeys.delete(prevVal.x + "," + prevVal.y);
+    if (nextVal && (nextVal.e || 0) > 0 && nextVal.x != null) chalkKeys.add(nextVal.x + "," + nextVal.y);
   }
 
   // トークンはサーバー発行 (secrets使用) のみ。クライアント側生成はしない。
