@@ -150,24 +150,22 @@ pub async fn rollback(
                 .await;
             events.push(serde_json::json!({"kind": "pixel", "x": x, "y": y, "c": "#ffffff", "t": "normal", "erased": true}));
         } else {
-            let pc: String = rows[1].get(2);
+            let pc: i32 = rows[1].get(2);
             let pt: String = rows[1].get(3);
             let pu: String = rows[1].get(1);
-            let pci = crate::color::hex_to_int(&pc);
             let _ = sqlx::query(
-                "INSERT INTO pixels(x, y, c, ci, t, by, coats, shieldUntil) VALUES ($1,$2,$3,$4,$5,$6,1,0)
-                 ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, ci=excluded.ci, t=excluded.t, by=excluded.by,
+                "INSERT INTO pixels(x, y, c, t, by, coats, shieldUntil) VALUES ($1,$2,$3,$4,$5,1,0)
+                 ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by,
                  coats=1, shieldUntil=0, chalkUntil=0",
             )
             .bind(x)
             .bind(y)
-            .bind(&pc)
-            .bind(pci)
+            .bind(pc)
             .bind(&pt)
             .bind(&pu)
             .execute(&mut *tx)
             .await;
-            events.push(serde_json::json!({"kind": "pixel", "x": x, "y": y, "c": pc, "t": pt, "by": pu}));
+            events.push(serde_json::json!({"kind": "pixel", "x": x, "y": y, "c": crate::color::int_to_hex(pc), "t": pt, "by": pu}));
         }
         restored += 1;
         xp_taken += rxp;

@@ -196,18 +196,16 @@ pub async fn place(
     .bind(&token)
     .execute(&mut *tx)
     .await;
-    let _ = sqlx::query(
-        "INSERT INTO history(x, y, uid, c, ci, t, at, xp) VALUES ($1,$2,$3,$4,$5,$6,$7,1)",
-    )
-    .bind(body.x)
-    .bind(body.y)
-    .bind(&uid)
-    .bind(&store_c)
-    .bind(crate::color::hex_to_int(&store_c))
-    .bind(&store_t)
-    .bind(now)
-    .execute(&mut *tx)
-    .await;
+    let _ =
+        sqlx::query("INSERT INTO history(x, y, uid, c, t, at, xp) VALUES ($1,$2,$3,$4,$5,$6,1)")
+            .bind(body.x)
+            .bind(body.y)
+            .bind(&uid)
+            .bind(crate::color::hex_to_int(&store_c).unwrap_or(0xffffff))
+            .bind(&store_t)
+            .bind(now)
+            .execute(&mut *tx)
+            .await;
     let _ = sqlx::query(
         "DELETE FROM history WHERE x = $1 AND y = $2 AND id NOT IN
          (SELECT id FROM history WHERE x = $1 AND y = $2 ORDER BY at DESC, id DESC LIMIT 20)",
@@ -269,14 +267,13 @@ async fn write_pixel(
     }
     if ink == "normal" {
         let c = color.to_lowercase();
-        let ci = crate::color::hex_to_int(&c);
+        let ci = crate::color::hex_to_int(&c).unwrap_or(0xffffff);
         let _ = sqlx::query(
-            "INSERT INTO pixels(x, y, c, ci, t, by, coats) VALUES ($1,$2,$3,$4,'normal',$5,1)
-             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, ci=excluded.ci, t='normal', by=excluded.by, coats=1",
+            "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,'normal',$4,1)
+             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t='normal', by=excluded.by, coats=1",
         )
         .bind(x)
         .bind(y)
-        .bind(&c)
         .bind(ci)
         .bind(uid)
         .execute(&mut **tx)
@@ -299,7 +296,7 @@ async fn write_pixel(
         .fetch_optional(&mut **tx)
         .await
         .unwrap_or(None);
-    let (base_c, base_t, base_coats): (Option<String>, Option<String>, i32) =
+    let (base_ci, base_t, base_coats): (Option<i32>, Option<String>, i32) =
         match row {
             Some(r) => {
                 use sqlx::Row;
@@ -309,31 +306,29 @@ async fn write_pixel(
         };
     let want_ghost = need.iter().any(|p| p == "ghost");
     let chosen = color.to_lowercase();
+    let base_hex = base_ci.map(crate::color::int_to_hex);
     let (store_c, coats) = if need.iter().any(|p| p == "rainbow") {
-        let c = base_c
-            .filter(|s| place_logic::is_hex_color(s))
-            .unwrap_or(chosen.clone());
+        let c = base_hex.clone().unwrap_or(chosen.clone());
         (c, if want_ghost { base_coats } else { 1 })
     } else if !want_ghost {
         (chosen.clone(), 1)
     } else if base_t.as_deref().map(|t| t.contains("ghost")).unwrap_or(false) && base_coats >= 1
     {
         (chosen.clone(), (base_coats + 1).min(MAX_GHOST_COATS))
-    } else if base_c.is_none() {
+    } else if base_hex.is_none() {
         (chosen.clone(), 1)
     } else {
-        let under = base_c.unwrap_or_else(|| "#ffffff".into());
+        let under = base_hex.unwrap_or_else(|| "#ffffff".into());
         (place_logic::blend_hex(&chosen, &under, 0.5), 0)
     };
     let store_t = need.join("+");
-    let store_ci = crate::color::hex_to_int(&store_c);
+    let store_ci = crate::color::hex_to_int(&store_c).unwrap_or(0xffffff);
     let _ = sqlx::query(
-        "INSERT INTO pixels(x, y, c, ci, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6,$7)
-         ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, ci=excluded.ci, t=excluded.t, by=excluded.by, coats=excluded.coats",
+        "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by, coats=excluded.coats",
     )
     .bind(x)
     .bind(y)
-    .bind(&store_c)
     .bind(store_ci)
     .bind(&store_t)
     .bind(uid)

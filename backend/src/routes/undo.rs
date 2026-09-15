@@ -92,7 +92,7 @@ pub async fn undo(
     };
     let hid: i64 = h.get(0);
     let huid: String = h.get(1);
-    let hc: String = h.get(2);
+    let hc: i32 = h.get(2);
     let ht: String = h.get(3);
     let hat: f64 = h.get(4);
     let hundone: i32 = h.get(5);
@@ -112,7 +112,7 @@ pub async fn undo(
         }
     } else if let Some(c) = cur {
         use sqlx::Row;
-        let cc: String = c.get(0);
+        let cc: i32 = c.get(0);
         let tt: String = c.get(1);
         if cc != hc || tt != ht {
             return err(StatusCode::CONFLICT, "changed");
@@ -129,14 +129,13 @@ pub async fn undo(
             .await;
     } else {
         let prev_c = body.prev_c.to_lowercase();
-        let prev_ci = crate::color::hex_to_int(&prev_c);
+        let prev_ci = crate::color::hex_to_int(&prev_c).unwrap_or(0xffffff);
         let _ = sqlx::query(
-            "INSERT INTO pixels(x, y, c, ci, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6,$7)
-             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, ci=excluded.ci, t=excluded.t, coats=excluded.coats",
+            "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6)
+             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, coats=excluded.coats",
         )
         .bind(body.x)
         .bind(body.y)
-        .bind(prev_c)
         .bind(prev_ci)
         .bind(&body.prev_t)
         .bind(&uid)
