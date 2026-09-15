@@ -7,6 +7,7 @@ use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Body {
     pub name: String,
     pub color: String,

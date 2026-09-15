@@ -8,7 +8,9 @@ use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
 /// 取消リクエスト。prev検証はPython normalizeUndoPrev互換。
+/// フロントはcamelCaseで送る (prevEmpty/prevC/prevT/prevCoats)。
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UndoBody {
     pub x: i32,
     pub y: i32,
@@ -210,7 +212,15 @@ pub async fn undo(
         ));
         state.hub.send_to_watchers(tile_of(body.x, body.y), &msg, None);
     }
+    // フロントは data.pixel / data.by で即時反映する (欠落すると例外→commError表示になる)
+    let pixel = if body.prev_empty {
+        serde_json::json!({"erased": true})
+    } else {
+        serde_json::json!({"c": body.prev_c.to_lowercase(), "t": body.prev_t.clone(),
+            "coats": body.prev_coats.clamp(0, 5)})
+    };
     let out = serde_json::json!({"ok": true, "x": body.x, "y": body.y,
+        "pixel": pixel, "by": uid,
         "level": level, "xp": xp,
         "xpNeeded": users::xp_needed_for_level(level, state.cfg.xp_base, state.cfg.xp_pow),
         "inventory": inv});
