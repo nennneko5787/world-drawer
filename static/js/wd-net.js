@@ -225,13 +225,18 @@
 
   let socket = null;
   let socketReady = false;
-  // 素WS (Socket.IO廃止): ticket + Turnstile必須。ページ表示の度に検証
+  let wsFailCount = 0;
+  let wsGiveUp = false;
+  // 素WS (Socket.IO廃止): ticket + Turnstile必須。ページ表示の度に検証。
+  // 失敗時は指数バックオフで最大3回まで (無限ウィジェット防止)。それ以上は手動リロード。
   async function connectSocket() {
-    if (socket) return;
+    if (socket || wsGiveUp) return;
     try {
       const ts = await getTurnstileToken();
+      if (wsGiveUp) return;
       const ticket = await fetchWsTicket();
       const ws = new WebSocket(wsUrl());
+      let helloDone = false;
       socket = ws;
       ws.onopen = () => {
         ws.send(JSON.stringify({ t: "hello", ticket, turnstileToken: ts }));
@@ -242,11 +247,15 @@
         if (!d || typeof d.t !== "string") return;
         if (d.t === "helloOk") {
           if (!d.ok) {
-            toast(t("turnstileFailed"));
+            helloDone = true;
+            wsFailCount += 1;
             try { ws.close(); } catch {}
             socket = null;
+            onWsFailed(d.error);
             return;
           }
+          helloDone = true;
+          wsFailCount = 0;
           socketReady = true;
           if (d.uid) {
             myUid = d.uid;
@@ -268,17 +277,41 @@
       ws.onclose = () => {
         socket = null;
         socketReady = false;
-        setTimeout(connectSocket, 3000);
+        if (wsGiveUp) return;
+        if (!helloDone) {
+          // hello前の切断も失敗扱い
+          wsFailCount += 1;
+          onWsFailed("");
+          return;
+        }
+        // hello済みの切断はネットワーク瞬断扱いで1回だけ自動再接続
+        if (wsFailCount < 3) {
+          wsFailCount += 1;
+          setTimeout(connectSocket, 3000 * wsFailCount);
+        } else {
+          onWsFailed("");
+        }
       };
       ws.onerror = () => {
         try { ws.close(); } catch {}
       };
     } catch {
+      onWsFailed("");
+    }
+  }
+  function onWsFailed(reason) {
+    if (wsFailCount >= 3) {
+      wsGiveUp = true;
+      socket = null;
+      toast(t("turnstileFailed"), "", { label: t("reloadBtn"), fn: () => location.reload() });
+      // ポーリングに切替 (閲覧だけはできる)
       setInterval(() => {
         fetchViewport();
         refreshOnlineUsers();
       }, 5000);
+      return;
     }
+    setTimeout(connectSocket, 3000 * Math.max(1, wsFailCount));
   }
   function onPixel(p) {
       const key = `${p.x},${p.y}`;

@@ -6,6 +6,8 @@
     "ja": {
       "coordsTitle": "カーソル位置のキャンバス座標",
       "ready": "準備OK",
+      "turnstileFailed": "認証に失敗しました",
+      "reloadBtn": "再読み込み",
       "levelWord": "レベル",
       "onlineTitle": "オンライン中のユーザー一覧",
       "accountTitle": "アカウント引っ越し",
@@ -290,6 +292,8 @@
     "en": {
       "coordsTitle": "Canvas coordinates at cursor",
       "ready": "Ready",
+      "turnstileFailed": "Verification failed",
+      "reloadBtn": "Reload",
       "levelWord": "Level",
       "onlineTitle": "Online users",
       "accountTitle": "Transfer account",
@@ -574,6 +578,8 @@
     "ko": {
       "coordsTitle": "커서 위치의 캔버스 좌표",
       "ready": "준비 완료",
+      "turnstileFailed": "인증에 실패했습니다",
+      "reloadBtn": "새로고침",
       "levelWord": "레벨",
       "onlineTitle": "온라인 사용자 목록",
       "accountTitle": "계정 이전",
@@ -858,6 +864,8 @@
     "zh-CN": {
       "coordsTitle": "光标位置的画布坐标",
       "ready": "就绪",
+      "turnstileFailed": "验证失败",
+      "reloadBtn": "重新加载",
       "levelWord": "等级",
       "onlineTitle": "在线用户列表",
       "accountTitle": "账号迁移",
@@ -1142,6 +1150,8 @@
     "zh-TW": {
       "coordsTitle": "游標位置的畫布座標",
       "ready": "就緒",
+      "turnstileFailed": "驗證失敗",
+      "reloadBtn": "重新載入",
       "levelWord": "等級",
       "onlineTitle": "線上使用者列表",
       "accountTitle": "帳號遷移",
