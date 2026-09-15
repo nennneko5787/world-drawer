@@ -17,6 +17,9 @@ wheels/
 data/
 !data/.gitkeep
 
+# wrangler local state (deploy cache)
+.wrangler/
+
 # Rust
 backend/target/
 backend/.env
