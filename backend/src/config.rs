@@ -56,6 +56,12 @@ pub struct Config {
     pub cooldown_decay: f64,
     #[serde(default = "d100k", alias = "max_bbox_pixels")]
     pub max_bbox_pixels: usize,
+    // /api/tilesの1クエリ上限行数。1GB級VPSは小さめに (1000〜100000)
+    #[serde(default = "d20k", alias = "tile_row_cap")]
+    pub tile_row_cap: i64,
+    // /api/tilesの1回取得タイル数。残りは次回以降に回る (16〜1024)
+    #[serde(default = "d128z", alias = "max_stale_tiles")]
+    pub max_stale_tiles: usize,
     #[serde(default = "d1i", alias = "xp_per_place")]
     pub xp_per_place: i64,
     #[serde(default = "d3f", alias = "xp_base")]
@@ -81,6 +87,12 @@ fn d087() -> f64 {
 }
 fn d100k() -> usize {
     100000
+}
+fn d20k() -> i64 {
+    20001
+}
+fn d128z() -> usize {
+    128
 }
 fn d1i() -> i64 {
     1

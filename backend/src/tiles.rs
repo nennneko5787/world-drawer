@@ -6,9 +6,6 @@ use dashmap::DashMap;
 use std::sync::Arc;
 
 pub const TILE: i32 = 128;
-/// 1回の /api/tiles でDBから起こす陳腐タイル数の目安。
-/// truncatedは廃止: 残りは版を進めず次回以降に回す (欠けなし・促しトーストなし)
-pub const MAX_STALE_PER_REQ: usize = 256;
 /// needの解析上限 (濫用防止の外枠)
 pub const MAX_NEED_TILES: usize = 4096;
 

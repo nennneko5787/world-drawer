@@ -46,6 +46,7 @@
   const WATCH_CAP = 512; // サーバのwatch保持上限に合わせる
   const TILE_REQ_CAP = 4096; // サーバのneed解析上限に合わせる
   const CHASE_MAX = 3; // 1パンでの追いかけ再取得の上限
+  const CHASE_CELLS = 20000; // これ以上のセル数を返した回は追いかけない (弱い鯖を叩き続けない)
   const tileVers = new Map(); // "tx,ty" -> v
   const tileCells = new Map(); // "tx,ty" -> Set("x,y")
   async function fetchMeta() {
@@ -92,17 +93,20 @@
       const data = await (await fetch(url)).json();
       if (seq !== fetchSeq) return; // 古い応答は破棄
       let progressed = false;
+      let cells = 0;
       for (const [tkey, tile] of Object.entries(data.tiles || {})) {
         if (tile.pixels) {
+          cells += Object.keys(tile.pixels).length;
           applyTile(tkey, tile.v, tile.pixels);
           progressed = true;
         } else if (tile.v != null) tileVers.set(tkey, tile.v);
       }
       pruneFar(box);
       zoneDirty = true;
-      // 残りがあれば視野が変わらないうちは追いかける (上限付きで自然収束)
+      // 残りがあれば視野が変わらないうちは追いかける (上限付きで自然収束。
+      // 巨大応答の直後は叩き続けない)
       const pending = typeof data.pending === "number" ? data.pending : 0;
-      if (pending > 0 && progressed && chase < CHASE_MAX && seq === fetchSeq) {
+      if (pending > 0 && progressed && cells < CHASE_CELLS && chase < CHASE_MAX && seq === fetchSeq) {
         fetchViewport(chase + 1);
       }
     } catch (err) {

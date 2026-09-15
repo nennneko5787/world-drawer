@@ -1,5 +1,5 @@
 use crate::routes::AppState;
-use crate::tiles::{self, MAX_NEED_TILES, MAX_STALE_PER_REQ, TILE};
+use crate::tiles::{self, MAX_NEED_TILES, TILE};
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -103,12 +103,13 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
         let body = serde_json::json!({"tiles": out, "pending": 0});
         return (StatusCode::OK, axum::Json(body)).into_response();
     }
-    // 1回にDBから起こすのは先頭MAX_STALE_PER_REQタイルまで。
-    // 外接矩形が濃密すぎる (ROW_CAP到達) 場合は半分ずつ削る。
+    // 1回にDBから起こすのは先頭max_stale_tilesタイルまで (既定128)。
+    // 外接矩形が濃密すぎる (tile_row_cap到達) 場合は半分ずつ削る。
     // 1タイル (128四方=最大16384行) まで削れば必ず収まるので、
     // serving分は常に完全 (欠けなし)。削り落とした分は版を進めない。
-    const ROW_CAP: i64 = 100001;
-    let mut n = stale.len().min(MAX_STALE_PER_REQ);
+    let row_cap = state.cfg.tile_row_cap.clamp(16385, 1000000);
+    let stale_budget = state.cfg.max_stale_tiles.clamp(16, 1024);
+    let mut n = stale.len().min(stale_budget);
     let rows = loop {
         let (mut lox, mut hix, mut loy, mut hiy) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
         for (tx, ty) in &stale[..n] {
@@ -128,11 +129,11 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
         .bind(loy)
         .bind(hiy)
         .bind(now)
-        .bind(ROW_CAP)
+        .bind(row_cap)
         .fetch_all(&state.pool)
         .await
         .unwrap_or_default();
-        if (rows.len() as i64) < ROW_CAP || n == 1 {
+        if (rows.len() as i64) < row_cap || n == 1 {
             break rows;
         }
         n = (n / 2).max(1);
