@@ -61,7 +61,7 @@ pub async fn bbox(State(state): State<AppState>, Query(q): Query<Bbox>) -> Respo
         return json_no_store(&body);
     }
     let rows = sqlx::query(
-        "SELECT x, y, c, t, by, coats FROM pixels
+        "SELECT x, y, c, ci, t, by, coats FROM pixels
          WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4
          AND (chalkUntil = 0 OR chalkUntil > $5)",
     )
@@ -80,10 +80,10 @@ pub async fn bbox(State(state): State<AppState>, Query(q): Query<Bbox>) -> Respo
         use sqlx::Row;
         let x: i32 = r.get(0);
         let y: i32 = r.get(1);
-        let c: String = r.get(2);
-        let t: String = r.get(3);
-        let by: Option<String> = r.get(4);
-        let coats: i32 = r.get(5);
+        let c: String = crate::color::resolve_hex(&r.get::<String, _>(2), r.get::<Option<i32>, _>(3));
+        let t: String = r.get(4);
+        let by: Option<String> = r.get(5);
+        let coats: i32 = r.get(6);
         pixels.insert(
             format!("{x},{y}"),
             serde_json::json!({"c": c, "t": t, "by": by, "coats": coats}),

@@ -197,12 +197,13 @@ pub async fn place(
     .execute(&mut *tx)
     .await;
     let _ = sqlx::query(
-        "INSERT INTO history(x, y, uid, c, t, at, xp) VALUES ($1,$2,$3,$4,$5,$6,1)",
+        "INSERT INTO history(x, y, uid, c, ci, t, at, xp) VALUES ($1,$2,$3,$4,$5,$6,$7,1)",
     )
     .bind(body.x)
     .bind(body.y)
     .bind(&uid)
     .bind(&store_c)
+    .bind(crate::color::hex_to_int(&store_c))
     .bind(&store_t)
     .bind(now)
     .execute(&mut *tx)
@@ -220,10 +221,24 @@ pub async fn place(
     }
     state.tiles.bump(body.x, body.y);
 
-    // broadcast (lag時は捨てる)。"kind"で識別 ("t"はインク種別で使うため)
-    let _ = state.hub.pixel_tx.send(
-        serde_json::json!({"kind": "pixel", "x": body.x, "y": body.y, "c": store_c, "t": store_t, "by": uid, "coats": coats}).to_string(),
-    );
+    // 購読タイル宛にバイナリ配信 (全員broadcast廃止)
+    {
+        use crate::tiles::tile_of;
+        use crate::ws::WsOut;
+        use crate::ws_proto::{self, ink_to_bits};
+        let (r, g, b) = crate::color::hex_to_rgb(&store_c);
+        let msg = WsOut::Bin(ws_proto::pixel_bin(
+            body.x,
+            body.y,
+            r,
+            g,
+            b,
+            ink_to_bits(&store_t),
+            coats.clamp(0, 5) as u8,
+            &uid,
+        ));
+        state.hub.send_to_watchers(tile_of(body.x, body.y), &msg, None);
+    }
     let body = serde_json::json!({
         "ok": true, "x": body.x, "y": body.y,
         "pixel": {"c": store_c, "t": store_t, "coats": coats},
@@ -254,13 +269,15 @@ async fn write_pixel(
     }
     if ink == "normal" {
         let c = color.to_lowercase();
+        let ci = crate::color::hex_to_int(&c);
         let _ = sqlx::query(
-            "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,'normal',$4,1)
-             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t='normal', by=excluded.by, coats=1",
+            "INSERT INTO pixels(x, y, c, ci, t, by, coats) VALUES ($1,$2,$3,$4,'normal',$5,1)
+             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, ci=excluded.ci, t='normal', by=excluded.by, coats=1",
         )
         .bind(x)
         .bind(y)
         .bind(&c)
+        .bind(ci)
         .bind(uid)
         .execute(&mut **tx)
         .await;
@@ -309,13 +326,15 @@ async fn write_pixel(
         (place_logic::blend_hex(&chosen, &under, 0.5), 0)
     };
     let store_t = need.join("+");
+    let store_ci = crate::color::hex_to_int(&store_c);
     let _ = sqlx::query(
-        "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6)
-         ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by, coats=excluded.coats",
+        "INSERT INTO pixels(x, y, c, ci, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, ci=excluded.ci, t=excluded.t, by=excluded.by, coats=excluded.coats",
     )
     .bind(x)
     .bind(y)
     .bind(&store_c)
+    .bind(store_ci)
     .bind(&store_t)
     .bind(uid)
     .bind(coats)

@@ -8,6 +8,7 @@
 //! - `/api/*`はEdgeキャッシュBYPASS。`GET /og-image.png`のみ60sキャッシュ。
 
 mod auth;
+mod color;
 mod config;
 mod db;
 mod ip;
@@ -18,6 +19,7 @@ mod tiles;
 mod turnstile;
 mod users;
 mod ws;
+mod ws_proto;
 
 use std::net::SocketAddr;
 use std::time::Duration;

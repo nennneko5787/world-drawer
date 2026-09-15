@@ -117,7 +117,7 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
     }
     let now = chrono::Utc::now().timestamp() as f64;
     let rows = sqlx::query(
-        "SELECT x, y, c, t, by, coats FROM pixels
+        "SELECT x, y, c, ci, t, by, coats FROM pixels
          WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4
          AND (chalkUntil = 0 OR chalkUntil > $5) LIMIT $6",
     )
@@ -143,9 +143,11 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
         let x: i32 = r.get(0);
         let y: i32 = r.get(1);
         let k = tiles::tile_of(x, y);
+        // ci優先・cフォールバック。APIはhexのまま (フロント無変更)
+        let c: String = crate::color::resolve_hex(&r.get::<String, _>(2), r.get::<Option<i32>, _>(3));
         let cell = serde_json::json!({
-            "c": r.get::<String, _>(2), "t": r.get::<String, _>(3),
-            "by": r.get::<Option<String>, _>(4), "coats": r.get::<i32, _>(5),
+            "c": c, "t": r.get::<String, _>(4),
+            "by": r.get::<Option<String>, _>(5), "coats": r.get::<i32, _>(6),
         });
         bucket.entry(k).or_default().insert(format!("{x},{y}"), cell);
     }

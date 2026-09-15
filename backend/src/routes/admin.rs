@@ -38,7 +38,7 @@ pub async fn status(State(state): State<AppState>, headers: HeaderMap) -> Respon
         return (StatusCode::FORBIDDEN, r#"{"ok":false,"error":"forbidden"}"#)
             .into_response();
     }
-    let presence = state.hub.peers.len();
+    let presence = state.hub.live_count();
     let body = serde_json::json!({"ok": true, "presence": presence,
         "config": {"maxSocketsPerIp": 64}});
     (StatusCode::OK, axum::Json(body)).into_response()
@@ -153,14 +153,16 @@ pub async fn rollback(
             let pc: String = rows[1].get(2);
             let pt: String = rows[1].get(3);
             let pu: String = rows[1].get(1);
+            let pci = crate::color::hex_to_int(&pc);
             let _ = sqlx::query(
-                "INSERT INTO pixels(x, y, c, t, by, coats, shieldUntil) VALUES ($1,$2,$3,$4,$5,1,0)
-                 ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by,
+                "INSERT INTO pixels(x, y, c, ci, t, by, coats, shieldUntil) VALUES ($1,$2,$3,$4,$5,$6,1,0)
+                 ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, ci=excluded.ci, t=excluded.t, by=excluded.by,
                  coats=1, shieldUntil=0, chalkUntil=0",
             )
             .bind(x)
             .bind(y)
             .bind(&pc)
+            .bind(pci)
             .bind(&pt)
             .bind(&pu)
             .execute(&mut *tx)
@@ -194,7 +196,22 @@ pub async fn rollback(
         state.tiles.bump(*x, *y);
     }
     for ev in &events {
-        let _ = state.hub.pixel_tx.send(ev.to_string());
+        use crate::tiles::tile_of;
+        use crate::ws::WsOut;
+        use crate::ws_proto::{self, ink_to_bits};
+        let x = ev.get("x").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
+        let y = ev.get("y").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
+        let c = ev.get("c").and_then(|s| s.as_str()).unwrap_or("#ffffff");
+        let t = ev.get("t").and_then(|s| s.as_str()).unwrap_or("normal");
+        let by = ev.get("by").and_then(|s| s.as_str()).unwrap_or("");
+        let (r, g, b) = crate::color::hex_to_rgb(c);
+        let ink = if ev.get("erased").and_then(|e| e.as_bool()).unwrap_or(false) {
+            ink_to_bits("erase")
+        } else {
+            ink_to_bits(t)
+        };
+        let msg = WsOut::Bin(ws_proto::pixel_bin(x, y, r, g, b, ink, 1, by));
+        state.hub.send_to_watchers(tile_of(x, y), &msg, None);
     }
     let out = serde_json::json!({"ok": true, "uid": uid, "restored": restored,
         "skipped": skipped, "truncated": truncated, "level": level, "xp": xp, "events": events});

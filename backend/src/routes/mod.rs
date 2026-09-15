@@ -70,13 +70,17 @@ pub mod ws_route {
     use crate::ip;
     use crate::rate;
     use crate::routes::AppState;
+    use crate::tiles::tile_of;
     use crate::turnstile;
+    use crate::ws::{PeerInfo, WsOut};
+    use crate::ws_proto;
     use axum::extract::ConnectInfo;
     use axum::extract::State;
     use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
     use axum::http::HeaderMap;
     use axum::response::Response;
     use futures_util::{SinkExt, StreamExt};
+    use std::collections::HashSet;
     use std::net::SocketAddr;
     use std::time::Duration;
 
@@ -100,6 +104,10 @@ pub mod ws_route {
         ws.on_upgrade(move |socket| async move {
             serve(socket, state, peer_s, cf, xff).await;
         })
+    }
+
+    fn hello_err(s: &str) -> Message {
+        Message::Text(format!(r#"{{"t":"helloOk","ok":false,"error":"{s}"}}"#).into())
     }
 
     async fn serve(
@@ -130,18 +138,8 @@ pub mod ws_route {
             .get("turnstileToken")
             .and_then(|x| x.as_str())
             .unwrap_or("");
-        let Some(token) = state.hub.tickets.remove(ticket).and_then(|(_, (tok, exp))| {
-            if chrono::Utc::now().timestamp() <= exp {
-                Some(tok)
-            } else {
-                None
-            }
-        }) else {
-            let _ = sink
-                .send(Message::Text(
-                    r#"{"t":"helloOk","ok":false,"error":"badTicket"}"#.into(),
-                ))
-                .await;
+        let Some(token) = state.hub.take_ticket(ticket) else {
+            let _ = sink.send(hello_err("badTicket")).await;
             return;
         };
         // Turnstile必須 (ページ表示の度)
@@ -152,18 +150,14 @@ pub mod ws_route {
             .map(|t| t.enforce)
             .unwrap_or(true);
         if enforce {
-            let (secret, timeout) = state
+            let secret = state
                 .cfg
                 .turnstile
                 .as_ref()
-                .map(|t| (t.secret_key.clone(), t.timeout_sec))
+                .map(|t| t.secret_key.clone())
                 .unwrap_or_default();
-            if !turnstile::verify(&secret, ts_token, &client_ip, timeout).await {
-                let _ = sink
-                    .send(Message::Text(
-                        r#"{"t":"helloOk","ok":false,"error":"turnstileRequired"}"#.into(),
-                    ))
-                    .await;
+            if !turnstile::verify(&secret, ts_token, &client_ip, 10).await {
+                let _ = sink.send(hello_err("turnstileRequired")).await;
                 return;
             }
         }
@@ -176,35 +170,35 @@ pub mod ws_route {
         .await
         .unwrap_or(None);
         let Some(r) = row else {
-            let _ = sink
-                .send(Message::Text(
-                    r#"{"t":"helloOk","ok":false,"error":"noUser"}"#.into(),
-                ))
-                .await;
+            let _ = sink.send(hello_err("noUser")).await;
             return;
         };
         use sqlx::Row;
-        let uid: String = r.get(0);
-        let name: String = r.get(1);
-        let color: String = r.get(2);
-        let level: i64 = r.get::<i32, _>(3) as i64;
+        let info = PeerInfo {
+            uid: r.get::<String, _>(0),
+            name: r.get::<String, _>(1),
+            color: r.get::<String, _>(2),
+            level: r.get::<i32, _>(3) as i64,
+        };
 
         let sid = uuid::Uuid::new_v4().simple().to_string();
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(64);
-        state.hub.peers.insert(uid.clone(), tx.clone());
-        state.hub.conns.insert(sid.clone(), uid.clone());
-        // presence joinをbroadcast
-        let _ = state.hub.pixel_tx.send(
-            serde_json::json!({"t":"join","uid":uid.clone(),"name":name.clone(),"color":color.clone(),"level":level})
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<WsOut>(64);
+        state.hub.sinks.insert(sid.clone(), (info.uid.clone(), tx));
+        state.hub.infos.insert(sid.clone(), info.clone());
+        // presence joinを全体へ (稀なのでbroadcast可)
+        state.hub.broadcast_all(
+            &WsOut::Text(
+                serde_json::json!({"t":"join","uid":info.uid,"name":info.name,
+                    "color":info.color,"level":info.level})
                 .to_string(),
+            ),
+            Some(&sid),
         );
-        let ok = serde_json::json!({"t":"helloOk","ok":true,"uid":uid.clone()}).to_string();
+        let ok = serde_json::json!({"t":"helloOk","ok":true,"uid":info.uid}).to_string();
         if sink.send(Message::Text(ok.into())).await.is_err() {
-            state.hub.peers.remove(&uid);
-            state.hub.conns.remove(&sid);
+            state.hub.remove(&sid);
             return;
         }
-        let mut sub = state.hub.pixel_tx.subscribe();
         let ping_interval = Duration::from_secs(20);
         let mut ping = tokio::time::interval(ping_interval);
         // 送信タスク
@@ -216,57 +210,89 @@ pub mod ws_route {
                     }
                     msg = rx.recv() => {
                         let Some(m) = msg else { break };
-                        if sink.send(Message::Text(m.into())).await.is_err() { break; }
-                    }
-                    msg = sub.recv() => {
-                        // lag時は捨てる (全体を道連れにしない)
-                        if let Ok(m) = msg {
-                            // 自分のcursorは送り返さない簡易判定: 送信側でuid一致は弾く前提
-                            if sink.send(Message::Text(m.into())).await.is_err() { break; }
-                        }
+                        let out = match m {
+                            WsOut::Text(t) => Message::Text(t.into()),
+                            WsOut::Bin(b) => Message::Binary(b.into()),
+                        };
+                        if sink.send(out).await.is_err() { break; }
                     }
                 }
             }
         };
-        // 受信 (cursorのみ中継、200ms間引きはクライアント+サーバ両方)
+        // 受信: cursorは購読タイル宛にバイナリ中継、watchで購読更新
         let hub2 = state.hub.clone();
-        let (uid_r, name_r, color_r) = (uid.clone(), name.clone(), color.clone());
-        let mut last_bc = std::time::Instant::now()
-            .checked_sub(Duration::from_millis(300))
-            .unwrap();
-        let mut last_cell = String::new();
+        let sid2 = sid.clone();
         let recv_fut = async move {
+            let mut last_bc = std::time::Instant::now()
+                .checked_sub(Duration::from_millis(300))
+                .unwrap();
+            let mut last_cell = String::new();
             while let Some(Ok(msg)) = stream.next().await {
-                match msg {
-                    Message::Text(t) => {
-                        let v: serde_json::Value =
-                            serde_json::from_str(&t).unwrap_or_default();
-                        if v.get("t").and_then(|x| x.as_str()) == Some("cursor") {
-                            let x = v.get("x").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
-                            let y = v.get("y").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
-                            if x.abs() > 1_000_000 || y.abs() > 1_000_000 {
-                                continue;
+                let Message::Text(t) = msg else {
+                    continue;
+                };
+                let v: serde_json::Value = serde_json::from_str(&t).unwrap_or_default();
+                match v.get("t").and_then(|x| x.as_str()) {
+                    Some("cursor") => {
+                        let x = v.get("x").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
+                        let y = v.get("y").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
+                        if x.abs() > 1_000_000 || y.abs() > 1_000_000 {
+                            continue;
+                        }
+                        let key = format!("{x},{y}");
+                        let now = std::time::Instant::now();
+                        if key == last_cell
+                            || now.duration_since(last_bc) < Duration::from_millis(200)
+                        {
+                            continue;
+                        }
+                        last_bc = now;
+                        last_cell = key;
+                        let uid = hub2
+                            .infos
+                            .get(&sid2)
+                            .map(|i| i.uid.clone())
+                            .unwrap_or_default();
+                        hub2.send_to_watchers(
+                            tile_of(x, y),
+                            &WsOut::Bin(ws_proto::cursor_bin(x, y, &uid)),
+                            Some(&sid2),
+                        );
+                    }
+                    Some("watch") => {
+                        let mut set = HashSet::new();
+                        if let Some(arr) = v.get("tiles").and_then(|a| a.as_array()) {
+                            for item in arr.iter().take(512) {
+                                let Some(s) = item.as_str() else { continue };
+                                let mut it = s.split(',');
+                                let (Some(a), Some(b)) = (it.next(), it.next()) else {
+                                    continue;
+                                };
+                                if it.next().is_some() {
+                                    continue;
+                                }
+                                if let (Ok(tx), Ok(ty)) =
+                                    (a.parse::<i32>(), b.parse::<i32>())
+                                {
+                                    if tx.abs() <= 20000 && ty.abs() <= 20000 {
+                                        set.insert((tx, ty));
+                                    }
+                                }
                             }
-                            let key = format!("{x},{y}");
-                            let now = std::time::Instant::now();
-                            if key == last_cell
-                                || now.duration_since(last_bc)
-                                    < Duration::from_millis(200)
-                            {
-                                continue;
-                            }
-                            last_bc = now;
-                            last_cell = key;
-                            let _ = hub2.pixel_tx.send(
-                                serde_json::json!({
-                                    "t":"cursor","uid":uid_r,"name":name_r,
-                                    "color":color_r,"level":level,"x":x,"y":y
-                                })
-                                .to_string(),
-                            );
+                        }
+                        hub2.watch.insert(sid2.clone(), set.clone());
+                        // 新規購読タイルの既存者をスナップショット送信
+                        for (_, info) in hub2.joins_for(&sid2, &set) {
+                            let _ = hub2.sinks.get(&sid2).map(|s| {
+                                s.value().1.try_send(WsOut::Text(
+                                    serde_json::json!({"t":"join","uid":info.uid,
+                                        "name":info.name,"color":info.color,
+                                        "level":info.level})
+                                    .to_string(),
+                                ))
+                            });
                         }
                     }
-                    Message::Close(_) => break,
                     _ => {}
                 }
             }
@@ -275,10 +301,11 @@ pub mod ws_route {
             _ = send_fut => {}
             _ = recv_fut => {}
         }
-        state.hub.peers.remove(&uid);
-        state.hub.conns.remove(&sid);
-        let _ = state.hub.pixel_tx.send(
-            serde_json::json!({"t":"leave","uid":uid.clone()}).to_string(),
-        );
+        if let Some(info) = state.hub.remove(&sid) {
+            state.hub.broadcast_all(
+                &WsOut::Bin(ws_proto::leave_bin(&info.uid)),
+                Some(&sid),
+            );
+        }
     }
 }

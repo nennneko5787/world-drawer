@@ -22,7 +22,7 @@ pub async fn history(State(state): State<AppState>, Query(q): Query<Q>) -> Respo
     let rows = if let Some(b) = q.before_id {
         sqlx::query(
             "SELECT h.id, h.uid, COALESCE(u.name,'ななし'), COALESCE(u.color,'#22aa66'),
-                    h.c, h.t, h.at,
+                    h.c, h.ci, h.t, h.at,
                     CASE WHEN u.showCountry = 1 THEN u.country ELSE NULL END,
                     COALESCE(u.level,1)
              FROM history h LEFT JOIN users u ON u.uid = h.uid
@@ -39,7 +39,7 @@ pub async fn history(State(state): State<AppState>, Query(q): Query<Q>) -> Respo
     } else {
         sqlx::query(
             "SELECT h.id, h.uid, COALESCE(u.name,'ななし'), COALESCE(u.color,'#22aa66'),
-                    h.c, h.t, h.at,
+                    h.c, h.ci, h.t, h.at,
                     CASE WHEN u.showCountry = 1 THEN u.country ELSE NULL END,
                     COALESCE(u.level,1)
              FROM history h LEFT JOIN users u ON u.uid = h.uid
@@ -62,9 +62,10 @@ pub async fn history(State(state): State<AppState>, Query(q): Query<Q>) -> Respo
             serde_json::json!({
                 "id": r.get::<i64, _>(0), "uid": r.get::<String, _>(1),
                 "name": r.get::<String, _>(2), "userColor": r.get::<String, _>(3),
-                "c": r.get::<String, _>(4), "t": r.get::<String, _>(5),
-                "at": r.get::<f64, _>(6), "country": r.get::<Option<String>, _>(7),
-                "level": r.get::<i32, _>(8) as i64,
+                "c": crate::color::resolve_hex(&r.get::<String, _>(4), r.get::<Option<i32>, _>(5)),
+                "t": r.get::<String, _>(6),
+                "at": r.get::<f64, _>(7), "country": r.get::<Option<String>, _>(8),
+                "level": r.get::<i32, _>(9) as i64,
             })
         })
         .collect();

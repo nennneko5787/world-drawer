@@ -128,13 +128,16 @@ pub async fn undo(
             .execute(&mut *tx)
             .await;
     } else {
+        let prev_c = body.prev_c.to_lowercase();
+        let prev_ci = crate::color::hex_to_int(&prev_c);
         let _ = sqlx::query(
-            "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6)
-             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, coats=excluded.coats",
+            "INSERT INTO pixels(x, y, c, ci, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6,$7)
+             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, ci=excluded.ci, t=excluded.t, coats=excluded.coats",
         )
         .bind(body.x)
         .bind(body.y)
-        .bind(body.prev_c.to_lowercase())
+        .bind(prev_c)
+        .bind(prev_ci)
         .bind(&body.prev_t)
         .bind(&uid)
         .bind(body.prev_coats.clamp(0, 5))
@@ -184,9 +187,30 @@ pub async fn undo(
         return err(StatusCode::SERVICE_UNAVAILABLE, "busy");
     }
     state.tiles.bump(body.x, body.y);
-    let _ = state.hub.pixel_tx.send(
-        serde_json::json!({"kind": "pixel", "x": body.x, "y": body.y, "c": body.prev_c, "t": body.prev_t, "by": uid}).to_string(),
-    );
+    // 取消の復元を購読タイル宛にバイナリ配信。
+    // prevEmpty時は消去として送る (旧JSONのprev_c既定値"#000000"混入バグの修正)
+    {
+        use crate::tiles::tile_of;
+        use crate::ws::WsOut;
+        use crate::ws_proto::{self, ink_to_bits};
+        let (store_c, store_t) = if body.prev_empty {
+            (state.cfg.background.clone(), "erase".to_string())
+        } else {
+            (body.prev_c.to_lowercase(), body.prev_t.clone())
+        };
+        let (r, g, b) = crate::color::hex_to_rgb(&store_c);
+        let msg = WsOut::Bin(ws_proto::pixel_bin(
+            body.x,
+            body.y,
+            r,
+            g,
+            b,
+            ink_to_bits(&store_t),
+            body.prev_coats.clamp(0, 5) as u8,
+            &uid,
+        ));
+        state.hub.send_to_watchers(tile_of(body.x, body.y), &msg, None);
+    }
     let out = serde_json::json!({"ok": true, "x": body.x, "y": body.y,
         "level": level, "xp": xp,
         "xpNeeded": users::xp_needed_for_level(level, state.cfg.xp_base, state.cfg.xp_pow),

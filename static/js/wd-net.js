@@ -58,6 +58,7 @@
     }
   }
   let fetchSeq = 0;
+  let lastWatchSent = "";
   async function fetchViewport() {
     const seq = ++fetchSeq;
     const box = visibleBbox();
@@ -70,6 +71,12 @@
     if (need.length > MAX_TILES) {
       toast(t("zoomOutToast"));
       return;
+    }
+    // 購読タイルをWSへ通知 (interest管理。変わった時だけ)
+    const watchKey = need.join(";");
+    if (socket && socketReady && socket.readyState === 1 && watchKey !== lastWatchSent) {
+      lastWatchSent = watchKey;
+      try { socket.send(JSON.stringify({ t: "watch", tiles: need })); } catch {}
     }
     const known = [];
     for (const k of need) {
@@ -287,12 +294,18 @@
       if (wsGiveUp) return;
       const ticket = await fetchWsTicket();
       const ws = new WebSocket(wsUrl());
+      ws.binaryType = "arraybuffer";
       let helloDone = false;
       socket = ws;
       ws.onopen = () => {
         ws.send(JSON.stringify({ t: "hello", ticket, turnstileToken: ts }));
       };
       ws.onmessage = (ev) => {
+        // バイナリ (pixel/cursor/leave) とJSON (helloOk/join) の混在
+        if (ev.data instanceof ArrayBuffer) {
+          onWsBin(ev.data);
+          return;
+        }
         let d = null;
         try { d = JSON.parse(ev.data); } catch { return; }
         if (!d || typeof d !== "object") return;
@@ -329,10 +342,67 @@
           return;
         }
       };
+  // ---- WSバイナリ (20B pixel / 15B cursor / 7B leave) ----
+  const _td = new TextDecoder();
+  const INK_BITS = ["chalk", "ghost", "glow", "rainbow", "shield"];
+  function bitsToInk(bits) {
+    if (bits & 0x20) return "erase";
+    const parts = [];
+    for (let i = 0; i < 5; i++) {
+      if (bits & (1 << i)) parts.push(INK_BITS[i]);
+    }
+    return parts.length ? parts.join("+") : "normal";
+  }
+  function binUid(view, off) {
+    let s = "";
+    for (let i = 0; i < 6; i++) {
+      const c = view.getUint8(off + i);
+      if (c === 0) break;
+      s += String.fromCharCode(c);
+    }
+    return s;
+  }
+  function rgbHex(r, g, b) {
+    return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+  }
+  function onWsBin(buf) {
+    if (!buf || buf.byteLength < 7) return;
+    const v = new DataView(buf);
+    const kind = v.getUint8(0);
+    if (kind === 1 && buf.byteLength >= 20) {
+      // pixel
+      const x = v.getInt32(1, true), y = v.getInt32(5, true);
+      const ink = bitsToInk(v.getUint8(12));
+      const coats = v.getUint8(13);
+      const uid = binUid(v, 14);
+      if (ink === "erase") {
+        onPixel({ x, y, c: background, t: "normal", by: null });
+      } else {
+        onPixel({ x, y, c: rgbHex(v.getUint8(9), v.getUint8(10), v.getUint8(11)), t: ink, by: uid || null, coats });
+      }
+      return;
+    }
+    if (kind === 2 && buf.byteLength >= 15) {
+      // cursor (uid既知の分だけ反映。join取りこぼしは次回watchスナップショットで復旧)
+      const x = v.getInt32(1, true), y = v.getInt32(5, true);
+      const uid = binUid(v, 9);
+      const cur = remotes.get(uid);
+      if (!uid || !cur) return;
+      applyRemote({ uid, x, y });
+      return;
+    }
+    if (kind === 3) {
+      const uid = binUid(v, 1);
+      if (uid) remotes.delete(uid);
+      refreshUserList();
+      markDirty();
+    }
+  }
       ws.onclose = () => {
         socket = null;
         socketReady = false;
         wsConnecting = false;
+        lastWatchSent = "";
         if (wsGiveUp) return;
         if (!helloDone) {
           // hello前の切断も失敗扱い

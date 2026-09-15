@@ -14,12 +14,15 @@ pub async fn list(State(state): State<AppState>, Query(q): Query<Q>) -> Response
     let limit = q.limit.unwrap_or(200).clamp(1, 1000);
     let online: Vec<serde_json::Value> = state
         .hub
-        .peers
+        .infos
         .iter()
         .take(limit)
-        .map(|e| serde_json::json!({"uid": e.key()}))
+        .map(|e| {
+            serde_json::json!({"uid": e.value().uid, "name": e.value().name,
+                "color": e.value().color, "level": e.value().level})
+        })
         .collect();
-    let count = state.hub.peers.len();
+    let count = state.hub.live_count();
     let body = serde_json::json!({
         "online": online, "count": count, "truncated": count > limit,
     });
