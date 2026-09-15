@@ -43,7 +43,6 @@
   // 全量bbox取得はしない (MB級JSONの根絶)。消去の取りこぼしはタイル単位で照合する
   // truncatedは廃止: サーバは読める分だけ返し、残りはpendingで知らせる。促しトーストなし
   const TILE = 128;
-  const WATCH_CAP = 512; // サーバのwatch保持上限に合わせる
   const TILE_REQ_CAP = 4096; // サーバのneed解析上限に合わせる
   const CHASE_MAX = 3; // 1パンでの追いかけ再取得の上限
   const CHASE_CELLS = 20000; // これ以上のセル数を返した回は追いかけない (弱い鯖を叩き続けない)
@@ -78,7 +77,7 @@
     const watchKey = need.join(";");
     if (socket && socketReady && socket.readyState === 1 && watchKey !== lastWatchSent) {
       lastWatchSent = watchKey;
-      try { socket.send(JSON.stringify({ t: "watch", tiles: need.slice(0, WATCH_CAP) })); } catch {}
+      try { socket.send(watchBin(need)); } catch {}
     }
     if (need.length > TILE_REQ_CAP) {
       // 濫用防止の外枠。購読は上で送ったので実況は止まらない
@@ -311,51 +310,57 @@
       let helloDone = false;
       socket = ws;
       ws.onopen = () => {
-        ws.send(JSON.stringify({ t: "hello", ticket, turnstileToken: ts }));
+        ws.send(helloBin(ticket, ts));
       };
       ws.onmessage = (ev) => {
-        // バイナリ (pixel/cursor/leave) とJSON (helloOk/join) の混在
-        if (ev.data instanceof ArrayBuffer) {
-          onWsBin(ev.data);
-          return;
-        }
-        let d = null;
-        try { d = JSON.parse(ev.data); } catch { return; }
-        if (!d || typeof d !== "object") return;
-        // サーバは識別子にkindを使う (pixel載荷の"t"=インク種と衝突するため)
-        const kind = d.kind || d.t;
-        if (kind === "helloOk") {
-          if (!d.ok) {
+        // 完全バイナリ。Textフレームは送受信ともに使わない
+        if (!(ev.data instanceof ArrayBuffer)) return;
+        const buf = ev.data;
+        if (!buf || buf.byteLength < 1) return;
+        const kind = new DataView(buf).getUint8(0);
+        if (kind === 6 && buf.byteLength >= 9) {
+          // helloOk
+          const v = new DataView(buf);
+          const ok = v.getUint8(1) !== 0, err = v.getUint8(2);
+          const uid = binUid(v, 3);
+          if (!ok) {
             helloDone = true;
             wsConnecting = false;
             wsFailCount += 1;
             try { ws.close(); } catch {}
             socket = null;
-            onWsFailed(d.error);
+            onWsFailed(err === 1 ? "badTicket" : err === 2 ? "turnstileRequired" : err === 3 ? "noUser" : "");
             return;
           }
           helloDone = true;
           wsConnecting = false;
           wsFailCount = 0;
           socketReady = true;
-          if (d.uid) {
-            myUid = d.uid;
+          if (uid) {
+            myUid = uid;
             myUidEl.textContent = `#${myUid}`;
           }
           fetchViewport();
           return;
         }
-        if (kind === "pixel") { onPixel(d); return; }
-        if (kind === "cursor") { applyRemote(d); return; }
-        if (kind === "join") { applyRemote(d); refreshUserList(); return; }
-        if (kind === "leave") {
-          if (d.uid) remotes.delete(d.uid);
+        if (kind === 7 && buf.byteLength >= 13) {
+          // join (最小13B: 空名の理論値。実務上は名前入り)
+          // join
+          const v = new DataView(buf);
+          const uid = binUid(v, 1);
+          const nl = v.getUint8(7);
+          if (buf.byteLength < 8 + nl + 5) return;
+          const name = _td.decode(new Uint8Array(buf, 8, nl));
+          const o = 8 + nl;
+          const color = rgbHex(v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2));
+          const level = v.getUint16(o + 3, true);
+          applyRemote({ uid, name, color, level });
           refreshUserList();
-          markDirty();
           return;
         }
+        onWsBin(buf);
       };
-  // ---- WSバイナリ (20B pixel / 15B cursor / 7B leave) ----
+  // ---- WSバイナリ (完全。pixel 20B / cursor 15B / leave 7B / hello,watch可変 / helloOk 9B / join可変) ----
   const _td = new TextDecoder();
   const INK_BITS = ["chalk", "ghost", "glow", "rainbow", "shield"];
   function bitsToInk(bits) {
@@ -377,6 +382,43 @@
   }
   function rgbHex(r, g, b) {
     return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+  }
+  // ---- WS送信エンコーダ (完全バイナリ。受信レイアウトと対称) ----
+  const _te = new TextEncoder();
+  function helloBin(ticket, ts) {
+    const tb = _te.encode(ticket), sb = _te.encode(ts || "");
+    const buf = new ArrayBuffer(5 + tb.length + sb.length);
+    const v = new DataView(buf);
+    const u8 = new Uint8Array(buf);
+    v.setUint8(0, 4);
+    v.setUint16(1, tb.length, true);
+    u8.set(tb, 3);
+    v.setUint16(3 + tb.length, sb.length, true);
+    u8.set(sb, 3 + tb.length + 2);
+    return buf;
+  }
+  function watchBin(tiles) {
+    const n = Math.min(tiles.length, 512);
+    const v = new DataView(new ArrayBuffer(3 + n * 8));
+    v.setUint8(0, 5);
+    v.setUint16(1, n, true);
+    for (let i = 0; i < n; i++) {
+      const [tx, ty] = tiles[i].split(",").map(Number);
+      v.setInt32(3 + i * 8, tx, true);
+      v.setInt32(7 + i * 8, ty, true);
+    }
+    return v.buffer;
+  }
+  function cursorBin(x, y) {
+    const v = new DataView(new ArrayBuffer(15));
+    v.setUint8(0, 2);
+    v.setInt32(1, x, true);
+    v.setInt32(5, y, true);
+    const uid = myUid || "";
+    for (let i = 0; i < 6; i++) {
+      v.setUint8(9 + i, i < uid.length ? uid.charCodeAt(i) & 0xff : 0);
+    }
+    return v.buffer;
   }
   function onWsBin(buf) {
     if (!buf || buf.byteLength < 7) return;
@@ -549,7 +591,7 @@
     }
     lastCursorSent = nowMs;
     lastCursorCell = key;
-    try { socket.send(JSON.stringify({ t: "cursor", x, y })); } catch {}
+    try { socket.send(cursorBin(x, y)); } catch {}
   }
 
   async function refreshOnlineUsers() {

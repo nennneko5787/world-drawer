@@ -195,7 +195,6 @@ pub async fn rollback(
     }
     for ev in &events {
         use crate::tiles::tile_of;
-        use crate::ws::WsOut;
         use crate::ws_proto::{self, ink_to_bits};
         let x = ev.get("x").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
         let y = ev.get("y").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
@@ -208,7 +207,7 @@ pub async fn rollback(
         } else {
             ink_to_bits(t)
         };
-        let msg = WsOut::Bin(ws_proto::pixel_bin(x, y, r, g, b, ink, 1, by));
+        let msg = ws_proto::pixel_bin(x, y, r, g, b, ink, 1, by);
         state.hub.send_to_watchers(tile_of(x, y), &msg, None);
     }
     let out = serde_json::json!({"ok": true, "uid": uid, "restored": restored,

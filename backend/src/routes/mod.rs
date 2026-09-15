@@ -106,8 +106,8 @@ pub mod ws_route {
         })
     }
 
-    fn hello_err(s: &str) -> Message {
-        Message::Text(format!(r#"{{"t":"helloOk","ok":false,"error":"{s}"}}"#).into())
+    fn hello_ok(ok: bool, err: u8, uid: &str) -> Message {
+        Message::Binary(ws_proto::hello_ok_bin(ok, err, uid).into())
     }
 
     async fn serve(
@@ -124,22 +124,18 @@ pub mod ws_route {
             return;
         }
         let (mut sink, mut stream) = socket.split();
-        // 初手helloを10秒待つ
+        // 初手hello (Binary) を10秒待つ。Textは使わない
         let first = tokio::time::timeout(Duration::from_secs(10), stream.next()).await;
-        let Ok(Some(Ok(Message::Text(text)))) = first else {
+        let Ok(Some(Ok(Message::Binary(b)))) = first else {
             return;
         };
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
-        if v.get("t").and_then(|x| x.as_str()) != Some("hello") {
+        let Some((ticket, ts_token)) = ws_proto::parse_hello(&b) else {
             return;
-        }
-        let ticket = v.get("ticket").and_then(|x| x.as_str()).unwrap_or("");
-        let ts_token = v
-            .get("turnstileToken")
-            .and_then(|x| x.as_str())
-            .unwrap_or("");
-        let Some(token) = state.hub.take_ticket(ticket) else {
-            let _ = sink.send(hello_err("badTicket")).await;
+        };
+        let Some(token) = state.hub.take_ticket(&ticket) else {
+            let _ = sink
+                .send(hello_ok(false, ws_proto::HELLO_ERR_BAD_TICKET, ""))
+                .await;
             return;
         };
         // Turnstile必須 (ページ表示の度)
@@ -156,8 +152,10 @@ pub mod ws_route {
                 .as_ref()
                 .map(|t| t.secret_key.clone())
                 .unwrap_or_default();
-            if !turnstile::verify(&secret, ts_token, &client_ip, 10).await {
-                let _ = sink.send(hello_err("turnstileRequired")).await;
+            if !turnstile::verify(&secret, &ts_token, &client_ip, 10).await {
+                let _ = sink
+                    .send(hello_ok(false, ws_proto::HELLO_ERR_TURNSTILE, ""))
+                    .await;
                 return;
             }
         }
@@ -170,7 +168,9 @@ pub mod ws_route {
         .await
         .unwrap_or(None);
         let Some(r) = row else {
-            let _ = sink.send(hello_err("noUser")).await;
+            let _ = sink
+                .send(hello_ok(false, ws_proto::HELLO_ERR_NO_USER, ""))
+                .await;
             return;
         };
         use sqlx::Row;
@@ -186,16 +186,18 @@ pub mod ws_route {
         state.hub.sinks.insert(sid.clone(), (info.uid.clone(), tx));
         state.hub.infos.insert(sid.clone(), info.clone());
         // presence joinを全体へ (稀なのでbroadcast可)
-        state.hub.broadcast_all(
-            &WsOut::Text(
-                serde_json::json!({"t":"join","uid":info.uid,"name":info.name,
-                    "color":info.color,"level":info.level})
-                .to_string(),
-            ),
-            Some(&sid),
-        );
-        let ok = serde_json::json!({"t":"helloOk","ok":true,"uid":info.uid}).to_string();
-        if sink.send(Message::Text(ok.into())).await.is_err() {
+        {
+            let (jr, jg, jb) = crate::color::hex_to_rgb(&info.color);
+            state.hub.broadcast_all(
+                &ws_proto::join_bin(&info.uid, &info.name, jr, jg, jb, info.level),
+                Some(&sid),
+            );
+        }
+        if sink
+            .send(hello_ok(true, ws_proto::HELLO_ERR_NONE, &info.uid))
+            .await
+            .is_err()
+        {
             state.hub.remove(&sid);
             return;
         }
@@ -210,16 +212,12 @@ pub mod ws_route {
                     }
                     msg = rx.recv() => {
                         let Some(m) = msg else { break };
-                        let out = match m {
-                            WsOut::Text(t) => Message::Text(t.into()),
-                            WsOut::Bin(b) => Message::Binary(b.into()),
-                        };
-                        if sink.send(out).await.is_err() { break; }
+                        if sink.send(Message::Binary(m.into())).await.is_err() { break; }
                     }
                 }
             }
         };
-        // 受信: cursorは購読タイル宛にバイナリ中継、watchで購読更新
+        // 受信: 完全バイナリ。Textフレームは使わない (旧クライアントはhello応答が無く polling に落ちる)
         let hub2 = state.hub.clone();
         let sid2 = sid.clone();
         let recv_fut = async move {
@@ -228,14 +226,14 @@ pub mod ws_route {
                 .unwrap();
             let mut last_cell = String::new();
             while let Some(Ok(msg)) = stream.next().await {
-                let Message::Text(t) = msg else {
+                let Message::Binary(b) = msg else {
                     continue;
                 };
-                let v: serde_json::Value = serde_json::from_str(&t).unwrap_or_default();
-                match v.get("t").and_then(|x| x.as_str()) {
-                    Some("cursor") => {
-                        let x = v.get("x").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
-                        let y = v.get("y").and_then(|n| n.as_i64()).unwrap_or(0) as i32;
+                match b.first().copied() {
+                    Some(2) if b.len() >= 15 => {
+                        // cursor (購読タイル宛にバイナリ中継)
+                        let x = i32::from_le_bytes([b[1], b[2], b[3], b[4]]);
+                        let y = i32::from_le_bytes([b[5], b[6], b[7], b[8]]);
                         if x.abs() > 1_000_000 || y.abs() > 1_000_000 {
                             continue;
                         }
@@ -255,40 +253,23 @@ pub mod ws_route {
                             .unwrap_or_default();
                         hub2.send_to_watchers(
                             tile_of(x, y),
-                            &WsOut::Bin(ws_proto::cursor_bin(x, y, &uid)),
+                            &ws_proto::cursor_bin(x, y, &uid),
                             Some(&sid2),
                         );
                     }
-                    Some("watch") => {
-                        let mut set = HashSet::new();
-                        if let Some(arr) = v.get("tiles").and_then(|a| a.as_array()) {
-                            for item in arr.iter().take(512) {
-                                let Some(s) = item.as_str() else { continue };
-                                let mut it = s.split(',');
-                                let (Some(a), Some(b)) = (it.next(), it.next()) else {
-                                    continue;
-                                };
-                                if it.next().is_some() {
-                                    continue;
-                                }
-                                if let (Ok(tx), Ok(ty)) =
-                                    (a.parse::<i32>(), b.parse::<i32>())
-                                {
-                                    if tx.abs() <= 20000 && ty.abs() <= 20000 {
-                                        set.insert((tx, ty));
-                                    }
-                                }
-                            }
-                        }
+                    Some(5) => {
+                        // watch (購読更新)
+                        let Some(tiles) = ws_proto::parse_watch(&b) else {
+                            continue;
+                        };
+                        let set: HashSet<(i32, i32)> = tiles.into_iter().collect();
                         hub2.watch.insert(sid2.clone(), set.clone());
                         // 新規購読タイルの既存者をスナップショット送信
                         for (_, info) in hub2.joins_for(&sid2, &set) {
+                            let (jr, jg, jb) = crate::color::hex_to_rgb(&info.color);
                             let _ = hub2.sinks.get(&sid2).map(|s| {
-                                s.value().1.try_send(WsOut::Text(
-                                    serde_json::json!({"t":"join","uid":info.uid,
-                                        "name":info.name,"color":info.color,
-                                        "level":info.level})
-                                    .to_string(),
+                                s.value().1.try_send(ws_proto::join_bin(
+                                    &info.uid, &info.name, jr, jg, jb, info.level,
                                 ))
                             });
                         }
@@ -302,10 +283,9 @@ pub mod ws_route {
             _ = recv_fut => {}
         }
         if let Some(info) = state.hub.remove(&sid) {
-            state.hub.broadcast_all(
-                &WsOut::Bin(ws_proto::leave_bin(&info.uid)),
-                Some(&sid),
-            );
+            state
+                .hub
+                .broadcast_all(&ws_proto::leave_bin(&info.uid), Some(&sid));
         }
     }
 }

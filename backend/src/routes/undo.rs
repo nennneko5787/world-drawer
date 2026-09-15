@@ -192,7 +192,6 @@ pub async fn undo(
     // prevEmpty時は消去として送る (旧JSONのprev_c既定値"#000000"混入バグの修正)
     {
         use crate::tiles::tile_of;
-        use crate::ws::WsOut;
         use crate::ws_proto::{self, ink_to_bits};
         let (store_c, store_t) = if body.prev_empty {
             (state.cfg.background.clone(), "erase".to_string())
@@ -200,7 +199,7 @@ pub async fn undo(
             (body.prev_c.to_lowercase(), body.prev_t.clone())
         };
         let (r, g, b) = crate::color::hex_to_rgb(&store_c);
-        let msg = WsOut::Bin(ws_proto::pixel_bin(
+        let msg = ws_proto::pixel_bin(
             body.x,
             body.y,
             r,
@@ -209,7 +208,7 @@ pub async fn undo(
             ink_to_bits(&store_t),
             body.prev_coats.clamp(0, 5) as u8,
             &uid,
-        ));
+        );
         state.hub.send_to_watchers(tile_of(body.x, body.y), &msg, None);
     }
     // フロントは data.pixel / data.by で即時反映する (欠落すると例外→commError表示になる)

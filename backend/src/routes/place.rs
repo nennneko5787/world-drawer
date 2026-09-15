@@ -222,10 +222,9 @@ pub async fn place(
     // 購読タイル宛にバイナリ配信 (全員broadcast廃止)
     {
         use crate::tiles::tile_of;
-        use crate::ws::WsOut;
         use crate::ws_proto::{self, ink_to_bits};
         let (r, g, b) = crate::color::hex_to_rgb(&store_c);
-        let msg = WsOut::Bin(ws_proto::pixel_bin(
+        let msg = ws_proto::pixel_bin(
             body.x,
             body.y,
             r,
@@ -234,7 +233,7 @@ pub async fn place(
             ink_to_bits(&store_t),
             coats.clamp(0, 5) as u8,
             &uid,
-        ));
+        );
         state.hub.send_to_watchers(tile_of(body.x, body.y), &msg, None);
     }
     let body = serde_json::json!({

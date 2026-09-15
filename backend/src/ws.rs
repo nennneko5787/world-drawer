@@ -1,16 +1,13 @@
 //! WSハブ (素のWebSocket。Socket.IO廃止)。
 //! interest管理: 接続ごとの購読タイルにだけ配信する (全員broadcast廃止)。
-//! ペイロードはバイナリ (ws_proto)。join/helloOk等の稀な制御系のみJSONテキスト。
+//! 完全バイナリ (ws_proto)。Textフレームは使わない。
 
 use dashmap::DashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-#[derive(Clone, Debug)]
-pub enum WsOut {
-    Text(String),
-    Bin(Vec<u8>),
-}
+/// WS送信ペイロード。完全バイナリ (Textフレームは使わない)
+pub type WsOut = Vec<u8>;
 
 #[derive(Clone, Debug)]
 pub struct PeerInfo {
