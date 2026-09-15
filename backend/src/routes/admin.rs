@@ -148,7 +148,7 @@ pub async fn rollback(
                 .bind(y)
                 .execute(&mut *tx)
                 .await;
-            events.push(serde_json::json!({"x": x, "y": y, "c": "#ffffff", "t": "normal", "erased": true}));
+            events.push(serde_json::json!({"kind": "pixel", "x": x, "y": y, "c": "#ffffff", "t": "normal", "erased": true}));
         } else {
             let pc: String = rows[1].get(2);
             let pt: String = rows[1].get(3);
@@ -165,7 +165,7 @@ pub async fn rollback(
             .bind(&pu)
             .execute(&mut *tx)
             .await;
-            events.push(serde_json::json!({"x": x, "y": y, "c": pc, "t": pt, "by": pu}));
+            events.push(serde_json::json!({"kind": "pixel", "x": x, "y": y, "c": pc, "t": pt, "by": pu}));
         }
         restored += 1;
         xp_taken += rxp;

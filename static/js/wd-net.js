@@ -227,10 +227,13 @@
   let socketReady = false;
   let wsFailCount = 0;
   let wsGiveUp = false;
+  let wsConnecting = false;
   // 素WS (Socket.IO廃止): ticket + Turnstile必須。ページ表示の度に検証。
   // 失敗時は指数バックオフで最大3回まで (無限ウィジェット防止)。それ以上は手動リロード。
   async function connectSocket() {
-    if (socket || wsGiveUp) return;
+    // asyncの隙間での二重起動防止 (二重ticket+二重接続の原因)
+    if (socket || wsGiveUp || wsConnecting) return;
+    wsConnecting = true;
     try {
       const ts = await getTurnstileToken();
       if (wsGiveUp) return;
@@ -244,10 +247,13 @@
       ws.onmessage = (ev) => {
         let d = null;
         try { d = JSON.parse(ev.data); } catch { return; }
-        if (!d || typeof d.t !== "string") return;
-        if (d.t === "helloOk") {
+        if (!d || typeof d !== "object") return;
+        // サーバは識別子にkindを使う (pixel載荷の"t"=インク種と衝突するため)
+        const kind = d.kind || d.t;
+        if (kind === "helloOk") {
           if (!d.ok) {
             helloDone = true;
+            wsConnecting = false;
             wsFailCount += 1;
             try { ws.close(); } catch {}
             socket = null;
@@ -255,6 +261,7 @@
             return;
           }
           helloDone = true;
+          wsConnecting = false;
           wsFailCount = 0;
           socketReady = true;
           if (d.uid) {
@@ -264,10 +271,10 @@
           fetchViewport();
           return;
         }
-        if (d.t === "pixel") { onPixel(d); return; }
-        if (d.t === "cursor") { applyRemote(d); return; }
-        if (d.t === "join") { applyRemote(d); refreshUserList(); return; }
-        if (d.t === "leave") {
+        if (kind === "pixel") { onPixel(d); return; }
+        if (kind === "cursor") { applyRemote(d); return; }
+        if (kind === "join") { applyRemote(d); refreshUserList(); return; }
+        if (kind === "leave") {
           if (d.uid) remotes.delete(d.uid);
           refreshUserList();
           markDirty();
@@ -277,6 +284,7 @@
       ws.onclose = () => {
         socket = null;
         socketReady = false;
+        wsConnecting = false;
         if (wsGiveUp) return;
         if (!helloDone) {
           // hello前の切断も失敗扱い
@@ -296,10 +304,12 @@
         try { ws.close(); } catch {}
       };
     } catch {
+      wsConnecting = false;
       onWsFailed("");
     }
   }
   function onWsFailed(reason) {
+    wsConnecting = false;
     if (wsFailCount >= 3) {
       wsGiveUp = true;
       socket = null;

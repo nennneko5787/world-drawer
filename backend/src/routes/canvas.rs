@@ -6,9 +6,13 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct Bbox {
+    #[serde(alias = "minX")]
     pub min_x: Option<i32>,
+    #[serde(alias = "maxX")]
     pub max_x: Option<i32>,
+    #[serde(alias = "minY")]
     pub min_y: Option<i32>,
+    #[serde(alias = "maxY")]
     pub max_y: Option<i32>,
 }
 

@@ -184,7 +184,7 @@ pub async fn undo(
         return err(StatusCode::SERVICE_UNAVAILABLE, "busy");
     }
     let _ = state.hub.pixel_tx.send(
-        serde_json::json!({"x": body.x, "y": body.y, "c": body.prev_c, "t": body.prev_t, "by": uid}).to_string(),
+        serde_json::json!({"kind": "pixel", "x": body.x, "y": body.y, "c": body.prev_c, "t": body.prev_t, "by": uid}).to_string(),
     );
     let out = serde_json::json!({"ok": true, "x": body.x, "y": body.y, "level": level, "xp": xp, "inventory": inv});
     (StatusCode::OK, axum::Json(out)).into_response()

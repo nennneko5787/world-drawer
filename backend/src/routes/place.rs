@@ -216,9 +216,9 @@ pub async fn place(
         return err(StatusCode::SERVICE_UNAVAILABLE, "busy");
     }
 
-    // broadcast (lag時は捨てる)
+    // broadcast (lag時は捨てる)。"kind"で識別 ("t"はインク種別で使うため)
     let _ = state.hub.pixel_tx.send(
-        serde_json::json!({"x": body.x, "y": body.y, "c": store_c, "t": store_t, "by": uid, "coats": coats}).to_string(),
+        serde_json::json!({"kind": "pixel", "x": body.x, "y": body.y, "c": store_c, "t": store_t, "by": uid, "coats": coats}).to_string(),
     );
     let body = serde_json::json!({
         "ok": true, "x": body.x, "y": body.y,

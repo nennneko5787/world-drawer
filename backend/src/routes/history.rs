@@ -9,6 +9,7 @@ pub struct Q {
     pub x: i32,
     pub y: i32,
     pub limit: Option<i64>,
+    #[serde(alias = "beforeId")]
     pub before_id: Option<i64>,
 }
 
