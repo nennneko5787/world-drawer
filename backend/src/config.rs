@@ -127,12 +127,70 @@ fn strip_jsonc(text: &str) -> String {
     out
 }
 
+/// `}` `]` 直前の余分なカンマを除去 (文字列リテラル内は保持)。
+fn remove_trailing_commas(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let b = text.as_bytes();
+    let mut i = 0;
+    let mut in_str = false;
+    let mut esc = false;
+    while i < b.len() {
+        let c = b[i] as char;
+        if in_str {
+            out.push(c);
+            if esc {
+                esc = false;
+            } else if c == '\\' {
+                esc = true;
+            } else if c == '"' {
+                in_str = false;
+            }
+            i += 1;
+            continue;
+        }
+        if c == '"' {
+            in_str = true;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        if c == ',' {
+            let mut j = i + 1;
+            while j < b.len() && (b[j] as char).is_whitespace() {
+                j += 1;
+            }
+            if j < b.len() && (b[j] == b'}' || b[j] == b']') {
+                i += 1;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
+fn empty_object() -> serde_json::Value {
+    serde_json::Value::Object(Default::default())
+}
+
 fn read_one(path: &PathBuf) -> serde_json::Value {
-    let Ok(raw) = std::fs::read_to_string(path) else {
-        return serde_json::Value::Object(Default::default());
+    let raw = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(_) => return empty_object(),
     };
-    let stripped = strip_jsonc(&raw);
-    serde_json::from_str(&stripped).unwrap_or_default()
+    let cleaned = remove_trailing_commas(&strip_jsonc(&raw));
+    match serde_json::from_str::<serde_json::Value>(&cleaned) {
+        Ok(serde_json::Value::Object(map)) => serde_json::Value::Object(map),
+        Ok(_) => {
+            tracing::warn!("{} root must be an object, using defaults", path.display());
+            empty_object()
+        }
+        Err(e) => {
+            tracing::warn!("{} parse error, using defaults: {e}", path.display());
+            empty_object()
+        }
+    }
 }
 
 fn deep_merge(mut a: serde_json::Value, b: serde_json::Value) -> serde_json::Value {
@@ -181,4 +239,17 @@ pub fn load() -> anyhow::Result<Config> {
         }
     }
     Ok(cfg)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trailing_comma_and_comments() {
+        let text = "{\n// c\n\"siteUrl\": \"https://x.example\",\n\"corsOrigins\": [],\n}";
+        let v: serde_json::Value =
+            serde_json::from_str(&remove_trailing_commas(&strip_jsonc(text))).unwrap();
+        assert_eq!(v["siteUrl"], "https://x.example");
+    }
 }
