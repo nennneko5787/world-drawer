@@ -177,7 +177,7 @@ pub mod ws_route {
         let info = PeerInfo {
             uid: r.get::<String, _>(0),
             name: r.get::<String, _>(1),
-            color: r.get::<String, _>(2),
+            color: crate::color::int_to_hex(r.get::<i32, _>(2)),
             level: r.get::<i32, _>(3) as i64,
         };
 

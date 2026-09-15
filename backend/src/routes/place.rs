@@ -202,7 +202,7 @@ pub async fn place(
             .bind(body.y)
             .bind(&uid)
             .bind(crate::color::hex_to_int(&store_c).unwrap_or(0xffffff))
-            .bind(&store_t)
+            .bind(crate::ws_proto::ink_to_bits(&store_t) as i16)
             .bind(now)
             .execute(&mut *tx)
             .await;
@@ -269,12 +269,13 @@ async fn write_pixel(
         let c = color.to_lowercase();
         let ci = crate::color::hex_to_int(&c).unwrap_or(0xffffff);
         let _ = sqlx::query(
-            "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,'normal',$4,1)
-             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t='normal', by=excluded.by, coats=1",
+            "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,$4,$5,1)
+             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by, coats=1",
         )
         .bind(x)
         .bind(y)
         .bind(ci)
+        .bind(0i16)
         .bind(uid)
         .execute(&mut **tx)
         .await;
@@ -296,11 +297,11 @@ async fn write_pixel(
         .fetch_optional(&mut **tx)
         .await
         .unwrap_or(None);
-    let (base_ci, base_t, base_coats): (Option<i32>, Option<String>, i32) =
+    let (base_ci, base_t, base_coats): (Option<i32>, Option<i16>, i32) =
         match row {
             Some(r) => {
                 use sqlx::Row;
-                (Some(r.get(0)), Some(r.get(1)), r.get(2))
+                (Some(r.get(0)), Some(r.get(1)), r.get::<i16, _>(2) as i32)
             }
             None => (None, None, 1),
         };
@@ -312,7 +313,7 @@ async fn write_pixel(
         (c, if want_ghost { base_coats } else { 1 })
     } else if !want_ghost {
         (chosen.clone(), 1)
-    } else if base_t.as_deref().map(|t| t.contains("ghost")).unwrap_or(false) && base_coats >= 1
+    } else if base_t.map(|t| t & 2 != 0).unwrap_or(false) && base_coats >= 1
     {
         (chosen.clone(), (base_coats + 1).min(MAX_GHOST_COATS))
     } else if base_hex.is_none() {
@@ -323,6 +324,7 @@ async fn write_pixel(
     };
     let store_t = need.join("+");
     let store_ci = crate::color::hex_to_int(&store_c).unwrap_or(0xffffff);
+    let store_ti = crate::ws_proto::ink_to_bits(&store_t) as i16;
     let _ = sqlx::query(
         "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6)
          ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by, coats=excluded.coats",
@@ -330,9 +332,9 @@ async fn write_pixel(
     .bind(x)
     .bind(y)
     .bind(store_ci)
-    .bind(&store_t)
+    .bind(store_ti)
     .bind(uid)
-    .bind(coats)
+    .bind(coats as i16)
     .execute(&mut **tx)
     .await;
     for p in &need {

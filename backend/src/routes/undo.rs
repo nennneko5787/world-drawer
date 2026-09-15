@@ -93,10 +93,10 @@ pub async fn undo(
     let hid: i64 = h.get(0);
     let huid: String = h.get(1);
     let hc: i32 = h.get(2);
-    let ht: String = h.get(3);
+    let ht: String = crate::ws_proto::bits_to_ink(h.get::<i16, _>(3));
     let hat: f64 = h.get(4);
-    let hundone: i32 = h.get(5);
-    if huid != uid || hundone != 0 || now - hat > 3.0 {
+    let hundone: bool = h.get(5);
+    if huid != uid || hundone || now - hat > 3.0 {
         return err(StatusCode::CONFLICT, "tooLate");
     }
     // 現在値一致
@@ -113,7 +113,7 @@ pub async fn undo(
     } else if let Some(c) = cur {
         use sqlx::Row;
         let cc: i32 = c.get(0);
-        let tt: String = c.get(1);
+        let tt: String = crate::ws_proto::bits_to_ink(c.get::<i16, _>(1));
         if cc != hc || tt != ht {
             return err(StatusCode::CONFLICT, "changed");
         }
@@ -137,9 +137,9 @@ pub async fn undo(
         .bind(body.x)
         .bind(body.y)
         .bind(prev_ci)
-        .bind(&body.prev_t)
+        .bind(crate::ws_proto::ink_to_bits(&body.prev_t) as i16)
         .bind(&uid)
-        .bind(body.prev_coats.clamp(0, 5))
+        .bind(body.prev_coats.clamp(0, 5) as i16)
         .execute(&mut *tx)
         .await;
         let _ = sqlx::query(
@@ -150,7 +150,7 @@ pub async fn undo(
         .execute(&mut *tx)
         .await;
     }
-    let _ = sqlx::query("UPDATE history SET undone = 1 WHERE id = $1")
+    let _ = sqlx::query("UPDATE history SET undone = true WHERE id = $1")
         .bind(hid)
         .execute(&mut *tx)
         .await;

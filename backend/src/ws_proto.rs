@@ -35,6 +35,36 @@ pub fn ink_to_bits(t: &str) -> u8 {
     b
 }
 
+/// bitmask → ink正準形。ink_to_bits の逆 (DBのt列読み用)。
+/// ビット順はalphabetical (正準ソート順) に戻す。
+pub fn bits_to_ink(b: i16) -> String {
+    let b = b as u8;
+    if b & 0x20 != 0 {
+        return "erase".into();
+    }
+    let mut parts = vec![];
+    if b & 1 != 0 {
+        parts.push("chalk");
+    }
+    if b & 2 != 0 {
+        parts.push("ghost");
+    }
+    if b & 4 != 0 {
+        parts.push("glow");
+    }
+    if b & 8 != 0 {
+        parts.push("rainbow");
+    }
+    if b & 16 != 0 {
+        parts.push("shield");
+    }
+    if parts.is_empty() {
+        "normal".into()
+    } else {
+        parts.join("+")
+    }
+}
+
 /// pixel 20B: [kind, x4, y4, r,g,b, ink, coats, uid6]
 pub fn pixel_bin(x: i32, y: i32, r: u8, g: u8, b: u8, ink: u8, coats: u8, uid: &str) -> Vec<u8> {
     let mut v = Vec::with_capacity(20);
@@ -87,6 +117,25 @@ mod tests {
         assert_eq!(ink_to_bits("normal"), 0);
         assert_eq!(ink_to_bits("erase"), 0x20);
         assert_eq!(ink_to_bits("bogus"), 0);
+    }
+
+    #[test]
+    fn bits_roundtrip() {
+        for s in [
+            "normal",
+            "erase",
+            "chalk",
+            "ghost",
+            "glow",
+            "rainbow",
+            "shield",
+            "chalk+ghost",
+            "ghost+glow",
+            "chalk+ghost+glow+rainbow+shield",
+        ] {
+            assert_eq!(bits_to_ink(ink_to_bits(s) as i16), s);
+        }
+        assert_eq!(bits_to_ink(0), "normal");
     }
 
     #[test]

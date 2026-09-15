@@ -81,9 +81,9 @@ pub async fn bbox(State(state): State<AppState>, Query(q): Query<Bbox>) -> Respo
         let x: i32 = r.get(0);
         let y: i32 = r.get(1);
         let c: String = crate::color::int_to_hex(r.get::<i32, _>(2));
-        let t: String = r.get(3);
+        let t: String = crate::ws_proto::bits_to_ink(r.get::<i16, _>(3));
         let by: Option<String> = r.get(4);
-        let coats: i32 = r.get(5);
+        let coats: i16 = r.get(5);
         pixels.insert(
             format!("{x},{y}"),
             serde_json::json!({"c": c, "t": t, "by": by, "coats": coats}),

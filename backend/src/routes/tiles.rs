@@ -143,11 +143,11 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
         let x: i32 = r.get(0);
         let y: i32 = r.get(1);
         let k = tiles::tile_of(x, y);
-        // cはINTEGER。APIはhexのまま (フロント無変更)
+        // cはINTEGER、tはbitmask。APIは従来通りhex/正準形 (フロント無変更)
         let c: String = crate::color::int_to_hex(r.get::<i32, _>(2));
         let cell = serde_json::json!({
-            "c": c, "t": r.get::<String, _>(3),
-            "by": r.get::<Option<String>, _>(4), "coats": r.get::<i32, _>(5),
+            "c": c, "t": crate::ws_proto::bits_to_ink(r.get::<i16, _>(3)),
+            "by": r.get::<Option<String>, _>(4), "coats": r.get::<i16, _>(5),
         });
         bucket.entry(k).or_default().insert(format!("{x},{y}"), cell);
     }

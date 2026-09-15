@@ -64,7 +64,7 @@ pub async fn create(
         let token = format!("wd_{}", uuid::Uuid::new_v4().simple());
         let uid = users::gen_uid();
         let name = "ななし";
-        let color = "#22aa66";
+        let color = 0x22aa66;
         let inv = serde_json::json!({"glow":0,"rainbow":0,"ghost":0,"chalk":0,"shield":0});
         let r = sqlx::query(
             "INSERT INTO users(token, uid, name, color, inventory) VALUES ($1,$2,$3,$4,$5)
@@ -81,7 +81,7 @@ pub async fn create(
             Ok(done) if done.rows_affected() == 1 => {
                 let body = serde_json::json!({
                     "ok": true, "token": token, "uid": uid,
-                    "profile": {"name": name, "color": color},
+                    "profile": {"name": name, "color": crate::color::int_to_hex(color)},
                     "inventory": {"glow":0,"rainbow":0,"ghost":0,"chalk":0,"shield":0},
                     "cooldownUntil": 0.0,
                     "cooldown": state.cfg.cooldown_sec,

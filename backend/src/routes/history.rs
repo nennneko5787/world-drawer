@@ -26,7 +26,7 @@ pub async fn history(State(state): State<AppState>, Query(q): Query<Q>) -> Respo
                     CASE WHEN u.showCountry = 1 THEN u.country ELSE NULL END,
                     COALESCE(u.level,1)
              FROM history h LEFT JOIN users u ON u.uid = h.uid
-             WHERE h.x = $1 AND h.y = $2 AND h.undone = 0 AND h.id < $3
+             WHERE h.x = $1 AND h.y = $2 AND NOT h.undone AND h.id < $3
              ORDER BY h.id DESC LIMIT $4",
         )
         .bind(q.x)
@@ -43,7 +43,7 @@ pub async fn history(State(state): State<AppState>, Query(q): Query<Q>) -> Respo
                     CASE WHEN u.showCountry = 1 THEN u.country ELSE NULL END,
                     COALESCE(u.level,1)
              FROM history h LEFT JOIN users u ON u.uid = h.uid
-             WHERE h.x = $1 AND h.y = $2 AND h.undone = 0
+             WHERE h.x = $1 AND h.y = $2 AND NOT h.undone
              ORDER BY h.id DESC LIMIT $3",
         )
         .bind(q.x)
@@ -61,8 +61,10 @@ pub async fn history(State(state): State<AppState>, Query(q): Query<Q>) -> Respo
         .map(|r| {
             serde_json::json!({
                 "id": r.get::<i64, _>(0), "uid": r.get::<String, _>(1),
-                "name": r.get::<String, _>(2), "userColor": r.get::<String, _>(3),
-                "c": crate::color::int_to_hex(r.get::<i32, _>(4)), "t": r.get::<String, _>(5),
+                "name": r.get::<String, _>(2),
+                "userColor": crate::color::int_to_hex(r.get::<i32, _>(3)),
+                "c": crate::color::int_to_hex(r.get::<i32, _>(4)),
+                "t": crate::ws_proto::bits_to_ink(r.get::<i16, _>(5)),
                 "at": r.get::<f64, _>(6), "country": r.get::<Option<String>, _>(7),
                 "level": r.get::<i32, _>(8) as i64,
             })

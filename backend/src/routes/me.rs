@@ -42,7 +42,7 @@ pub async fn me(
     let body = serde_json::json!({
         "token": token,
         "uid": r.get::<String, _>(1),
-        "profile": {"name": r.get::<String, _>(2), "color": r.get::<String, _>(3)},
+        "profile": {"name": r.get::<String, _>(2), "color": crate::color::int_to_hex(r.get::<i32, _>(3))},
         "inventory": users::parse_inventory(&inv, &keys),
         "cooldownUntil": r.get::<f64, _>(5),
         "cooldown": users::cooldown_for_level(

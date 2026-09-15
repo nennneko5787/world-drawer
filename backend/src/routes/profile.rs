@@ -44,7 +44,7 @@ pub async fn update(
         return (StatusCode::NOT_FOUND, r#"{"ok":false,"error":"noUser"}"#).into_response();
     };
     use sqlx::Row;
-    let cur_color: String = r.get(1);
+    let cur_color = crate::color::int_to_hex(r.get::<i32, _>(1));
     let cur_show: i32 = r.get(2);
     let cur_country: Option<String> = r.get(3);
     let new_name = users::clean_name(&body.name, 20, "ななし");
@@ -54,7 +54,7 @@ pub async fn update(
         "UPDATE users SET name = $1, color = $2, showCountry = $3 WHERE token = $4",
     )
     .bind(&new_name)
-    .bind(&new_color)
+    .bind(crate::color::hex_to_int(&new_color).unwrap_or(0x22aa66))
     .bind(if new_show { 1 } else { 0 })
     .bind(&token)
     .execute(&mut *tx)

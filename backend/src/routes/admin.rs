@@ -67,7 +67,7 @@ pub async fn lookup(
     use sqlx::Row;
     let out = serde_json::json!({"ok": true, "user": {
         "uid": r.get::<String, _>(0), "name": r.get::<String, _>(1),
-        "color": r.get::<String, _>(2), "level": r.get::<i32, _>(3) as i64,
+        "color": crate::color::int_to_hex(r.get::<i32, _>(2)), "level": r.get::<i32, _>(3) as i64,
         "xp": r.get::<i32, _>(4) as i64,
     }});
     (StatusCode::OK, axum::Json(out)).into_response()
@@ -107,7 +107,7 @@ pub async fn rollback(
     };
     use sqlx::Row;
     let cells: Vec<(i32, i32)> = sqlx::query(
-        "SELECT DISTINCT x, y FROM history WHERE uid = $1 AND undone = 0 LIMIT $2",
+        "SELECT DISTINCT x, y FROM history WHERE uid = $1 AND NOT undone LIMIT $2",
     )
     .bind(&uid)
     .bind(limit + 1)
@@ -125,7 +125,7 @@ pub async fn rollback(
     for (x, y) in cells.iter().take(limit as usize) {
         let rows = sqlx::query(
             "SELECT id, uid, c, t, xp FROM history
-             WHERE x = $1 AND y = $2 AND undone = 0 ORDER BY id DESC LIMIT 2",
+             WHERE x = $1 AND y = $2 AND NOT undone ORDER BY id DESC LIMIT 2",
         )
         .bind(x)
         .bind(y)
@@ -138,7 +138,7 @@ pub async fn rollback(
         }
         let rid: i64 = rows[0].get(0);
         let rxp: i64 = rows[0].get::<i32, _>(4) as i64;
-        let _ = sqlx::query("UPDATE history SET undone = 1 WHERE id = $1")
+        let _ = sqlx::query("UPDATE history SET undone = true WHERE id = $1")
             .bind(rid)
             .execute(&mut *tx)
             .await;
@@ -151,7 +151,7 @@ pub async fn rollback(
             events.push(serde_json::json!({"kind": "pixel", "x": x, "y": y, "c": "#ffffff", "t": "normal", "erased": true}));
         } else {
             let pc: i32 = rows[1].get(2);
-            let pt: String = rows[1].get(3);
+            let pt: String = crate::ws_proto::bits_to_ink(rows[1].get::<i16, _>(3));
             let pu: String = rows[1].get(1);
             let _ = sqlx::query(
                 "INSERT INTO pixels(x, y, c, t, by, coats, shieldUntil) VALUES ($1,$2,$3,$4,$5,1,0)
