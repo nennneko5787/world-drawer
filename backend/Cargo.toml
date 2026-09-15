@@ -1,0 +1,33 @@
+[package]
+name = "world-drawer-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "compression-br", "trace", "limit", "timeout"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls", "macros"] }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+dashmap = "6"
+moka = { version = "0.12", features = ["future"] }
+argon2 = "0.5"
+scrypt = "0.11"
+hex = "0.4"
+rand = "0.8"
+blake3 = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+validator = { version = "0.18", features = ["derive"] }
+regex = "1"
+ipnet = "2"
+humantime = "2"
+thiserror = "2"
+anyhow = "1"
+chrono = "0.4"
+uuid = { version = "1", features = ["v4"] }
+futures-util = "0.3"

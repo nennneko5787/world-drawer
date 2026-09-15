@@ -3,7 +3,12 @@
 "use strict";
   async function ensureToken() {
     if (token) return;
-    const res = await fetch(`/api/session?lang=${encodeURIComponent(window.wdI18n.lang)}&tz=${encodeURIComponent(myTz)}`, { method: "POST" });
+    const ts = await getTurnstileToken();
+    const res = await fetch(`${apiBase()}/api/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ turnstile_token: ts, lang: window.wdI18n.lang }),
+    });
     const data = await res.json();
     if (!data.ok || !data.token) throw new Error("session failed");
     token = data.token;
@@ -39,7 +44,7 @@
     const seq = ++fetchSeq;
     const box = visibleBbox();
     try {
-      const url = `/api/canvas?minX=${box.minX}&minY=${box.minY}&maxX=${box.maxX}&maxY=${box.maxY}`;
+      const url = `${apiBase()}/api/canvas?minX=${box.minX}&minY=${box.minY}&maxX=${box.maxX}&maxY=${box.maxY}`;
       const canvasData = await (await fetch(url)).json();
       if (seq !== fetchSeq) return; // 古い応答は破棄
       if (canvasData.background && canvasData.background !== background) {
@@ -126,7 +131,7 @@
       centerOn(best.x, best.y);
     } else {
       try {
-        const b = await (await fetch("/api/bounds")).json();
+        const b = await (await fetch(`${apiBase()}/api/bounds`)).json();
         if (b.count > 0 && b.minX != null) centerOn((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2);
         else {
           toast(t("noArtToast"));
@@ -170,7 +175,7 @@
     try {
       await ensureToken();
       await fetchViewport(); // 視野+余白だけ取得
-      const me = await (await fetch(`/api/me?token=${encodeURIComponent(token)}&lang=${encodeURIComponent(window.wdI18n.lang)}&tz=${encodeURIComponent(myTz)}`)).json();
+      const me = await (await fetch(`${apiBase()}/api/me`, { headers: authHeaders() })).json();
       inventory = { ...inventory, ...me.inventory };
       cooldownUntil = me.cooldownUntil ? me.cooldownUntil * 1000 : 0;
       myCountry = me.country ?? null;
@@ -220,78 +225,62 @@
 
   let socket = null;
   let socketReady = false;
-  function connectSocket() {
+  // 素WS (Socket.IO廃止): ticket + Turnstile必須。ページ表示の度に検証
+  async function connectSocket() {
     if (socket) return;
-    if (typeof io === "undefined") {
+    try {
+      const ts = await getTurnstileToken();
+      const ticket = await fetchWsTicket();
+      const ws = new WebSocket(wsUrl());
+      socket = ws;
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ t: "hello", ticket, turnstileToken: ts }));
+      };
+      ws.onmessage = (ev) => {
+        let d = null;
+        try { d = JSON.parse(ev.data); } catch { return; }
+        if (!d || typeof d.t !== "string") return;
+        if (d.t === "helloOk") {
+          if (!d.ok) {
+            toast(t("turnstileFailed"));
+            try { ws.close(); } catch {}
+            socket = null;
+            return;
+          }
+          socketReady = true;
+          if (d.uid) {
+            myUid = d.uid;
+            myUidEl.textContent = `#${myUid}`;
+          }
+          fetchViewport();
+          return;
+        }
+        if (d.t === "pixel") { onPixel(d); return; }
+        if (d.t === "cursor") { applyRemote(d); return; }
+        if (d.t === "join") { applyRemote(d); refreshUserList(); return; }
+        if (d.t === "leave") {
+          if (d.uid) remotes.delete(d.uid);
+          refreshUserList();
+          markDirty();
+          return;
+        }
+      };
+      ws.onclose = () => {
+        socket = null;
+        socketReady = false;
+        setTimeout(connectSocket, 3000);
+      };
+      ws.onerror = () => {
+        try { ws.close(); } catch {}
+      };
+    } catch {
       setInterval(() => {
         fetchViewport();
         refreshOnlineUsers();
       }, 5000);
-      return;
     }
-    socket = wsOnly ? io({ transports: ["websocket"] }) : io();
-    socket.on("connect", () => {
-      socketReady = true;
-      socket.emit("hello", { token, name: myName, color: myColor, lang: window.wdI18n.lang, tz: myTz });
-    });
-    socket.on("init", (d) => {
-      if (d.background && d.background !== background) {
-        background = d.background;
-        markStatic();
-      } else {
-        background = d.background || background;
-      }
-      if (d.cooldown) cooldown = d.cooldown;
-      applyZoneData(d);
-      refreshLevelUI();
-      (d.online || []).forEach(applyRemote);
-      refreshUserList();
-      fetchViewport(); // 全量は送られてこないので視野を取得
-    });
-    socket.on("helloOk", (d) => {
-      if (d.token && d.token !== token) {
-        token = d.token;
-        localStorage.setItem("wd_token", token);
-      }
-      inventory = { ...inventory, ...d.inventory };
-      myCountry = d.country ?? null;
-      myShowCountry = d.showCountry ?? true;
-      countryChk.checked = myShowCountry;
-      cooldownUntil = d.cooldownUntil ? d.cooldownUntil * 1000 : cooldownUntil;
-      if (d.uid) {
-        myUid = d.uid;
-        myUidEl.textContent = `#${myUid}`;
-      }
-      if (d.profile && document.activeElement !== profileName) {
-        // サーバー正に合わせる (統合後の古い端末など)。入力中は上書きしない
-        if (d.profile.name) {
-          myName = d.profile.name;
-          profileName.value = myName;
-          try {
-            localStorage.setItem("wd_name", myName);
-          } catch {}
-        }
-        if (d.profile.color) {
-          setProfileColor(d.profile.color);
-          try {
-            localStorage.setItem("wd_userColor", myColor);
-          } catch {}
-        }
-      }
-      applyLevelData(d);
-      refreshInkUI();
-      refreshUserList();
-    });
-    socket.on("accountMerged", (d) => {
-      // 統合対象アカウントの全接続先で生き残りトークンに載せ替えて再読み込み。
-      // 放置すると古いトークンのタブが空アカウントを復活させてしまう。
-      try {
-        if (d && d.token) localStorage.setItem("wd_token", d.token);
-        sessionStorage.setItem("wd_merged", "1");
-      } catch {}
-      location.reload();
-    });
-    socket.on("pixel", (p) => {
+  }
+  function onPixel(p) {
       const key = `${p.x},${p.y}`;
       const prev = pixels.get(key) || null;
       if (p.t === "normal" && String(p.c).toLowerCase() === background.toLowerCase()) {
@@ -306,26 +295,6 @@
       markStatic();
       if (pendingUndo && `${pendingUndo.x},${pendingUndo.y}` === key && p.by !== myUid) cancelUndo();
       if (historyMode && historyKey === key) showHistory(p.x, p.y);
-    });
-    socket.on("placeResult", (r) => {
-      if (!r.ok && r.error === "cooldown") {
-        cooldownUntil = r.cooldownUntil * 1000;
-        toast(t("cooldownToast", { s: r.remaining }));
-      } else if (!r.ok && r.error === "shielded") {
-        toast(t("shieldToast", { s: r.remaining ?? 0 }));
-      } else if (!r.ok && r.error === "noSocket") {
-        toast(t("socketRequiredToast"));
-      } else if (!r.ok && r.error === "cursorMismatch") {
-        toast(t("cursorMismatchToast"));
-      }
-    });
-    socket.on("cursor", applyRemote);
-    socket.on("presence", applyPresenceList);
-    socket.on("leave", (d) => {
-      if (d && d.uid) remotes.delete(d.uid);
-      refreshUserList();
-      markDirty();
-    });
   }
 
   // カーソルは10秒で画面から消える。その分の再描画を予約 (連打防止の単発)
@@ -380,7 +349,7 @@
   let lastCursorSent = 0;
   let lastCursorCell = "";
   function sendCursor(x, y, force) {
-    if (!socket || !socketReady) return;
+    if (!socket || !socketReady || socket.readyState !== 1) return;
     const key = `${x},${y}`;
     const nowMs = Date.now();
     if (!force) {
@@ -389,12 +358,12 @@
     }
     lastCursorSent = nowMs;
     lastCursorCell = key;
-    socket.emit("cursor", { token, x, y });
+    try { socket.send(JSON.stringify({ t: "cursor", x, y })); } catch {}
   }
 
   async function refreshOnlineUsers() {
     try {
-      const data = await (await fetch("/api/users")).json();
+      const data = await (await fetch(`${apiBase()}/api/users`)).json();
       applyPresenceList(data.online || [], data.count);
     } catch {}
   }
@@ -421,10 +390,10 @@
       }
     }
     try {
-      const res = await fetch("/api/place", {
+      const res = await fetch(`${apiBase()}/api/place`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ x, y, color: paintColor, ink: inkToUse, token }),
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ x, y, color: paintColor, ink: inkToUse }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -507,15 +476,15 @@
     const target = pendingUndo;
     cancelUndo();
     try {
-      const body = { token, x: target.x, y: target.y, prevEmpty: target.prev == null };
+      const body = { x: target.x, y: target.y, prevEmpty: target.prev == null };
       if (target.prev) {
         body.prevC = target.prev.c;
         body.prevT = target.prev.t;
         body.prevCoats = target.prev.coats ?? 1;
       }
-      const res = await fetch("/api/undo", {
+      const res = await fetch(`${apiBase()}/api/undo`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(body),
       });
       const data = await res.json();

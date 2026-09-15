@@ -1,0 +1,22 @@
+# world-drawer backend infra (Postgres + Valkey)
+services:
+  pg:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-secret}
+      POSTGRES_DB: ${PG_DB:-worlddrawer}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  valkey:
+    image: valkey/valkey:8
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - valkeydata:/data
+volumes:
+  pgdata:
+  valkeydata:

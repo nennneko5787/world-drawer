@@ -8,12 +8,11 @@
     localStorage.setItem("wd_userColor", myColor);
     profileName.value = myName;
     try {
-      await fetch("/api/profile", {
+      await fetch(`${apiBase()}/api/profile`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, name: myName, color: myColor, showCountry: myShowCountry, tz: myTz }),
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ name: myName, color: myColor, showCountry: myShowCountry, tz: myTz }),
       });
-      if (socket && socketReady) socket.emit("hello", { token, name: myName, color: myColor, tz: myTz });
       toast(t("profileSaved", { name: myName }));
       refreshUserList();
     } catch {
@@ -95,10 +94,11 @@
       loading.className = "muted";
       loading.textContent = t("historyLoading");
       historyList.appendChild(loading);
-      historyPanel.classList.remove("hidden");
+      if (typeof openModal === "function") openModal(historyPanel);
+      else historyPanel.classList.remove("hidden");
     }
     try {
-      let url = `/api/history?x=${x}&y=${y}&limit=20`;
+      let url = `${apiBase()}/api/history?x=${x}&y=${y}&limit=20`;
       if (beforeId != null) url += `&beforeId=${beforeId}`;
       const data = await (await fetch(url)).json();
       if (historyKey !== `${x},${y}`) return;
@@ -135,6 +135,7 @@
   }
 
   function closeHistory() {
-    historyPanel.classList.add("hidden");
     historyKey = null;
+    if (typeof closeAllModals === "function") closeAllModals(true);
+    else historyPanel.classList.add("hidden");
   }

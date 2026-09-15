@@ -1,0 +1,327 @@
+use crate::auth;
+use crate::ip;
+use crate::place_logic::{self, MAX_GHOST_COATS};
+use crate::rate;
+use crate::routes::AppState;
+use crate::users;
+use axum::extract::{ConnectInfo, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use serde::Deserialize;
+use std::net::SocketAddr;
+
+#[derive(Deserialize)]
+pub struct PlaceBody {
+    pub x: i32,
+    pub y: i32,
+    pub color: Option<String>,
+    pub ink: Option<String>,
+}
+
+/// 配置。Bearerのみ。body内tokenは無視する。
+pub async fn place(
+    State(mut state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    body: axum::Json<PlaceBody>,
+) -> Response {
+    let Ok(token) = auth::bearer(&headers) else {
+        return err(StatusCode::UNAUTHORIZED, "missingToken");
+    };
+    if !place_logic::in_bounds(body.x, body.y, 1_000_000) {
+        return err(StatusCode::BAD_REQUEST, "outOfBounds");
+    }
+    let ink = body.ink.clone().unwrap_or_else(|| "normal".into());
+    if ink != "normal" && ink != "erase" && place_logic::parse_combo_ink(&ink).is_none() {
+        return err(StatusCode::BAD_REQUEST, "unknownInk");
+    }
+    if ink != "erase" && ink != "normal" && !place_logic::is_hex_color(
+        body.color.as_deref().unwrap_or(""),
+    ) {
+        // rainbow単体は色不要だが、他は要HEX (Python resolveComboColor互換の簡易版)
+        if !ink.split('+').all(|p| p == "rainbow") {
+            return err(StatusCode::BAD_REQUEST, "badColor");
+        }
+    }
+    if ink == "normal"
+        && !place_logic::is_hex_color(body.color.as_deref().unwrap_or(""))
+    {
+        return err(StatusCode::BAD_REQUEST, "badColor");
+    }
+
+    // IP解決 (trustedProxies経由のみヘッダ信用)
+    let nets = ip::parse_nets(&state.cfg.trusted_proxies);
+    let peer_s = peer.ip().to_string();
+    let cf = headers
+        .get("cf-connecting-ip")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let xff = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let client_ip = ip::resolve_client_ip(&peer_s, cf, xff, &nets);
+
+    // IP共有バケツ (成功分のみ計数すべきだが、簡易版は試行時計数。詳細はTODO)
+    if client_ip != "unknown"
+        && !rate::allow(&mut state.redis, "place", &client_ip, 60, 60.0).await
+    {
+        return err(StatusCode::TOO_MANY_REQUESTS, "ipBusy");
+    }
+
+    // トランザクション + 行ロック
+    let mut tx = match state.pool.begin().await {
+        Ok(t) => t,
+        Err(_) => return err(StatusCode::SERVICE_UNAVAILABLE, "busy"),
+    };
+    let now = chrono::Utc::now().timestamp() as f64;
+    let user = sqlx::query(
+        "SELECT token, uid, name, color, inventory, cooldownUntil, level, xp,
+                transferCode, passwordHash, country, showCountry
+         FROM users WHERE token = $1 FOR UPDATE",
+    )
+    .bind(&token)
+    .fetch_optional(&mut *tx)
+    .await
+    .unwrap_or(None);
+    let Some(u) = user else {
+        return err(StatusCode::NOT_FOUND, "noUser");
+    };
+    use sqlx::Row;
+    let uid: String = u.get(1);
+    let level = users::clamp_level(u.get::<i64, _>(6));
+    let cd_until: f64 = u.get(5);
+    if cd_until > now {
+        let remain = (cd_until - now).max(0.0);
+        let body = serde_json::json!({
+            "ok": false, "error": "cooldown",
+            "remaining": (remain * 100.0).round() / 100.0,
+            "cooldownUntil": cd_until,
+        });
+        return (StatusCode::TOO_MANY_REQUESTS, axum::Json(body)).into_response();
+    }
+
+    // 期限切れチョークの遅延消去
+    let chalk: Option<f64> = sqlx::query_scalar(
+        "SELECT chalkUntil FROM pixels WHERE x = $1 AND y = $2",
+    )
+    .bind(body.x)
+    .bind(body.y)
+    .fetch_optional(&mut *tx)
+    .await
+    .unwrap_or(None)
+    .flatten();
+    if let Some(until) = chalk {
+        if until > 0.0 && until <= now {
+            let _ = sqlx::query("DELETE FROM pixels WHERE x = $1 AND y = $2")
+                .bind(body.x)
+                .bind(body.y)
+                .execute(&mut *tx)
+                .await;
+        }
+    }
+    // シールド (他人・有効期限内は拒否)
+    if let Some(row) = sqlx::query("SELECT by, shieldUntil FROM pixels WHERE x = $1 AND y = $2")
+        .bind(body.x)
+        .bind(body.y)
+        .fetch_optional(&mut *tx)
+        .await
+        .unwrap_or(None)
+    {
+        use sqlx::Row;
+        let by: Option<String> = row.get(0);
+        let until: f64 = row.get(1);
+        if until > now && by.as_deref() != Some(uid.as_str()) {
+            let body = serde_json::json!({
+                "ok": false, "error": "shielded",
+                "remaining": (until - now) as i64,
+            });
+            return (StatusCode::CONFLICT, axum::Json(body)).into_response();
+        }
+    }
+
+    // 書込
+    let color = body.color.clone().unwrap_or_else(|| "#000000".into());
+    let keys = ["glow", "rainbow", "ghost", "chalk", "shield"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>();
+    let inv_raw: String = u.get(4);
+    let mut inv = users::parse_inventory(&inv_raw, &keys);
+    let (store_c, store_t, coats) = match write_pixel(
+        &mut tx,
+        body.x,
+        body.y,
+        &color,
+        &ink,
+        &mut inv,
+        &uid,
+        &state.cfg,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    // 経験値・レベル・クールダウン
+    let cooldown = users::cooldown_for_level(
+        level,
+        state.cfg.cooldown_sec,
+        state.cfg.min_cooldown,
+        state.cfg.cooldown_decay,
+    );
+    let cd_new = now + cooldown;
+    let mut xp: i64 = u.get::<i64, _>(7) + 1;
+    let mut lv = level;
+    loop {
+        let need = users::xp_needed_for_level(lv, 3.0, 1.5);
+        if xp < need {
+            break;
+        }
+        xp -= need;
+        lv += 1;
+    }
+    let inv_json = serde_json::to_string(&inv).unwrap_or_default();
+    let _ = sqlx::query(
+        "UPDATE users SET inventory = $1, cooldownUntil = $2, level = $3, xp = $4 WHERE token = $5",
+    )
+    .bind(&inv_json)
+    .bind(cd_new)
+    .bind(lv)
+    .bind(xp)
+    .bind(&token)
+    .execute(&mut *tx)
+    .await;
+    let _ = sqlx::query(
+        "INSERT INTO history(x, y, uid, c, t, at, xp) VALUES ($1,$2,$3,$4,$5,$6,1)",
+    )
+    .bind(body.x)
+    .bind(body.y)
+    .bind(&uid)
+    .bind(&store_c)
+    .bind(&store_t)
+    .bind(now)
+    .execute(&mut *tx)
+    .await;
+    let _ = sqlx::query(
+        "DELETE FROM history WHERE x = $1 AND y = $2 AND id NOT IN
+         (SELECT id FROM history WHERE x = $1 AND y = $2 ORDER BY at DESC, id DESC LIMIT 20)",
+    )
+    .bind(body.x)
+    .bind(body.y)
+    .execute(&mut *tx)
+    .await;
+    if tx.commit().await.is_err() {
+        return err(StatusCode::SERVICE_UNAVAILABLE, "busy");
+    }
+
+    // broadcast (lag時は捨てる)
+    let _ = state.hub.pixel_tx.send(
+        serde_json::json!({"x": body.x, "y": body.y, "c": store_c, "t": store_t, "by": uid, "coats": coats}).to_string(),
+    );
+    let body = serde_json::json!({
+        "ok": true, "x": body.x, "y": body.y,
+        "pixel": {"c": store_c, "t": store_t, "coats": coats},
+        "by": uid, "cooldownUntil": cd_new, "level": lv, "xp": xp,
+    });
+    (StatusCode::OK, axum::Json(body)).into_response()
+}
+
+async fn write_pixel(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    x: i32,
+    y: i32,
+    color: &str,
+    ink: &str,
+    inv: &mut std::collections::HashMap<String, i64>,
+    uid: &str,
+    _cfg: &crate::config::Config,
+) -> Result<(String, String, i32), Response> {
+    if ink == "erase" {
+        let _ = sqlx::query("DELETE FROM pixels WHERE x = $1 AND y = $2")
+            .bind(x)
+            .bind(y)
+            .execute(&mut **tx)
+            .await;
+        return Ok(("#ffffff".into(), "normal".into(), 1));
+    }
+    if ink == "normal" {
+        let c = color.to_lowercase();
+        let _ = sqlx::query(
+            "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,'normal',$4,1)
+             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t='normal', by=excluded.by, coats=1",
+        )
+        .bind(x)
+        .bind(y)
+        .bind(&c)
+        .bind(uid)
+        .execute(&mut **tx)
+        .await;
+        return Ok((c, "normal".into(), 1));
+    }
+    let need = place_logic::parse_combo_ink(ink).unwrap_or_default();
+    if need.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "unknownInk"));
+    }
+    if need.iter().any(|p| inv.get(p).copied().unwrap_or(0) <= 0) {
+        let body =
+            serde_json::json!({"ok": false, "error": "noInk", "inventory": inv});
+        return Err((StatusCode::CONFLICT, axum::Json(body)).into_response());
+    }
+    // 既存
+    let row = sqlx::query("SELECT c, t, coats FROM pixels WHERE x = $1 AND y = $2")
+        .bind(x)
+        .bind(y)
+        .fetch_optional(&mut **tx)
+        .await
+        .unwrap_or(None);
+    let (base_c, base_t, base_coats): (Option<String>, Option<String>, i32) =
+        match row {
+            Some(r) => {
+                use sqlx::Row;
+                (Some(r.get(0)), Some(r.get(1)), r.get(2))
+            }
+            None => (None, None, 1),
+        };
+    let want_ghost = need.iter().any(|p| p == "ghost");
+    let chosen = color.to_lowercase();
+    let (store_c, coats) = if need.iter().any(|p| p == "rainbow") {
+        let c = base_c
+            .filter(|s| place_logic::is_hex_color(s))
+            .unwrap_or(chosen.clone());
+        (c, if want_ghost { base_coats } else { 1 })
+    } else if !want_ghost {
+        (chosen.clone(), 1)
+    } else if base_t.as_deref().map(|t| t.contains("ghost")).unwrap_or(false) && base_coats >= 1
+    {
+        (chosen.clone(), (base_coats + 1).min(MAX_GHOST_COATS))
+    } else if base_c.is_none() {
+        (chosen.clone(), 1)
+    } else {
+        let under = base_c.unwrap_or_else(|| "#ffffff".into());
+        (place_logic::blend_hex(&chosen, &under, 0.5), 0)
+    };
+    let store_t = need.join("+");
+    let _ = sqlx::query(
+        "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by, coats=excluded.coats",
+    )
+    .bind(x)
+    .bind(y)
+    .bind(&store_c)
+    .bind(&store_t)
+    .bind(uid)
+    .bind(coats)
+    .execute(&mut **tx)
+    .await;
+    for p in &need {
+        *inv.entry(p.clone()).or_insert(0) -= 1;
+    }
+    Ok((store_c, store_t, coats))
+}
+
+fn err(status: StatusCode, code: &str) -> Response {
+    let body = serde_json::json!({"ok": false, "error": code});
+    (status, axum::Json(body)).into_response()
+}

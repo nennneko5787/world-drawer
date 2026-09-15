@@ -91,8 +91,25 @@
   // PostgreSQL 必須 (SQLite ではプロセス跨ぎで database locked が頻発する)。
   // 例: "postgresql://wd:secret@127.0.0.1:5432/worlddrawer"
   // 環境変数 DATABASE_URL があればそちらが優先 (本番推奨)。
+  // ※ RustバックエンドはPostgres専用。data/world.dbはアーカイブ保持のみ。
   "databaseUrl": "",
   // dbPoolSize: PostgreSQL 時の1プロセスあたりの最大接続数 (1〜100)。
   // workers数 × この値がDBの max_connections を超えないよう調整すること。
   "dbPoolSize": 10,
+
+  // ---- Turnstile (Rustバックエンド用。Python版は無視) ----
+  // Cloudflare Turnstileのサイトキー/シークレット。ページ表示の度に検証する。
+  // secretKeyは config.local.jsonc (Git管理外) に書くこと。
+  // enforce=falseで緊急バイパス (再起動反映)。
+  "turnstile": {
+    "enforce": true,
+    "siteKey": "",
+    "secretKey": "",
+    "timeoutSec": 5,
+  },
+  // Rustバックエンドの待ち受け・公開URL・CORS許可オリジン (PagesのURLを列挙)
+  "listen": "127.0.0.1:5787",
+  "apiBase": "https://api.example.com",
+  "wsUrl": "wss://api.example.com/ws",
+  "corsOrigins": [],
 }

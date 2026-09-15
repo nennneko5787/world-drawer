@@ -176,12 +176,8 @@
       refreshColorUI();
     };
   });
-  // 一覧と設定は同じ場所に出るため同時に開かない (排他)
-  onlineEl.onclick = () => {
-    const opening = userPanel.classList.contains("hidden");
-    userPanel.classList.toggle("hidden");
-    if (opening) settingsPanel.classList.add("hidden");
-  };
+  // 一覧と設定はモーダル排他 (wd-modal.js)
+  onlineEl.onclick = () => openModal(userPanel);
   function flagCode(cc) {
     if (typeof cc !== "string" || !/^[A-Za-z]{2}$/.test(cc)) return "";
     const up = cc.toUpperCase();
@@ -213,10 +209,10 @@
   async function saveShowCountry() {
     const show = countryChk.checked;
     try {
-      const res = await fetch("/api/profile", {
+      const res = await fetch(`${apiBase()}/api/profile`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, name: myName, color: myColor, showCountry: show, tz: myTz }),
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ name: myName, color: myColor, showCountry: show, tz: myTz }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -254,12 +250,8 @@
     resize();
   };
   applyChrome();
-  accountBtn.onclick = () => {
-    const opening = accountPanel.classList.contains("hidden");
-    accountPanel.classList.toggle("hidden");
-    if (opening && adminPanel) adminPanel.classList.add("hidden");
-  };
-  accountClose.onclick = () => accountPanel.classList.add("hidden");
+  accountBtn.onclick = () => openModal(accountPanel);
+  accountClose.onclick = () => closeAllModals();
   countryChk.checked = myShowCountry;
   countryChk.onchange = saveShowCountry;
   issueBtn.onclick = async () => {
@@ -269,10 +261,11 @@
       return;
     }
     try {
-      const res = await fetch("/api/account/issue", {
+      const ts = await getTurnstileToken();
+      const res = await fetch(`${apiBase()}/api/account/issue`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password: pw }),
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ password: pw, turnstile_token: ts }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -289,10 +282,11 @@
   };
   loginBtn.onclick = async () => {
     try {
-      const res = await fetch("/api/account/login", {
+      const ts = await getTurnstileToken();
+      const res = await fetch(`${apiBase()}/api/account/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: loginCode.value, password: loginPassword.value, fromToken: token }),
+        body: JSON.stringify({ code: loginCode.value, password: loginPassword.value, turnstile_token: ts }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -435,19 +429,8 @@
       showHistory(hx, hy);
     }
   };
-  settingsBtn.onclick = () => {
-    const opening = settingsPanel.classList.contains("hidden");
-    settingsPanel.classList.toggle("hidden");
-    if (opening) userPanel.classList.add("hidden");
-    if (opening) {
-      // 横幅が狭いとトップバーが折り返してパネルと被るため、ボタンの直下に出す
-      try {
-        const r = settingsBtn.getBoundingClientRect();
-        settingsPanel.style.top = `${Math.max(8, r.bottom + 8)}px`;
-      } catch {}
-    }
-  };
-  if (settingsClose) settingsClose.onclick = () => settingsPanel.classList.add("hidden");
+  settingsBtn.onclick = () => openModal(settingsPanel);
+  if (settingsClose) settingsClose.onclick = () => closeAllModals();
   // saveProfile は後続ファイルのため実行時に解決する
   profileSave.onclick = (...args) => saveProfile(...args);
   profileName.addEventListener("keydown", (e) => {

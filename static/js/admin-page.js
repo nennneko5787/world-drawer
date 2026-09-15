@@ -8,7 +8,7 @@
   let adminTarget = null; // {uid, ip}
   let autoTimer = 0;
 
-  function token() {
+  function adminToken() {
     try {
       return localStorage.getItem("wd_adminToken") || localStorage.getItem("wd_token") || "";
     } catch {
@@ -19,8 +19,8 @@
   async function post(path, body) {
     const res = await fetch(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: token(), ...body }),
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${adminToken()}` },
+      body: JSON.stringify({ ...body }),
     });
     return await res.json();
   }
@@ -251,6 +251,6 @@
   try {
     $("admToken").value = localStorage.getItem("wd_adminToken") || "";
   } catch {}
-  if (token()) refreshAll();
+  if (adminToken()) refreshAll();
   else setAuthed(false);
 })();

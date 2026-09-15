@@ -13,7 +13,13 @@ wheels/
 .venv
 
 # world-drawer runtime data (canvas save)
+# NOTE: data/world.db はアーカイブとしてローカル保持。Git管理外のまま。
 data/
+!data/.gitkeep
+
+# Rust
+backend/target/
+backend/.env
 
 # server-local config override (untracked, wins over config.jsonc)
 config.local.jsonc

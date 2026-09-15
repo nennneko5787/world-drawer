@@ -1,0 +1,35 @@
+/* wd-modal.css — パネル系の共通モーダル化 + 設定タブ */
+#modal-overlay {
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(0, 0, 0, .45);
+  backdrop-filter: blur(2px);
+}
+#modal-overlay.hidden { display: none; }
+.wd-modal {
+  position: fixed !important;
+  left: 50% !important; top: 50% !important; right: auto !important; bottom: auto !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 50 !important;
+  width: min(380px, calc(100vw - 24px)) !important;
+  max-height: min(72vh, 640px) !important;
+  overflow-y: auto !important;
+}
+.wd-modal.hidden { display: none !important; }
+/* 設定タブ */
+.wd-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.wd-tabs button {
+  flex: 1; border: 1px solid var(--border); background: var(--seg);
+  color: var(--chrome-fg); border-radius: 8px; padding: 6px 4px;
+  font-size: 12px; cursor: pointer;
+}
+.wd-tabs button.active { background: #111; color: #fff; }
+:root[data-theme="dark"] .wd-tabs button.active { background: #f0f0f2; color: #111; }
+.wd-tabpane.hidden { display: none; }
+@media (max-width: 700px) {
+  .wd-modal {
+    top: auto !important; bottom: 0 !important;
+    transform: translateX(-50%) !important;
+    width: 100vw !important; max-height: 78vh !important;
+    border-radius: 16px 16px 0 0 !important;
+  }
+}

@@ -1,0 +1,17 @@
+[Unit]
+Description=world-drawer backend (Rust/Axum)
+After=network.target postgresql.service valkey.service
+Wants=postgresql.service valkey.service
+
+[Service]
+Type=simple
+User=world-drawer
+WorkingDirectory=/opt/world-drawer
+EnvironmentFile=/opt/world-drawer/backend/.env
+ExecStart=/opt/world-drawer/backend/target/release/world-drawer-backend
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

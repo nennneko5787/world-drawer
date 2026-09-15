@@ -8,10 +8,10 @@
     if (!isAdmin && adminPanel) adminPanel.classList.add("hidden");
   }
   async function adminPost(path, body) {
-    const res = await fetch(path, {
+    const res = await fetch(`${apiBase()}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, ...body }),
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ ...body }),
     });
     return await res.json();
   }
@@ -76,13 +76,9 @@
     }
   }
   if (adminBtn) {
-    adminBtn.onclick = () => {
-      const opening = adminPanel.classList.contains("hidden");
-      adminPanel.classList.toggle("hidden");
-      if (opening && accountPanel) accountPanel.classList.add("hidden");
-    };
+    adminBtn.onclick = () => openModal(adminPanel);
   }
-  if (adminClose) adminClose.onclick = () => adminPanel.classList.add("hidden");
+  if (adminClose) adminClose.onclick = () => closeAllModals();
   if (adminLookupBtn) adminLookupBtn.onclick = adminLookup;
   if (adminRollbackBtn) adminRollbackBtn.onclick = adminRollback;
   if (adminBanBtn) adminBanBtn.onclick = adminBan;
