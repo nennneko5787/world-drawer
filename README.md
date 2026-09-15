@@ -31,9 +31,33 @@ uv sync
 管理画面を使う場合は `adminTokens` を設定してください（詳細は下の
 設定表・公開例を参照）。
 
-### 多人数向けの追加セットアップ（Redis・nginx）
+### 多人数向けの追加セットアップ（PostgreSQL・Redis・nginx）
 
-単体動作には不要です。マルチワーカーにする場合のみ用意します。
+単体動作には不要です（既定は `data/world.db` のSQLite）。
+マルチワーカーにする場合は **PostgreSQL が必須**です
+（SQLite ではプロセス跨ぎで `database locked` が頻発します）。
+
+```powershell
+# PostgreSQL (例: Docker)
+docker run -d --name wd-pg -p 5432:5432 --restart always `
+  -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=worlddrawer postgres:18
+```
+
+```jsonc
+// config.jsonc に追記 (環境変数 DATABASE_URL があればそちらが優先)
+"databaseUrl": "postgresql://postgres:secret@127.0.0.1:5432/worlddrawer",
+"dbPoolSize": 10,
+```
+
+```powershell
+# 既存のSQLiteデータを移行する場合 (ワーカー停止中に実行)
+uv run python main.py --copy-sqlite-to-pg
+# 移行先にゴミがある場合のみ全消去して複写
+uv run python main.py --copy-sqlite-to-pg --force
+```
+
+- `workers数 × dbPoolSize` がDBの `max_connections` を超えないよう調整してください
+- 起動ログに `database backend: postgres` と出れば連携OKです
 
 ```powershell
 # Redis (例: Docker)
@@ -256,7 +280,8 @@ server {
 - Redis障害時は可用性優先で縮退します（制限は緩め・一覧は空）。
   `/api/admin/status` の `redis` 欄で状態を確認できます
 - SQLite はWALモードで複数プロセスから利用します。配置などの
-  読み→書きは直列化しています。将来的なボトルネック時は PostgreSQL 化を検討
+  読み→書きは直列化しています。多人数・多ワーカー運用時は PostgreSQL
+  （上の追加セットアップ参照）を使ってください
 
 ## 更新手順（本番）
 

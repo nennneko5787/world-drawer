@@ -9,11 +9,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import aiosqlite
-
 from app.services import config as cfg
-from app.services import shared, users
-from app.services.database import beginImmediate
+from app.services import database, shared, users
+from app.services.database import DbTx
 
 ROLLBACK_DEFAULT_LIMIT = 1000
 ROLLBACK_MAX_LIMIT = 5000
@@ -24,59 +22,68 @@ def isAdminToken(token: str) -> bool:
     return bool(tok) and tok in set(cfg.adminTokens or [])
 
 
-async def lookupUser(db: aiosqlite.Connection, uid: str) -> dict | None:
+async def lookupUser(uid: str) -> dict | None:
     """uid から管理表示用の安全な概要を返す (秘密情報は含めない)。"""
     uid = (uid or "").strip()[:16]
     if not uid:
         return None
-    async with db.execute("SELECT token FROM users WHERE uid = ?", (uid,)) as cur:
-        row = await cur.fetchone()
+    row = await database.fetchOne("SELECT token FROM users WHERE uid = ?", (uid,))
     if row is None:
         return None
-    user = await users.fetchUser(db, row[0])
+    user = await database.fetchOne(
+        "SELECT token, uid, name, color, inventory, cooldownUntil, level, xp,"
+        " transferCode, passwordHash, country, showCountry FROM users WHERE token = ?",
+        (row[0],),
+    )
     if user is None:
         return None
-    async with db.execute(
-        "SELECT COUNT(DISTINCT x || ',' || y) FROM history WHERE uid = ? AND undone = 0",
+    userDict = users.rowToUser(user)
+    touchedRow = await database.fetchOne(
+        "SELECT COUNT(*) FROM (SELECT DISTINCT x, y FROM history"
+        " WHERE uid = ? AND undone = 0) AS t",
         (uid,),
-    ) as cur:
-        touchedRow = await cur.fetchone()
+    )
     return {
-        "uid": user["uid"],
-        "name": user["name"],
-        "color": user["color"],
-        "level": user["level"],
-        "xp": user["xp"],
-        "inventory": dict(user["inventory"]),
-        "country": user.get("country"),
+        "uid": userDict["uid"],
+        "name": userDict["name"],
+        "color": userDict["color"],
+        "level": userDict["level"],
+        "xp": userDict["xp"],
+        "inventory": dict(userDict["inventory"]),
+        "country": userDict.get("country"),
         "touchedCells": int(touchedRow[0]) if touchedRow else 0,
-        "lastIp": await shared.lastIp(user["token"]),
-        "online": (await shared.pget(user["token"])) is not None,
+        "lastIp": await shared.lastIp(userDict["token"]),
+        "online": (await shared.pget(userDict["token"])) is not None,
     }
 
 
-async def rollbackUser(
-    db: aiosqlite.Connection, uid: str, limit: int = ROLLBACK_DEFAULT_LIMIT
-) -> dict:
+async def rollbackUser(uid: str, limit: int = ROLLBACK_DEFAULT_LIMIT) -> dict:
     """uid の配置を巻き戻す。上書き済みセルは触らない。"""
+
+    async def _once() -> dict:
+        async with database.tx() as db:
+            return await _rollbackInner(db, uid, limit)
+
+    return await database.withRetry("rollback", _once)
+
+
+async def _rollbackInner(db: DbTx, uid: str, limit: int = ROLLBACK_DEFAULT_LIMIT) -> dict:
     uid = (uid or "").strip()[:16]
     limit = max(1, min(ROLLBACK_MAX_LIMIT, int(limit or ROLLBACK_DEFAULT_LIMIT)))
     if not uid:
         return {"ok": False, "error": "badUid"}
-    # 他プロセスの同時巻き戻しと直列化
-    await beginImmediate(db)
-    async with db.execute(
-        "SELECT token, level, xp, inventory FROM users WHERE uid = ?", (uid,)
-    ) as cur:
-        target = await cur.fetchone()
+    # 行ロックで同時巻き戻しと直列化 (SQLite時は tx() のBEGIN IMMEDIATEが担う)
+    userSql = "SELECT token, level, xp, inventory FROM users WHERE uid = ?"
+    if database.isPostgres():
+        userSql += " FOR UPDATE"
+    target = await db.fetchOne(userSql, (uid,))
     if target is None:
         return {"ok": False, "error": "noUser"}
     targetToken = target[0]
-    async with db.execute(
+    cells = await db.fetchAll(
         "SELECT DISTINCT x, y FROM history WHERE uid = ? AND undone = 0 LIMIT ?",
         (uid, limit + 1),
-    ) as cur:
-        cells = list(await cur.fetchall())
+    )
     truncated = len(cells) > limit
     events: list[dict] = []
     restored = 0
@@ -84,12 +91,11 @@ async def rollbackUser(
     xpTaken = 0
     rewardsTaken: dict[str, int] = {}
     for x, y in cells[:limit]:
-        async with db.execute(
+        rows = await db.fetchAll(
             "SELECT id, uid, c, t, xp, rewardInk, rewardAmount FROM history"
             " WHERE x = ? AND y = ? AND undone = 0 ORDER BY id DESC LIMIT 2",
             (x, y),
-        ) as cur:
-            rows = list(await cur.fetchall())
+        )
         if not rows or rows[0][1] != uid:
             skipped += 1
             continue
@@ -139,7 +145,6 @@ async def rollbackUser(
         "UPDATE users SET inventory = ?, level = ?, xp = ? WHERE uid = ?",
         (_dumpInventory(inv), level, xp, uid),
     )
-    await db.commit()
     await shared.ptouch(targetToken, level=level)
     return {
         "ok": True,

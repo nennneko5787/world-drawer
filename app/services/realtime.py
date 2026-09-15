@@ -8,15 +8,13 @@ import secrets
 import time
 from typing import Any
 
-import aiosqlite
 import socketio
 from pydantic import BaseModel, ValidationError
 
 from app.objects.requests import PlaceInput, SocketCursor, SocketHello
 from app.objects.responses import PixelEvent
-from app.services import canvas, shared, users
+from app.services import canvas, database, shared, users
 from app.services import config as cfg
-from app.services.database import dbLock, getDb
 
 
 def _wsTransports() -> list[str]:
@@ -177,6 +175,53 @@ async def disconnect(sid: str) -> None:
             await sio.emit("presence", await shared.presenceList())
 
 
+async def _helloExisting(db: database.DbTx, sid: str, payload: SocketHello, token: str) -> dict:
+    """持ち込みトークンの解決。行がなければ持ち込み名で作り直す。
+
+    既存行の name/color は上書きしない。保存 (/api/profile) と
+    統合 (mergeAccounts) だけが正であり、古い端末の hello で
+    統合結果が巻き戻るのを防ぐ。表示側はサーバーに合わせる。
+    """
+    user = await users.fetchUser(db, token)
+    if user is None:
+        # トークンだけ残って行がない (DB初期化等) → 持ち込み名で作り直す
+        anonFallback = users.defaultNameFor(payload.lang, "")
+        return await users.insertUser(
+            db,
+            users.NewUser(
+                token=token,
+                uid=await users.newUidDb(db),
+                name=users.cleanName(payload.name or anonFallback, anonFallback),
+                color=users.cleanColor(payload.color or "", users.randomUserColor()),
+                inventory=users.newInventory(),
+                country=sidCountry(sid, payload.tz),
+            ),
+        )
+    code = sidCountry(sid, payload.tz)
+    if code and code != user.get("country"):
+        await db.execute("UPDATE users SET country = ? WHERE token = ?", (code, token))
+        user["country"] = code
+    return user
+
+
+async def _helloFresh(db: database.DbTx, sid: str, payload: SocketHello, token: str) -> dict | None:
+    """初回トークン発行。規定名は作成者のロケールで固定。衝突時は None。"""
+    if await users.fetchUser(db, token) is not None:
+        return None
+    anonFallback = users.defaultNameFor(payload.lang, "")
+    return await users.insertUser(
+        db,
+        users.NewUser(
+            token=token,
+            uid=await users.newUidDb(db),
+            name=users.cleanName(payload.name or anonFallback, anonFallback),
+            color=users.cleanColor(payload.color or "", users.randomUserColor()),
+            inventory=users.newInventory(),
+            country=sidCountry(sid),
+        ),
+    )
+
+
 @sio.event
 async def hello(sid: str, data: Any) -> None:
     payload = parseSocket(SocketHello, data)
@@ -184,67 +229,30 @@ async def hello(sid: str, data: Any) -> None:
         await sio.emit("helloOk", {"ok": False, "error": "badPayload"}, to=sid)
         return
     token = payload.token.strip()[:64]
-    db = await getDb()
-    async with dbLock:
-        if token:
-            # 既存行の name/color は上書きしない。保存 (/api/profile) と
-            # 統合 (mergeAccounts) だけが正であり、古い端末の hello で
-            # 統合結果が巻き戻るのを防ぐ。表示側はサーバーに合わせる。
-            user = await users.fetchUser(db, token)
+    heldToken = token
+    user: dict | None = None
+    for _ in range(3):
+        try:
+            async with database.tx() as db:
+                if token:
+                    user = await _helloExisting(db, sid, payload, token)
+                else:
+                    token = secrets.token_urlsafe(32)
+                    user = await _helloFresh(db, sid, payload, token)
             if user is None:
-                # トークンだけ残って行がない (DB初期化等) → 持ち込み名で作り直す
-                anonFallback = users.defaultNameFor(payload.lang, "")
-                try:
-                    user = await users.insertUser(
-                        db,
-                        users.NewUser(
-                            token=token,
-                            uid=await users.newUidDb(db),
-                            name=users.cleanName(payload.name or anonFallback, anonFallback),
-                            color=users.cleanColor(payload.color or "", users.randomUserColor()),
-                            inventory=users.newInventory(),
-                            country=sidCountry(sid, payload.tz),
-                        ),
-                    )
-                except aiosqlite.IntegrityError:
-                    # 別ワーカーとの同時作成の競合 → 勝者の行を読む
-                    await db.rollback()
-                    user = await users.fetchUser(db, token)
-                    if user is None:
-                        await sio.emit("helloOk", {"ok": False, "error": "busy"}, to=sid)
-                        return
-            else:
-                code = sidCountry(sid, payload.tz)
-                if code and code != user.get("country"):
-                    await db.execute("UPDATE users SET country = ? WHERE token = ?", (code, token))
-                    user["country"] = code
-            await db.commit()
-        else:
-            # トークンなし = 初回。サーバー発行トークンを新規作成
-            # 規定名は作成者のロケールで固定 (全言語圏にそのまま表示)
-            anonFallback = users.defaultNameFor(payload.lang, "")
-            while True:
-                token = secrets.token_urlsafe(32)
-                if await users.fetchUser(db, token) is None:
-                    break
-            try:
-                user = await users.insertUser(
-                    db,
-                    users.NewUser(
-                        token=token,
-                        uid=await users.newUidDb(db),
-                        name=users.cleanName(payload.name or anonFallback, anonFallback),
-                        color=users.cleanColor(payload.color or "", users.randomUserColor()),
-                        inventory=users.newInventory(),
-                        country=sidCountry(sid),
-                    ),
-                )
-            except aiosqlite.IntegrityError:
-                # 別ワーカーとの同時作成の競合 → やり直す
-                await db.rollback()
-                await hello(sid, data)
-                return
-            await db.commit()
+                continue
+            break
+        except Exception as err:  # 一意違反かで分岐するため広く受ける
+            if not database.isUniqueViolation(err):
+                raise
+            # 同時作成の競合 → 持ち込みトークンなら勝者の行を読み直し、
+            # 新規発行ならトークンを作り直す
+            user = None
+            token = heldToken
+            continue
+    if user is None:
+        await sio.emit("helloOk", {"ok": False, "error": "busy"}, to=sid)
+        return
     prev = await shared.pget(token)
     await shared.sidBind(sid, token)
     await shared.pset(token, shared.buildEntry(token, user, prev))
@@ -260,8 +268,7 @@ async def cursor(sid: str, data: Any) -> None:
     token = payload.token.strip()[:64]
     if not token or not canvas.inBounds(payload.x, payload.y):
         return
-    db = await getDb()
-    user = await users.fetchUser(db, token)
+    user = await users.fetchUserSingle(token)
     if user is None:
         return
     await shared.sidBind(sid, token)

@@ -12,16 +12,21 @@ import secrets
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any
-
-import aiosqlite
+from typing import TYPE_CHECKING, Any
 
 from app.services import config as cfg
+
+if TYPE_CHECKING:
+    from app.services.database import DbTx
 
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
 UID_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # 紛らわしい文字 (0/o, 1/l) を除外
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+_USER_SELECT = (
+    "SELECT token, uid, name, color, inventory, cooldownUntil, level, xp,"
+    " transferCode, passwordHash, country, showCountry FROM users WHERE token = ?"
+)
 
 # ロケールごとの規定表示名。作成者のロケールで固定し、全言語圏にそのまま表示する
 ANON_NAMES: dict[str, str] = {
@@ -209,29 +214,37 @@ def rowToUser(row: Sequence[Any]) -> dict:
     }
 
 
-async def newUidDb(db: aiosqlite.Connection) -> str:
+async def newUidDb(tx: DbTx) -> str:
     while True:
         uid = "".join(secrets.choice(UID_ALPHABET) for _ in range(6))
-        async with db.execute("SELECT 1 FROM users WHERE uid = ?", (uid,)) as cur:
-            if await cur.fetchone() is None:
-                return uid
+        if await tx.fetchOne("SELECT 1 FROM users WHERE uid = ?", (uid,)) is None:
+            return uid
 
 
-async def newTransferCodeDb(db: aiosqlite.Connection) -> str:
+async def newTransferCodeDb(tx: DbTx) -> str:
     while True:
         code = "-".join("".join(secrets.choice(CODE_ALPHABET) for _ in range(4)) for _ in range(2))
-        async with db.execute("SELECT 1 FROM users WHERE transferCode = ?", (code,)) as cur:
-            if await cur.fetchone() is None:
-                return code
+        if await tx.fetchOne("SELECT 1 FROM users WHERE transferCode = ?", (code,)) is None:
+            return code
 
 
-async def fetchUser(db: aiosqlite.Connection, token: str) -> dict | None:
-    async with db.execute(
-        "SELECT token, uid, name, color, inventory, cooldownUntil, level, xp,"
-        " transferCode, passwordHash, country, showCountry FROM users WHERE token = ?",
-        (token,),
-    ) as cur:
-        row = await cur.fetchone()
+async def fetchUser(tx: DbTx, token: str, *, forUpdate: bool = False) -> dict | None:
+    """token行を読む。forUpdateは書き込み直前の行ロック (PostgreSQLのみ有効)。"""
+    sql = _USER_SELECT
+    if forUpdate:
+        from app.services.database import isPostgres  # noqa: PLC0415
+
+        if isPostgres():
+            sql += " FOR UPDATE"
+    row = await tx.fetchOne(sql, (token,))
+    return rowToUser(row) if row else None
+
+
+async def fetchUserSingle(token: str) -> dict | None:
+    """単発読み取り用 (Tx外・行ロック不要時用。cursor等のホットパス向け)。"""
+    from app.services import database as dbmod  # noqa: PLC0415
+
+    row = await dbmod.fetchOne(_USER_SELECT, (token,))
     return rowToUser(row) if row else None
 
 
@@ -249,8 +262,9 @@ class NewUser:
     showCountry: bool = True
 
 
-async def insertUser(db: aiosqlite.Connection, new: NewUser) -> dict:
-    await db.execute(
+async def insertUser(tx: DbTx, new: NewUser) -> dict:
+    """行を作る。確定は呼び出し側の tx() に任せる (ここではcommitしない)。"""
+    await tx.execute(
         "INSERT INTO users(token, uid, name, color, inventory, cooldownUntil, level, xp,"
         " country, showCountry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
@@ -266,31 +280,48 @@ async def insertUser(db: aiosqlite.Connection, new: NewUser) -> dict:
             int(new.showCountry),
         ),
     )
-    user = await fetchUser(db, new.token)
+    user = await fetchUser(tx, new.token)
     assert user is not None  # noqa: S101 — 直前INSERTのため存在保証
     return user
 
 
-async def ensureUser(db: aiosqlite.Connection, token: str, defaultName: str = "ななし") -> dict:
-    user = await fetchUser(db, token)
+async def ensureUser(
+    tx: DbTx, token: str, defaultName: str = "ななし", *, forUpdate: bool = False
+) -> dict:
+    """token行を返す。なければ作る (同時作成の競合は勝者の行を読む)。
+
+    INSERTは `ON CONFLICT DO NOTHING` (対象無指定=全一意制約) で行う。
+    PostgreSQLでは一意違反でトランザクション全体がabortするため、例外を
+    受けて同一Tx内で読み直す形にはできない。DO NOTHINGならエラー無しで
+    スキップされ、Txは健全なまま勝者行を読める (SQLiteでも同構文が有効)。
+    uid衝突時は行ができないため新しいuidで作り直す。
+    """
+    user = await fetchUser(tx, token, forUpdate=forUpdate)
     if user is not None:
         return user
-    try:
-        user = await insertUser(
-            db,
-            NewUser(
-                token=token,
-                uid=await newUidDb(db),
-                name=defaultName,
-                color=randomUserColor(),
-                inventory=newInventory(),
+    for _ in range(5):
+        await tx.execute(
+            "INSERT INTO users(token, uid, name, color, inventory, cooldownUntil, level, xp,"
+            " country, showCountry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT DO NOTHING",
+            (
+                token,
+                await newUidDb(tx),
+                defaultName,
+                randomUserColor(),
+                json.dumps(newInventory(), ensure_ascii=False),
+                0.0,
+                1,
+                0,
+                None,
+                1,
             ),
         )
-    except aiosqlite.IntegrityError:
-        # 同時作成の競合 → 勝者の行を読む
-        user = await fetchUser(db, token)
-        assert user is not None  # noqa: S101 — 競合相手の行が存在するはず
-    await db.commit()
+        user = await fetchUser(tx, token, forUpdate=forUpdate)
+        if user is not None:
+            return user
+    user = await fetchUser(tx, token, forUpdate=forUpdate)
+    assert user is not None  # noqa: S101 — DO NOTHING後の再読のため存在保証
     return user
 
 

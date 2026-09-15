@@ -17,18 +17,14 @@ from fastapi import FastAPI
 from starlette.middleware.gzip import GZipMiddleware
 
 from app.routes import api, pages, staticfiles
-from app.services import realtime, shared
-from app.services.database import closeDb, getDb
+from app.services import database, realtime, shared
+from app.services.database import closeDb
 
 
 @contextlib.asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """起動時にDBを温め、終了時に後始末する。
-
-    終了時の後始末をしないと aiosqlite のワーカースレッドが残留し、
-    "Application shutdown complete" の後にプロセスが固まる。
-    """
-    await getDb()
+    """起動時にDBへ接続し、終了時に後始末する。"""
+    await database.connect()
     await shared.connect()
     yield
     with contextlib.suppress(Exception):
@@ -48,7 +44,7 @@ app = socketio.ASGIApp(realtime.sio, other_asgi_app=fastapi)
 
 
 async def _wsStartup() -> None:
-    await getDb()
+    await database.connect()
     await shared.connect()
 
 
@@ -73,6 +69,22 @@ if __name__ == "__main__":
         action="store_true",
         help="DBマイグレーションのみ実行して終了 (本番デプロイ時は再起動前に実行)",
     )
+    parser.add_argument(
+        "--copy-sqlite-to-pg",
+        action="store_true",
+        help="SQLiteファイルをPostgreSQLへ複写して終了"
+        " (DATABASE_URL/databaseUrlがPostgreSQLの場合のみ)",
+    )
+    parser.add_argument(
+        "--sqlite-file",
+        default="",
+        help="複写元のSQLiteファイル (既定は data/world.db)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="--copy-sqlite-to-pg時: 複写先に既存行があっても全消去して複写",
+    )
     args = parser.parse_args()
     if args.migrate:
         import logging
@@ -82,5 +94,27 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.INFO, format="%(message)s")
         version = asyncio.run(runMigrations())
         logging.getLogger("world-drawer.migrate").info("migrations applied (version %d)", version)
+    elif args.copy_sqlite_to_pg:
+        import logging
+        from pathlib import Path
+
+        from app.services import config as cfg
+        from app.services.database import copySqliteToPostgres
+
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+        src = args.sqlite_file.strip() or str(cfg.dbFile)
+        if not Path(src).exists():
+            msg = f"sqlite file not found: {src}"
+            raise SystemExit(msg)
+
+        async def _copy() -> dict[str, int]:
+            await database.connect()
+            try:
+                return await copySqliteToPostgres(src, force=args.force)
+            finally:
+                await closeDb()
+
+        result = asyncio.run(_copy())
+        logging.getLogger("world-drawer.migrate").info("copied sqlite to postgres: %s", result)
     else:
         uvicorn.run(app, host="127.0.0.1", port=8000)

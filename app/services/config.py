@@ -77,6 +77,17 @@ adminTokens: list[str] = []
 # 直結公開のヘッダは偽装可能なため無視し、ソケットIPを使う
 trustedProxies = ["127.0.0.1", "::1"]
 
+# ---- データベース ----
+# databaseUrl: 空なら SQLite (data/world.db)。PostgreSQL にする場合は
+# "postgresql://user:pass@127.0.0.1:5432/worlddrawer" のように指定する。
+# 環境変数 DATABASE_URL があればそちらが優先 (本番推奨)。
+# マルチワーカー運用は PostgreSQL 必須 (SQLite ではプロセス跨ぎで locked が頻発する)。
+# 例: "postgresql://wd:secret@127.0.0.1:5432/worlddrawer"
+databaseUrl: str = ""
+# dbPoolSize: PostgreSQL 時の1プロセスあたりの最大接続数 (1〜100)。
+# workers数とこの値の積がDBの max_connections を超えないよう調整すること。
+dbPoolSize = 10
+
 # ---- マルチワーカー ----
 # RedisのURL。空なら単体動作 (従来どおりプロセス内記憶)。
 # 設定すると uvicorn --workers での複数プロセス間で presence・制限・ban を共有し、
@@ -119,6 +130,7 @@ _INT_KEYS: dict[str, tuple[int, int]] = {
     "shieldMinutes": (1, 1440),
     "chalkMinutes": (1, 1440),
     "maxSocketsPerIp": (1, 1000),
+    "dbPoolSize": (1, 100),
 }
 _BOOL_KEYS: frozenset[str] = frozenset({"requireSocketForPlace", "forceWebsocket"})
 _FLOAT_KEYS: dict[str, tuple[float, float]] = {
@@ -308,6 +320,29 @@ def validateRedisUrl(value: object) -> str | None:
     return text
 
 
+def validateDatabaseUrl(value: object) -> str | None:
+    if not isinstance(value, str):
+        logger.warning("config.jsonc: databaseUrl must be a string, using default")
+        return None
+    text = value.strip()
+    if not text:
+        return ""
+    if not re.match(r"^postgres(ql)?://\S+$", text):
+        logger.warning(
+            "config.jsonc: databaseUrl must be like"
+            " postgresql://user:pass@127.0.0.1:5432/worlddrawer, using default"
+        )
+        return None
+    return text
+
+
+def validateUrlKey(key: str, value: object) -> str | None:
+    """redisUrl / databaseUrl の検証。スキーム違いは警告して既定維持。"""
+    if key == "databaseUrl":
+        return validateDatabaseUrl(value)
+    return validateRedisUrl(value)
+
+
 def applyConfigKey(
     validated: dict[str, int | float | str | bool | list[str]], key: str, value: object
 ) -> None:
@@ -324,8 +359,8 @@ def applyConfigKey(
         result = validateProxyList(value)
     elif key == "siteUrl":
         result = validateSiteUrl(value)
-    elif key == "redisUrl":
-        result = validateRedisUrl(value)
+    elif key in ("redisUrl", "databaseUrl"):
+        result = validateUrlKey(key, value)
     elif key == "adminTokens":
         result = validateTokenList(value)
     else:
