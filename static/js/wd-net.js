@@ -144,6 +144,14 @@
         if (pixels.size <= maxCache) break;
       }
     }
+    // 遠方タイルの版も捨てる (無制限増殖防止。捨てた分は次回全量取り直し)
+    for (const tkey of [...tileVers.keys()]) {
+      const [tx, ty] = tkey.split(",").map(Number);
+      const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
+      if (cx < box.minX - big || cx > box.maxX + big || cy < box.minY - big || cy > box.maxY + big) {
+        tileVers.delete(tkey);
+      }
+    }
   }
 
   function goOrigin() {

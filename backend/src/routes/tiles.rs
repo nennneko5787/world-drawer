@@ -86,9 +86,28 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
         return (StatusCode::OK, axum::Json(body)).into_response();
     }
     let known = parse_known(q.known.as_deref().unwrap_or(""));
-    // 要求タイル全体の外接矩形を1クエリで取得して振り分ける
-    let (mut lox, mut hix, mut loy, mut hiy) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
+    // 版突合せを先にやる。全部最新ならDBに触らない (パン毎の全量取得の根絶)。
+    // 従来は変わりが無くても外接矩形の全行を取って捨てていた
+    let mut fresh: HashMap<(i32, i32), u64> = HashMap::new();
+    let mut stale: Vec<(i32, i32)> = vec![];
     for (tx, ty) in &need {
+        let v = state.tiles.get(*tx, *ty);
+        fresh.insert((*tx, *ty), v);
+        if known.get(&(*tx, *ty)) != Some(&v) {
+            stale.push((*tx, *ty));
+        }
+    }
+    let mut out = serde_json::Map::new();
+    if stale.is_empty() {
+        for (k, v) in &fresh {
+            out.insert(format!("{},{}", k.0, k.1), serde_json::json!({"v": v}));
+        }
+        let body = serde_json::json!({"tiles": out, "truncated": false});
+        return (StatusCode::OK, axum::Json(body)).into_response();
+    }
+    // 陳腐タイルだけの外接矩形を1クエリで取得して振り分ける
+    let (mut lox, mut hix, mut loy, mut hiy) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
+    for (tx, ty) in &stale {
         lox = lox.min(tx * TILE);
         hix = hix.max(tx * TILE + TILE - 1);
         loy = loy.min(ty * TILE);
@@ -124,7 +143,7 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
     }
     let mut out = serde_json::Map::new();
     for (tx, ty) in &need {
-        let v = state.tiles.get(*tx, *ty);
+        let v = fresh[&(*tx, *ty)];
         if known.get(&(*tx, *ty)) == Some(&v) {
             out.insert(format!("{tx},{ty}"), serde_json::json!({"v": v}));
         } else {

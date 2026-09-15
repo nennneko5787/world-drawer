@@ -23,6 +23,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use axum::Router;
+use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
@@ -48,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .merge(routes::router(state))
+        .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .layer(TimeoutLayer::new(Duration::from_secs(10)))
         .layer(RequestBodyLimitLayer::new(64 * 1024))
