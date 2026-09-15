@@ -26,6 +26,7 @@ use std::time::Duration;
 
 use axum::Router;
 use tower_http::compression::CompressionLayer;
+use tower_http::compression::CompressionLevel;
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
@@ -61,7 +62,9 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .merge(routes::router(state))
-        .layer(CompressionLayer::new())
+        // 動的JSON (MB級tiles) 向けに最速圧縮。既定q4でも1共有vCPUでは
+        // 応答ごとに数百ms燃えるため。圧縮率は少し落ちるが遅延優先
+        .layer(CompressionLayer::new().quality(CompressionLevel::Fastest))
         .layer(TraceLayer::new_for_http())
         .layer(TimeoutLayer::new(Duration::from_secs(10)))
         .layer(RequestBodyLimitLayer::new(64 * 1024))
