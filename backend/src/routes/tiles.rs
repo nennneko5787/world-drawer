@@ -109,6 +109,7 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
     // serving分は常に完全 (欠けなし)。削り落とした分は版を進めない。
     let row_cap = state.cfg.tile_row_cap.clamp(16385, 1000000);
     let stale_budget = state.cfg.max_stale_tiles.clamp(16, 1024);
+    let now = chrono::Utc::now().timestamp() as f64;
     let mut n = stale.len().min(stale_budget);
     let rows = loop {
         let (mut lox, mut hix, mut loy, mut hiy) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
@@ -118,9 +119,8 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
             loy = loy.min(ty * TILE);
             hiy = hiy.max(ty * TILE + TILE - 1);
         }
-        let now = chrono::Utc::now().timestamp() as f64;
         let rows = sqlx::query(
-            "SELECT x, y, c, t, by, coats FROM pixels
+            "SELECT x, y, c, t, by, coats, chalkUntil, shieldUntil FROM pixels
              WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4
              AND (chalkUntil = 0 OR chalkUntil > $5) LIMIT $6",
         )
@@ -146,12 +146,22 @@ pub async fn tiles(State(state): State<AppState>, Query(q): Query<Q>) -> Respons
         let x: i32 = r.get(0);
         let y: i32 = r.get(1);
         let k = tiles::tile_of(x, y);
-        // cはINTEGER、tはbitmask。APIは従来通りhex/正準形 (フロント無変更)
+        // cはINTEGER、tはbitmask。APIは従来通りhex/正準形 (フロント無変更)。
+        // e/e0/sは有効な期限付きセルのみ付与 (通常セルは増量なし)
         let c: String = crate::color::int_to_hex(r.get::<i32, _>(2));
-        let cell = serde_json::json!({
+        let mut cell = serde_json::json!({
             "c": c, "t": crate::ws_proto::bits_to_ink(r.get::<i16, _>(3)),
             "by": r.get::<Option<String>, _>(4), "coats": r.get::<i16, _>(5),
         });
+        let chalk_left: f64 = r.get::<f64, _>(6) - now;
+        if chalk_left > 0.0 {
+            cell["e"] = serde_json::json!(chalk_left);
+            cell["e0"] = serde_json::json!(state.cfg.chalk_minutes * 60.0);
+        }
+        let shield_left: f64 = r.get::<f64, _>(7) - now;
+        if shield_left > 0.0 {
+            cell["s"] = serde_json::json!(shield_left);
+        }
         bucket.entry(k).or_default().insert(format!("{x},{y}"), cell);
     }
     let mut out = serde_json::Map::new();

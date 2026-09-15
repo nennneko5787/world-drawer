@@ -74,6 +74,12 @@ pub struct Config {
     pub trusted_level: i64,
     #[serde(default = "d1000i", alias = "place_radius")]
     pub place_radius: i32,
+    // チョークの保持時間 (分)。切れるとマスが消える
+    #[serde(default = "d30f", alias = "chalk_minutes")]
+    pub chalk_minutes: f64,
+    // シールドの保護時間 (分)。切れると上書き可に戻る
+    #[serde(default = "d60f", alias = "shield_minutes")]
+    pub shield_minutes: f64,
 }
 
 fn d5() -> f64 {
@@ -111,6 +117,12 @@ fn d5i() -> i64 {
 }
 fn d1000i() -> i32 {
     1000
+}
+fn d30f() -> f64 {
+    30.0
+}
+fn d60f() -> f64 {
+    60.0
 }
 
 impl Config {

@@ -61,7 +61,7 @@ pub async fn bbox(State(state): State<AppState>, Query(q): Query<Bbox>) -> Respo
         return json_no_store(&body);
     }
     let rows = sqlx::query(
-        "SELECT x, y, c, t, by, coats FROM pixels
+        "SELECT x, y, c, t, by, coats, chalkUntil, shieldUntil FROM pixels
          WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4
          AND (chalkUntil = 0 OR chalkUntil > $5)",
     )
@@ -84,10 +84,17 @@ pub async fn bbox(State(state): State<AppState>, Query(q): Query<Bbox>) -> Respo
         let t: String = crate::ws_proto::bits_to_ink(r.get::<i16, _>(3));
         let by: Option<String> = r.get(4);
         let coats: i16 = r.get(5);
-        pixels.insert(
-            format!("{x},{y}"),
-            serde_json::json!({"c": c, "t": t, "by": by, "coats": coats}),
-        );
+        let mut cell = serde_json::json!({"c": c, "t": t, "by": by, "coats": coats});
+        let chalk_left: f64 = r.get::<f64, _>(6) - now;
+        if chalk_left > 0.0 {
+            cell["e"] = serde_json::json!(chalk_left);
+            cell["e0"] = serde_json::json!(state.cfg.chalk_minutes * 60.0);
+        }
+        let shield_left: f64 = r.get::<f64, _>(7) - now;
+        if shield_left > 0.0 {
+            cell["s"] = serde_json::json!(shield_left);
+        }
+        pixels.insert(format!("{x},{y}"), cell);
     }
     let body = serde_json::json!({
         "pixels": pixels,

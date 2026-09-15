@@ -119,11 +119,13 @@
       next.add(key);
       const cur = pixels.get(key);
       const coats = val.coats ?? 1;
-      if (!cur || cur.c !== val.c || cur.t !== val.t || (cur.coats ?? 1) !== coats) {
+      const ve = val.e || 0, vs = val.s || 0;
+      if (!cur || cur.c !== val.c || cur.t !== val.t || (cur.coats ?? 1) !== coats
+        || (cur.e || 0) !== ve || (cur.s || 0) !== vs) {
         // キー分解はsplitより手割り (巨大取得時の主スレッド停止を短縮)
         const ci = key.indexOf(",");
         const px = +key.slice(0, ci), py = +key.slice(ci + 1);
-        const cell = { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats, s: 0, sAt: Date.now(), e: 0, eAt: Date.now(), e0: 0 };
+        const cell = { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats, s: vs, sAt: Date.now(), e: ve, eAt: Date.now(), e0: val.e0 || ve };
         trackPixelWrite(cur, cell);
         pixels.set(key, cell);
         markStatic();
@@ -664,7 +666,7 @@
         trackPixelWrite(prevPix, null);
         pixels.delete(key);
       } else {
-        const next = { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x, y, coats: data.pixel.coats ?? 1, s: data.pixel.s || 0, sAt: Date.now(), e: data.pixel.e || 0, eAt: Date.now(), e0: data.pixel.e || 0 };
+        const next = { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x, y, coats: data.pixel.coats ?? 1, s: data.pixel.s || 0, sAt: Date.now(), e: data.pixel.e || 0, eAt: Date.now(), e0: data.pixel.e0 || data.pixel.e || 0 };
         trackPixelWrite(prevPix, next);
         pixels.set(key, next);
       }
@@ -735,7 +737,7 @@
         trackPixelWrite(prevUndoPix, null);
         pixels.delete(key);
       } else {
-        const next = { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x: target.x, y: target.y, coats: data.pixel.coats ?? 1, s: data.pixel.s || 0, sAt: Date.now(), e: data.pixel.e || 0, eAt: Date.now(), e0: 0 };
+        const next = { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x: target.x, y: target.y, coats: data.pixel.coats ?? 1, s: data.pixel.s || 0, sAt: Date.now(), e: data.pixel.e || 0, eAt: Date.now(), e0: data.pixel.e0 || data.pixel.e || 0 };
         trackPixelWrite(prevUndoPix, next);
         pixels.set(key, next);
       }

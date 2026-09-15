@@ -148,7 +148,7 @@ pub async fn place(
         .collect::<Vec<_>>();
     let inv_raw: String = u.get(4);
     let mut inv = users::parse_inventory(&inv_raw, &keys);
-    let (store_c, store_t, coats) = match write_pixel(
+    let (store_c, store_t, coats, chalk_secs, shield_secs) = match write_pixel(
         &mut tx,
         body.x,
         body.y,
@@ -238,7 +238,8 @@ pub async fn place(
     }
     let body = serde_json::json!({
         "ok": true, "x": body.x, "y": body.y,
-        "pixel": {"c": store_c, "t": store_t, "coats": coats},
+        "pixel": {"c": store_c, "t": store_t, "coats": coats,
+            "e": chalk_secs, "e0": chalk_secs, "s": shield_secs},
         "by": uid, "cooldownUntil": cd_new, "cooldown": cooldown,
         "inventory": inv, "reward": null,
         "level": lv, "xp": xp, "xpNeeded": xp_needed, "leveledUp": leveled_up,
@@ -254,22 +255,24 @@ async fn write_pixel(
     ink: &str,
     inv: &mut std::collections::HashMap<String, i64>,
     uid: &str,
-    _cfg: &crate::config::Config,
-) -> Result<(String, String, i32), Response> {
+    cfg: &crate::config::Config,
+) -> Result<(String, String, i32, f64, f64), Response> {
     if ink == "erase" {
         let _ = sqlx::query("DELETE FROM pixels WHERE x = $1 AND y = $2")
             .bind(x)
             .bind(y)
             .execute(&mut **tx)
             .await;
-        return Ok(("#ffffff".into(), "normal".into(), 1));
+        return Ok(("#ffffff".into(), "normal".into(), 1, 0.0, 0.0));
     }
     if ink == "normal" {
         let c = color.to_lowercase();
         let ci = crate::color::hex_to_int(&c).unwrap_or(0xffffff);
         let _ = sqlx::query(
-            "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,$4,$5,1)
-             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by, coats=1",
+            "INSERT INTO pixels(x, y, c, t, by, coats, chalkUntil, shieldUntil)
+             VALUES ($1,$2,$3,$4,$5,1,0,0)
+             ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by,
+             coats=1, chalkUntil=0, shieldUntil=0",
         )
         .bind(x)
         .bind(y)
@@ -278,7 +281,7 @@ async fn write_pixel(
         .bind(uid)
         .execute(&mut **tx)
         .await;
-        return Ok((c, "normal".into(), 1));
+        return Ok((c, "normal".into(), 1, 0.0, 0.0));
     }
     let need = place_logic::parse_combo_ink(ink).unwrap_or_default();
     if need.is_empty() {
@@ -324,9 +327,23 @@ async fn write_pixel(
     let store_t = need.join("+");
     let store_ci = crate::color::hex_to_int(&store_c).unwrap_or(0xffffff);
     let store_ti = crate::ws_proto::ink_to_bits(&store_t) as i16;
+    // 期限付与 (チョークは消滅、シールドは保護)。持たない側は0で明示消去
+    let now_until = chrono::Utc::now().timestamp() as f64;
+    let chalk_until = if need.iter().any(|p| p == "chalk") {
+        now_until + cfg.chalk_minutes * 60.0
+    } else {
+        0.0
+    };
+    let shield_until = if need.iter().any(|p| p == "shield") {
+        now_until + cfg.shield_minutes * 60.0
+    } else {
+        0.0
+    };
     let _ = sqlx::query(
-        "INSERT INTO pixels(x, y, c, t, by, coats) VALUES ($1,$2,$3,$4,$5,$6)
-         ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by, coats=excluded.coats",
+        "INSERT INTO pixels(x, y, c, t, by, coats, chalkUntil, shieldUntil)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         ON CONFLICT(x, y) DO UPDATE SET c=excluded.c, t=excluded.t, by=excluded.by,
+         coats=excluded.coats, chalkUntil=excluded.chalkUntil, shieldUntil=excluded.shieldUntil",
     )
     .bind(x)
     .bind(y)
@@ -334,12 +351,24 @@ async fn write_pixel(
     .bind(store_ti)
     .bind(uid)
     .bind(coats as i16)
+    .bind(chalk_until)
+    .bind(shield_until)
     .execute(&mut **tx)
     .await;
     for p in &need {
         *inv.entry(p.clone()).or_insert(0) -= 1;
     }
-    Ok((store_c, store_t, coats))
+    let chalk_secs = if chalk_until > 0.0 {
+        cfg.chalk_minutes * 60.0
+    } else {
+        0.0
+    };
+    let shield_secs = if shield_until > 0.0 {
+        cfg.shield_minutes * 60.0
+    } else {
+        0.0
+    };
+    Ok((store_c, store_t, coats, chalk_secs, shield_secs))
 }
 
 fn err(status: StatusCode, code: &str) -> Response {
