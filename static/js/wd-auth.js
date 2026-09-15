@@ -43,7 +43,6 @@
     if (el) return el;
     el = document.createElement("div");
     el.id = "ts-slot";
-    el.style.cssText = "position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:60;";
     document.body.appendChild(el);
     return el;
   }
@@ -55,9 +54,10 @@
       try {
         const slot = ensureTurnstileSlot();
         slot.innerHTML = "";
+        const dark = document.documentElement.dataset.theme === "dark";
         const id = turnstile.render(slot, {
           sitekey: key,
-          size: "compact",
+          theme: dark ? "dark" : "light",
           callback: (tok) => {
             try { turnstile.remove(id); } catch {}
             slot.innerHTML = "";
