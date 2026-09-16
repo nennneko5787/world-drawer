@@ -3,13 +3,12 @@
 "use strict";
   async function ensureToken() {
     if (token) return;
-    const ts = await getTurnstileToken();
-    const res = await fetch(`${apiBase()}/api/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ turnstile_token: ts, lang: window.wdI18n.lang }),
-    });
-    const data = await res.json();
+    // サーバが要求した時だけ検証する (不要時は空トークンで通る)
+    const data = await postWithTurnstile(
+      "/api/session",
+      { "Content-Type": "application/json" },
+      (ts) => ({ turnstile_token: ts, lang: window.wdI18n.lang }),
+    );
     if (!data.ok || !data.token) throw new Error("session failed");
     token = data.token;
     localStorage.setItem("wd_token", token);
@@ -416,9 +415,11 @@
     wsConnecting = true;
     try {
       if (wsFailCount === 0) toast(t("connectingToast"));
-      const ts = await getTurnstileToken();
+      const { ticket, turnstileRequired } = await fetchWsTicket();
       if (wsGiveUp) return;
-      const ticket = await fetchWsTicket();
+      // サーバが要求する時だけ検証ウィジェットを実行する
+      const ts = turnstileRequired ? await getTurnstileToken() : "";
+      if (wsGiveUp) return;
       const ws = new WebSocket(wsUrl());
       ws.binaryType = "arraybuffer";
       let helloDone = false;

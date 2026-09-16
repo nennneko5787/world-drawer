@@ -18,7 +18,7 @@
 | `GET /api/bounds` | `routes/canvas.rs:114` | `{count}` または `{count,minX,minY,maxX,maxY}` |
 | `GET /api/me` | `routes/me.rs:10` | Bearerの自情報。不存在は `404 noUser`（自動作成しない） |
 | `POST /api/session` | `routes/session.rs:19` | Turnstile必須で新規発行。`{ok,token,uid,profile,inventory,cooldownUntil,cooldown,level,xp,xpNeeded,hasAccount,country,showCountry}` |
-| `POST /api/ws-ticket` | `routes/ticket.rs:8` | WS用使い切りチケット（30秒）。`{ok,ticket}` |
+| `POST /api/ws-ticket` | `routes/ticket.rs:8` | WS用使い切りチケット（30秒）。`{ok,ticket,turnstileRequired}`（helloの検証要否。クライアントはtrueの時だけTurnstile実行） |
 | `POST /api/place` | `routes/place.rs:22` | 配置（`{x,y,color,ink}`）。成功時は `ok:true` + `pixel/by/cooldownUntil/cooldown/inventory/reward/level/xp/xpNeeded/leveledUp` |
 | `POST /api/undo` | `routes/undo.rs:36` | 3秒取消（`{x,y,prevEmpty,prevC,prevT,prevCoats}`）。成功時は `pixel/by/level/xp/xpNeeded/inventory` |
 | `GET /api/history?x&y&limit&beforeId` | `routes/history.rs:16` | `{ok,x,y,items,hasMore}`（`limit` 1-100、既定20） |

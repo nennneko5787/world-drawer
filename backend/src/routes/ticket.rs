@@ -22,5 +22,7 @@ pub async fn create(State(state): State<AppState>, headers: HeaderMap) -> Respon
             chrono::Utc::now().timestamp() + 30,
         ),
     );
-    axum::Json(serde_json::json!({"ok": true, "ticket": ticket})).into_response()
+    // クライアントはこのフラグがtrueの時だけTurnstileを実行する
+    let enforce = state.cfg.turnstile.as_ref().map(|t| t.enforce).unwrap_or(true);
+    axum::Json(serde_json::json!({"ok": true, "ticket": ticket, "turnstileRequired": enforce})).into_response()
 }

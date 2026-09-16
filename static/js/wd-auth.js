@@ -96,5 +96,23 @@
     const res = await apiFetch("/api/ws-ticket", { method: "POST" });
     const data = await res.json();
     if (!data.ok || !data.ticket) throw new Error("ticket failed");
-    return data.ticket;
+    // 旧サーバ互換: フラグ無しは要求あり扱い (検証側に倒す)
+    return { ticket: data.ticket, turnstileRequired: data.turnstileRequired !== false };
+  }
+  // サーバが要求した時だけTurnstileを実行するPOST。先に空トークンで試し、
+  // turnstileRequiredで返ってきたら1回だけトークン付きで再送する。
+  async function postWithTurnstile(path, headers, makeBody) {
+    const send = async (ts) => {
+      const res = await fetch(`${apiBase()}${path}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(makeBody(ts)),
+      });
+      return res.json();
+    };
+    let data = await send("");
+    if (!data.ok && data.error === "turnstileRequired") {
+      data = await send(await getTurnstileToken());
+    }
+    return data;
   }

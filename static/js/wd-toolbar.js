@@ -261,13 +261,11 @@
       return;
     }
     try {
-      const ts = await getTurnstileToken();
-      const res = await fetch(`${apiBase()}/api/account/issue`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ password: pw, turnstile_token: ts }),
-      });
-      const data = await res.json();
+      const data = await postWithTurnstile(
+        "/api/account/issue",
+        authHeaders({ "Content-Type": "application/json" }),
+        (ts) => ({ password: pw, turnstile_token: ts }),
+      );
       if (!data.ok) {
         toast(t("issueFailed", { error: data.error || "" }));
         return;
@@ -282,13 +280,11 @@
   };
   loginBtn.onclick = async () => {
     try {
-      const ts = await getTurnstileToken();
-      const res = await fetch(`${apiBase()}/api/account/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: loginCode.value, password: loginPassword.value, turnstile_token: ts, from_token: token || "" }),
-      });
-      const data = await res.json();
+      const data = await postWithTurnstile(
+        "/api/account/login",
+        { "Content-Type": "application/json" },
+        (ts) => ({ code: loginCode.value, password: loginPassword.value, turnstile_token: ts, from_token: token || "" }),
+      );
       if (!data.ok) {
         toast(t(data.error === "locked" ? "lockedToast" : "badLoginToast"));
         return;
