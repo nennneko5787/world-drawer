@@ -21,13 +21,10 @@ const COORD_LIMIT: i32 = 1_000_000;
 /// 視野取得。Edgeキャッシュなし (no-store)。常にDB直読み。
 pub async fn bbox(State(state): State<AppState>, Query(q): Query<Bbox>) -> Response {
     let Some((lox, hix, loy, hiy)) = normalize(q) else {
-        // bbox無しは全量返さない。metaのみ (フロントの初回取得用)
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pixels")
-            .fetch_one(&state.pool)
-            .await
-            .unwrap_or(0);
+        // bbox無しは全量返さない。metaのみ (フロントの初回取得用)。
+        // 全件COUNTはしない (重い上にpixelCountはフロント未使用のため廃止)
         let body = serde_json::json!({
-            "pixels": {}, "truncated": false, "pixelCount": count,
+            "pixels": {}, "truncated": false,
             "background": state.cfg.background,
             "cooldown": state.cfg.cooldown_sec,
             "trustedLevel": state.cfg.trusted_level,
@@ -138,12 +135,12 @@ fn json_no_store(v: &serde_json::Value) -> Response {
         .unwrap()
 }
 
-/// OGP画像のみ60sキャッシュ許可。
-pub async fn og_image(State(_state): State<AppState>, _h: HeaderMap) -> Response {
-    // TODO: picks/ogp_image.rs (原点付近レンダ)
+/// OGP画像のみ60sキャッシュ許可。原点中心レンダ (ogp.rs)
+pub async fn og_image(State(state): State<AppState>, _h: HeaderMap) -> Response {
+    let bytes = crate::ogp::render(&state.pool, &state.cfg.background).await;
     Response::builder()
         .header("content-type", "image/png")
         .header("cache-control", "public, max-age=60")
-        .body(axum::body::Body::from(vec![]))
+        .body(axum::body::Body::from(bytes))
         .unwrap()
 }

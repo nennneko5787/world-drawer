@@ -21,6 +21,15 @@ pub struct TurnstileCfg {
 fn default_true() -> bool {
     true
 }
+fn dtrue() -> bool {
+    true
+}
+fn d64i() -> i64 {
+    64
+}
+fn d60i() -> i64 {
+    60
+}
 fn default_timeout() -> u64 {
     5
 }
@@ -74,12 +83,35 @@ pub struct Config {
     pub trusted_level: i64,
     #[serde(default = "d1000i", alias = "place_radius")]
     pub place_radius: i32,
+    // 配置にWS接続を必須化 (REST直叩きの自動配置を封じる)
+    #[serde(default = "dtrue", alias = "require_socket_for_place")]
+    pub require_socket_for_place: bool,
+    // IPごとの同時WS接続上限 (多アカウント荒らし対策)
+    #[serde(default = "d64i", alias = "max_sockets_per_ip")]
+    pub max_sockets_per_ip: i64,
+    // IP共有の配置上限/分 (家族利用を妨げないよう緩めに)
+    #[serde(default = "d60i", alias = "place_per_min_per_ip")]
+    pub place_per_min_per_ip: i64,
     // チョークの保持時間 (分)。切れるとマスが消える
     #[serde(default = "d30f", alias = "chalk_minutes")]
     pub chalk_minutes: f64,
     // シールドの保護時間 (分)。切れると上書き可に戻る
     #[serde(default = "d60f", alias = "shield_minutes")]
     pub shield_minutes: f64,
+    // 特殊インクガチャ: 配置ごとの当選確率と付与量
+    #[serde(default = "d030", alias = "reward_chance")]
+    pub reward_chance: f64,
+    #[serde(default = "d1i", alias = "reward_min")]
+    pub reward_min: i64,
+    #[serde(default = "d5r", alias = "reward_max")]
+    pub reward_max: i64,
+    // 履歴上限: 1セル件数と履歴持ちセル数。
+    // セル数上限は0で無効 (既定)。履歴はロールバックの根拠のため残す。
+    // 有効化すると古いセルから無言削除され、履歴表示・巻き戻しが効かなくなる
+    #[serde(default = "d20i", alias = "max_history_per_cell")]
+    pub max_history_per_cell: i64,
+    #[serde(default = "d0i", alias = "max_history_cells")]
+    pub max_history_cells: i64,
 }
 
 fn d5() -> f64 {
@@ -120,6 +152,18 @@ fn d1000i() -> i32 {
 }
 fn d30f() -> f64 {
     30.0
+}
+fn d030() -> f64 {
+    0.30
+}
+fn d5r() -> i64 {
+    5
+}
+fn d20i() -> i64 {
+    20
+}
+fn d0i() -> i64 {
+    0
 }
 fn d60f() -> f64 {
     60.0
@@ -261,15 +305,6 @@ fn deep_merge(mut a: serde_json::Value, b: serde_json::Value) -> serde_json::Val
 }
 
 pub fn load() -> anyhow::Result<Config> {
-    if let Ok(url) = std::env::var("DATABASE_URL") {
-        if !url.trim().is_empty() {
-            let cfg = Config {
-                database_url: url,
-                ..Default::default()
-            };
-            return Ok(cfg);
-        }
-    }
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("config.jsonc");
@@ -279,6 +314,8 @@ pub fn load() -> anyhow::Result<Config> {
     let merged = deep_merge(read_one(&base), read_one(&local));
     let mut cfg: Config =
         serde_json::from_value(merged).context("config.jsonc parse error")?;
+    // DATABASE_URLはDB接続先だけ上書きする (他キーを既定化しないこと。
+    // 以前はここで早期returnしてadmin/turnstile等を失っていた)
     if let Ok(url) = std::env::var("DATABASE_URL") {
         if !url.trim().is_empty() {
             cfg.database_url = url;

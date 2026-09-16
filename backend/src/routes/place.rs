@@ -7,8 +7,10 @@ use crate::users;
 use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use rand::Rng;
 use serde::Deserialize;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 #[derive(Deserialize)]
 pub struct PlaceBody {
@@ -62,11 +64,33 @@ pub async fn place(
         .unwrap_or("");
     let client_ip = ip::resolve_client_ip(&peer_s, cf, xff, &nets);
 
+    // ban執行 (管理banを配置で効かせる。Redis障害時は通す)
+    if rate::ban_remaining(&mut state.redis, &client_ip).await > 0.0 {
+        return err(StatusCode::FORBIDDEN, "banned");
+    }
+
     // IP共有バケツ (成功分のみ計数すべきだが、簡易版は試行時計数。詳細はTODO)
+    let place_limit = state.cfg.place_per_min_per_ip.max(1);
     if client_ip != "unknown"
-        && !rate::allow(&mut state.redis, "place", &client_ip, 60, 60.0).await
+        && !rate::allow(&mut state.redis, "place", &client_ip, place_limit, 60.0).await
     {
         return err(StatusCode::TOO_MANY_REQUESTS, "ipBusy");
+    }
+
+    // socket必須 + カーソル照合 (REST直叩きの自動配置を封じる)
+    if state.cfg.require_socket_for_place {
+        if !state.hub.token_has_live(&token) {
+            return err(StatusCode::FORBIDDEN, "noSocket");
+        }
+        if !state.hub.cursor_matches(&token, body.x, body.y) {
+            tokio::time::sleep(Duration::from_millis(
+                place_logic::CURSOR_WAIT_MS,
+            ))
+            .await;
+            if !state.hub.cursor_matches(&token, body.x, body.y) {
+                return err(StatusCode::CONFLICT, "cursorMismatch");
+            }
+        }
     }
 
     // トランザクション + 行ロック
@@ -89,6 +113,8 @@ pub async fn place(
     };
     use sqlx::Row;
     let uid: String = u.get(1);
+    // 最終IP記録 (荒らし特定用)
+    crate::rate::note_last_ip(&mut state.redis, &token, &client_ip).await;
     let level = users::clamp_level(u.get::<i32, _>(6) as i64);
     let cd_until: f64 = u.get(5);
     if cd_until > now {
@@ -140,6 +166,35 @@ pub async fn place(
         }
     }
 
+    // 半径制限 (低レベルは既存ピクセル近傍のみ。全件COUNTは使わない。
+    // 空キャンバスの初手は許可。presence近傍は廃止=仕様)
+    if level < state.cfg.trusted_level {
+        let any: Option<i32> = sqlx::query_scalar("SELECT 1 FROM pixels LIMIT 1")
+            .fetch_optional(&mut *tx)
+            .await
+            .unwrap_or(None);
+        if any.is_some() {
+            let r = state.cfg.place_radius;
+            let near: Option<i32> = sqlx::query_scalar(
+                "SELECT 1 FROM pixels
+                  WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 1",
+            )
+            .bind(body.x.saturating_sub(r))
+            .bind(body.x.saturating_add(r))
+            .bind(body.y.saturating_sub(r))
+            .bind(body.y.saturating_add(r))
+            .fetch_optional(&mut *tx)
+            .await
+            .unwrap_or(None);
+            if near.is_none() {
+                let body = serde_json::json!({
+                    "ok": false, "error": "tooFar", "radius": state.cfg.place_radius,
+                });
+                return (StatusCode::BAD_REQUEST, axum::Json(body)).into_response();
+            }
+        }
+    }
+
     // 書込
     let color = body.color.clone().unwrap_or_else(|| "#000000".into());
     let keys = ["glow", "rainbow", "ghost", "chalk", "shield"]
@@ -185,6 +240,25 @@ pub async fn place(
         leveled_up = true;
     }
     let xp_needed = users::xp_needed_for_level(lv, state.cfg.xp_base, state.cfg.xp_pow);
+    // 報酬ガチャ (特殊インクの入手経路。game-rules.md)。
+    // ゲーム内ガチャであり秘密情報ではないためrandでよい。
+    // ThreadRngは!Sendのため束縛せず都度生成する (await跨ぎ保持の回避)
+    let reward: Option<(String, i64)> = {
+        let chance = state.cfg.reward_chance.clamp(0.0, 1.0);
+        let (lo, hi) = (
+            state.cfg.reward_min.max(1).min(state.cfg.reward_max.max(1)),
+            state.cfg.reward_min.max(1).max(state.cfg.reward_max.max(1)),
+        );
+        if chance > 0.0 && rand::thread_rng().gen_range(0.0..1.0) < chance {
+            let inks = ["glow", "rainbow", "ghost", "chalk", "shield"];
+            let ink = inks[rand::thread_rng().gen_range(0..inks.len())].to_string();
+            let amount = rand::thread_rng().gen_range(lo..=hi);
+            *inv.entry(ink.clone()).or_insert(0) += amount;
+            Some((ink, amount))
+        } else {
+            None
+        }
+    };
     let inv_json = serde_json::to_string(&inv).unwrap_or_default();
     let _ = sqlx::query(
         "UPDATE users SET inventory = $1, cooldownUntil = $2, level = $3, xp = $4 WHERE token = $5",
@@ -196,27 +270,35 @@ pub async fn place(
     .bind(&token)
     .execute(&mut *tx)
     .await;
-    let _ =
-        sqlx::query("INSERT INTO history(x, y, uid, c, t, at, xp) VALUES ($1,$2,$3,$4,$5,$6,1)")
-            .bind(body.x)
-            .bind(body.y)
-            .bind(&uid)
-            .bind(crate::color::hex_to_int(&store_c).unwrap_or(0xffffff))
-            .bind(crate::ws_proto::ink_to_bits(&store_t) as i16)
-            .bind(now)
-            .execute(&mut *tx)
-            .await;
     let _ = sqlx::query(
-        "DELETE FROM history WHERE x = $1 AND y = $2 AND id NOT IN
-         (SELECT id FROM history WHERE x = $1 AND y = $2 ORDER BY at DESC, id DESC LIMIT 20)",
+        "INSERT INTO history(x, y, uid, c, t, at, xp, rewardInk, rewardAmount)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
     )
     .bind(body.x)
     .bind(body.y)
+    .bind(&uid)
+    .bind(crate::color::hex_to_int(&store_c).unwrap_or(0xffffff))
+    .bind(crate::ws_proto::ink_to_bits(&store_t) as i16)
+    .bind(now)
+    .bind(state.cfg.xp_per_place)
+    .bind(reward.as_ref().map(|(ink, _)| ink.clone()))
+    .bind(reward.as_ref().map(|(_, n)| *n).unwrap_or(0))
+    .execute(&mut *tx)
+    .await;
+    let per_cell = state.cfg.max_history_per_cell.clamp(1, 200);
+    let _ = sqlx::query(
+        "DELETE FROM history WHERE x = $1 AND y = $2 AND id NOT IN
+         (SELECT id FROM history WHERE x = $1 AND y = $2 ORDER BY at DESC, id DESC LIMIT $3)",
+    )
+    .bind(body.x)
+    .bind(body.y)
+    .bind(per_cell)
     .execute(&mut *tx)
     .await;
     if tx.commit().await.is_err() {
         return err(StatusCode::SERVICE_UNAVAILABLE, "busy");
     }
+    maybe_prune(&state.pool, state.cfg.max_history_cells).await;
     state.tiles.bump(body.x, body.y);
 
     // 購読タイル宛にバイナリ配信 (全員broadcast廃止)
@@ -236,12 +318,16 @@ pub async fn place(
         );
         state.hub.send_to_watchers(tile_of(body.x, body.y), &msg, None);
     }
+    let reward_json = reward
+        .as_ref()
+        .map(|(ink, n)| serde_json::json!({"ink": ink, "amount": n}))
+        .unwrap_or(serde_json::Value::Null);
     let body = serde_json::json!({
         "ok": true, "x": body.x, "y": body.y,
         "pixel": {"c": store_c, "t": store_t, "coats": coats,
             "e": chalk_secs, "e0": chalk_secs, "s": shield_secs},
         "by": uid, "cooldownUntil": cd_new, "cooldown": cooldown,
-        "inventory": inv, "reward": null,
+        "inventory": inv, "reward": reward_json,
         "level": lv, "xp": xp, "xpNeeded": xp_needed, "leveledUp": leveled_up,
     });
     (StatusCode::OK, axum::Json(body)).into_response()
@@ -263,7 +349,7 @@ async fn write_pixel(
             .bind(y)
             .execute(&mut **tx)
             .await;
-        return Ok(("#ffffff".into(), "normal".into(), 1, 0.0, 0.0));
+        return Ok((cfg.background.clone(), "normal".into(), 1, 0.0, 0.0));
     }
     if ink == "normal" {
         let c = color.to_lowercase();
@@ -374,4 +460,36 @@ async fn write_pixel(
 fn err(status: StatusCode, code: &str) -> Response {
     let body = serde_json::json!({"ok": false, "error": code});
     (status, axum::Json(body)).into_response()
+}
+
+/// 履歴セル数の整理。配置トランザクションの外・別Txで低頻度に実行する
+/// (Python maybePrune相当。5%サンプリングで全走査を間引く)
+async fn maybe_prune(pool: &sqlx::PgPool, max_cells: i64) {
+    if max_cells <= 0 {
+        return;
+    }
+    if rand::thread_rng().gen_range(0.0..1.0) >= 0.05 {
+        return;
+    }
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM (SELECT DISTINCT x, y FROM history) AS t",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+    let excess = total - max_cells;
+    if excess <= 0 {
+        return;
+    }
+    let _ = sqlx::query(
+        "DELETE FROM history WHERE (x, y) IN (
+           SELECT x, y FROM (
+             SELECT x, y, MAX(id) AS m FROM history
+             GROUP BY x, y ORDER BY m ASC LIMIT $1
+           ) AS old
+         )",
+    )
+    .bind(excess)
+    .execute(pool)
+    .await;
 }

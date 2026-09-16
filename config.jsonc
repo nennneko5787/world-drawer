@@ -32,7 +32,10 @@
 
   // ---- 履歴 ----
   "maxHistoryPerCell": 20, // 1マスあたりの保持件数 (1〜200)
-  "maxHistoryCells": 50000, // 履歴を持つマス数の上限 (100〜1000000)
+  // 履歴を持つマス数の上限 (0で無効=既定。100〜1000000)。
+  // 有効化すると上限超過分を古いセルから無言削除する (5%サンプリング)。
+  // 履歴表示・荒らしの巻き戻しが効かなくなるため、残したい場合は0のまま
+  "maxHistoryCells": 0,
 
   // ---- アカウント ----
   "minPasswordLen": 8, // パスワード最小文字数 (4〜64)
@@ -50,11 +53,11 @@
   "placeRadius": 1000,
   // trustedLevel: このレベル以上は半径制限なし (1〜100)。
   "trustedLevel": 5,
-  // requireSocketForPlace: 配置にsocket.io接続を必須化 (true/false)。
-  // true でREST直叩きの自動配置を封じられる。false だとsocket.ioなし環境でも
+  // requireSocketForPlace: 配置にWS接続を必須化 (true/false)。
+  // true でREST直叩きの自動配置を封じられる。false だとWSなし環境でも
   // 配置できるがスクリプト荒らしに弱くなる。変更は再起動後に反映。
   "requireSocketForPlace": true,
-  // maxSocketsPerIp: IPごとの同時socket接続上限 (1〜1000)。多アカウント荒らし対策。
+  // maxSocketsPerIp: IPごとの同時WS接続上限 (1〜1000)。多アカウント荒らし対策。
   "maxSocketsPerIp": 64,
 
   // ---- 管理者 ----

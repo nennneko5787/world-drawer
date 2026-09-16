@@ -22,6 +22,9 @@ pub struct LoginBody {
     pub code: String,
     pub password: String,
     pub turnstile_token: Option<String>,
+    /// 現端末のtoken (統合用。空・不一致・不存在なら切替のみ)
+    #[serde(default)]
+    pub from_token: Option<String>,
 }
 
 fn hash_new(pw: &str) -> String {
@@ -183,13 +186,14 @@ pub async fn login(
         )
             .into_response();
     };
-    if !rate::allow(&mut state.redis, "login", &client_ip, 10, 600.0).await {
+    if !rate::allow_record(&mut state.redis, "login", &client_ip, 10, 600.0, false).await
+    {
         return (StatusCode::TOO_MANY_REQUESTS, r#"{"ok":false,"error":"locked"}"#)
             .into_response();
     }
     let code = body.code.trim().to_uppercase();
     let row = sqlx::query(
-        "SELECT token, uid, passwordHash FROM users WHERE transferCode = $1",
+        "SELECT passwordHash FROM users WHERE transferCode = $1",
     )
     .bind(&code)
     .fetch_optional(&state.pool)
@@ -200,13 +204,148 @@ pub async fn login(
             .into_response();
     };
     use sqlx::Row;
-    let token: String = r.get(0);
-    let uid: String = r.get(1);
-    let stored: Option<String> = r.get(2);
+    let stored: Option<String> = r.get(0);
     if !verify(&body.password, stored.as_deref().unwrap_or("")) {
+        // 失敗のみ計数。成功時は下でリセット (Pythonと同方式)
+        let _ = rate::allow_record(&mut state.redis, "login", &client_ip, 10, 600.0, true).await;
         return (StatusCode::UNAUTHORIZED, r#"{"ok":false,"error":"badLogin"}"#)
             .into_response();
     }
-    (StatusCode::OK, axum::Json(serde_json::json!({"ok": true, "token": token, "uid": uid})))
-        .into_response()
+    rate::rate_reset(&mut state.redis, "login", &client_ip).await;
+    // 統合 (現端末のアカウントを引っ越し先に合体。account-transfer.md)。
+    // 行ロックで同時統合と直列化する
+    let mut tx = match state.pool.begin().await {
+        Ok(t) => t,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                r#"{"ok":false,"error":"busy"}"#,
+            )
+                .into_response()
+        }
+    };
+    let dst = sqlx::query(
+        "SELECT token, uid, name, color, inventory, cooldownUntil, level, xp, country
+         FROM users WHERE transferCode = $1 FOR UPDATE",
+    )
+    .bind(&code)
+    .fetch_optional(&mut *tx)
+    .await
+    .unwrap_or(None);
+    let Some(d) = dst else {
+        return (StatusCode::UNAUTHORIZED, r#"{"ok":false,"error":"badLogin"}"#)
+            .into_response();
+    };
+    let dst_token: String = d.get(0);
+    let dst_uid: String = d.get(1);
+    let mut name: String = d.get(2);
+    let mut color: String = crate::color::int_to_hex(d.get::<i32, _>(3));
+    let mut merged = false;
+    let from = body.from_token.clone().unwrap_or_default().trim().to_string();
+    if !from.is_empty() && from != dst_token {
+        let src = sqlx::query(
+            "SELECT token, uid, name, color, inventory, cooldownUntil, level, xp, country
+             FROM users WHERE token = $1 FOR UPDATE",
+        )
+        .bind(&from)
+        .fetch_optional(&mut *tx)
+        .await
+        .unwrap_or(None);
+        if let Some(s) = src {
+            let src_uid: String = s.get(1);
+            if src_uid == dst_uid {
+                // uidが同じでもトークンが違えば旧行だけ消す
+                let _ = sqlx::query("DELETE FROM users WHERE token = $1")
+                    .bind(&from)
+                    .execute(&mut *tx)
+                    .await;
+            } else {
+                let keys = ["glow", "rainbow", "ghost", "chalk", "shield"]
+                    .iter()
+                    .map(|k| k.to_string())
+                    .collect::<Vec<_>>();
+                let total = users::total_earned(
+                    d.get::<i32, _>(6) as i64,
+                    d.get::<i32, _>(7) as i64,
+                    state.cfg.xp_base,
+                    state.cfg.xp_pow,
+                ) + users::total_earned(
+                    s.get::<i32, _>(6) as i64,
+                    s.get::<i32, _>(7) as i64,
+                    state.cfg.xp_base,
+                    state.cfg.xp_pow,
+                );
+                let (lv, xp) =
+                    users::level_xp_from_total(total, state.cfg.xp_base, state.cfg.xp_pow);
+                let mut dinv = users::parse_inventory(&d.get::<String, _>(4), &keys);
+                let sinv = users::parse_inventory(&s.get::<String, _>(4), &keys);
+                for k in &keys {
+                    *dinv.entry(k.clone()).or_insert(0) += sinv.get(k).copied().unwrap_or(0);
+                }
+                let cd = d.get::<f64, _>(5).max(s.get::<f64, _>(5));
+                let country: Option<String> =
+                    d.get::<Option<String>, _>(8).or(s.get::<Option<String>, _>(8));
+                // 名前・色は引っ越し先維持。先が初期名のまま＋元が改名済みなら元を採用
+                const DEFAULTS: [&str; 5] = ["ななし", "Anon", "익명", "无名", "無名"];
+                let mut new_name = name.clone();
+                let mut new_color = color.clone();
+                let src_name: String = s.get::<String, _>(2).trim().to_string();
+                if DEFAULTS.contains(&new_name.as_str())
+                    && !src_name.is_empty()
+                    && !DEFAULTS.contains(&src_name.as_str())
+                {
+                    new_name = users::clean_name(&src_name, 20, "ななし");
+                    new_color = users::clean_color(
+                        &crate::color::int_to_hex(s.get::<i32, _>(3)),
+                        &new_color,
+                    );
+                }
+                let _ = sqlx::query(
+                    "UPDATE users SET inventory = $1, cooldownUntil = $2, level = $3,
+                     xp = $4, country = $5, name = $6, color = $7 WHERE token = $8",
+                )
+                .bind(serde_json::to_string(&dinv).unwrap_or_default())
+                .bind(cd)
+                .bind(lv)
+                .bind(xp)
+                .bind(country)
+                .bind(&new_name)
+                .bind(crate::color::hex_to_int(&new_color).unwrap_or(0x22aa66))
+                .bind(&dst_token)
+                .execute(&mut *tx)
+                .await;
+                // 帰属の付け替え (両方の履歴を残す)
+                let _ = sqlx::query("UPDATE history SET uid = $1 WHERE uid = $2")
+                    .bind(&dst_uid)
+                    .bind(&src_uid)
+                    .execute(&mut *tx)
+                    .await;
+                let _ = sqlx::query("UPDATE pixels SET by = $1 WHERE by = $2")
+                    .bind(&dst_uid)
+                    .bind(&src_uid)
+                    .execute(&mut *tx)
+                    .await;
+                let _ = sqlx::query("DELETE FROM users WHERE token = $1")
+                    .bind(&from)
+                    .execute(&mut *tx)
+                    .await;
+                name = new_name;
+                color = new_color;
+                merged = true;
+            }
+        }
+    }
+    if tx.commit().await.is_err() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            r#"{"ok":false,"error":"busy"}"#,
+        )
+            .into_response();
+    }
+    if merged {
+        state.hub.forget_token(&from);
+    }
+    let out = serde_json::json!({"ok": true, "token": dst_token, "uid": dst_uid,
+        "merged": merged, "profile": {"name": name, "color": color}});
+    (StatusCode::OK, axum::Json(out)).into_response()
 }

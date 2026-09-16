@@ -33,19 +33,46 @@ pub struct BanBody {
     pub seconds: Option<f64>,
 }
 
-pub async fn status(State(state): State<AppState>, headers: HeaderMap) -> Response {
+pub async fn status(State(mut state): State<AppState>, headers: HeaderMap) -> Response {
     if !is_admin(&state, &headers) {
         return (StatusCode::FORBIDDEN, r#"{"ok":false,"error":"forbidden"}"#)
             .into_response();
     }
     let presence = state.hub.live_count();
-    let body = serde_json::json!({"ok": true, "presence": presence,
-        "config": {"maxSocketsPerIp": 64}});
+    let banned = ban_list(&mut state).await;
+    let body = serde_json::json!({"ok": true, "presence": presence, "sockets": presence,
+        "banned": banned,
+        "config": {"placePerMinPerIp": state.cfg.place_per_min_per_ip,
+                   "sessionPerHour": 30,
+                   "requireSocketForPlace": state.cfg.require_socket_for_place,
+                   "maxSocketsPerIp": state.cfg.max_sockets_per_ip}});
     (StatusCode::OK, axum::Json(body)).into_response()
 }
 
+/// 有効ban一覧。期限切れ・壊値は掃除する (Python banList相当)
+async fn ban_list(state: &mut AppState) -> Vec<serde_json::Value> {
+    use redis::AsyncCommands;
+    let map: std::collections::HashMap<String, String> =
+        state.redis.hgetall("wd:bans").await.unwrap_or_default();
+    let now = chrono::Utc::now().timestamp() as f64;
+    let mut out = vec![];
+    let mut dead = vec![];
+    for (ip, raw) in map {
+        match raw.trim().parse::<f64>() {
+            Ok(until) if until > now => {
+                out.push(serde_json::json!({"ip": ip, "until": until}))
+            }
+            _ => dead.push(ip),
+        }
+    }
+    if !dead.is_empty() {
+        let _: Result<(), _> = state.redis.hdel("wd:bans", &dead).await;
+    }
+    out
+}
+
 pub async fn lookup(
-    State(state): State<AppState>,
+    State(mut state): State<AppState>,
     headers: HeaderMap,
     body: axum::Json<LookupBody>,
 ) -> Response {
@@ -55,7 +82,8 @@ pub async fn lookup(
     }
     let uid = body.uid.trim().chars().take(16).collect::<String>();
     let row = sqlx::query(
-        "SELECT uid, name, color, level, xp FROM users WHERE uid = $1",
+        "SELECT token, uid, name, color, level, xp, inventory, country, showCountry
+         FROM users WHERE uid = $1",
     )
     .bind(&uid)
     .fetch_optional(&state.pool)
@@ -65,10 +93,25 @@ pub async fn lookup(
         return (StatusCode::OK, r#"{"ok":false,"error":"noUser"}"#).into_response();
     };
     use sqlx::Row;
+    let token: String = r.get(0);
+    let keys = ["glow", "rainbow", "ghost", "chalk", "shield"]
+        .iter()
+        .map(|k| k.to_string())
+        .collect::<Vec<_>>();
+    let touched: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pixels WHERE by = $1")
+        .bind(&uid)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or(0);
+    let last_ip = crate::rate::last_ip(&mut state.redis, &token).await;
+    let online = state.hub.infos.iter().any(|e| e.value().uid == uid);
     let out = serde_json::json!({"ok": true, "user": {
-        "uid": r.get::<String, _>(0), "name": r.get::<String, _>(1),
-        "color": crate::color::int_to_hex(r.get::<i32, _>(2)), "level": r.get::<i32, _>(3) as i64,
-        "xp": r.get::<i32, _>(4) as i64,
+        "uid": r.get::<String, _>(1), "name": r.get::<String, _>(2),
+        "color": crate::color::int_to_hex(r.get::<i32, _>(3)),
+        "level": r.get::<i32, _>(4) as i64, "xp": r.get::<i32, _>(5) as i64,
+        "inventory": crate::users::parse_inventory(&r.get::<String, _>(6), &keys),
+        "country": r.get::<Option<String>, _>(7), "showCountry": r.get::<i32, _>(8) != 0,
+        "touchedCells": touched, "lastIp": last_ip, "online": online,
     }});
     (StatusCode::OK, axum::Json(out)).into_response()
 }
@@ -148,10 +191,11 @@ pub async fn rollback(
                 .bind(y)
                 .execute(&mut *tx)
                 .await;
-            events.push(serde_json::json!({"kind": "pixel", "x": x, "y": y, "c": "#ffffff", "t": "normal", "erased": true}));
+            events.push(serde_json::json!({"x": x, "y": y, "erased": true,
+                "c": "#ffffff", "t": "normal", "coats": 1}));
         } else {
             let pc: i32 = rows[1].get(2);
-            let pt: String = crate::ws_proto::bits_to_ink(rows[1].get::<i16, _>(3));
+            let pt: i16 = rows[1].get(3);
             let pu: String = rows[1].get(1);
             let _ = sqlx::query(
                 "INSERT INTO pixels(x, y, c, t, by, coats, shieldUntil) VALUES ($1,$2,$3,$4,$5,1,0)
@@ -161,11 +205,13 @@ pub async fn rollback(
             .bind(x)
             .bind(y)
             .bind(pc)
-            .bind(&pt)
+            .bind(pt)
             .bind(&pu)
             .execute(&mut *tx)
             .await;
-            events.push(serde_json::json!({"kind": "pixel", "x": x, "y": y, "c": crate::color::int_to_hex(pc), "t": pt, "by": pu}));
+            let pt_s = crate::ws_proto::bits_to_ink(pt);
+            events.push(serde_json::json!({"x": x, "y": y,
+                "c": crate::color::int_to_hex(pc), "t": pt_s, "by": pu, "coats": 1}));
         }
         restored += 1;
         xp_taken += rxp;
@@ -174,7 +220,7 @@ pub async fn rollback(
     let mut xp = tg.get::<i32, _>(1) as i64 - xp_taken;
     while xp < 0 && level > 1 {
         level -= 1;
-        xp += crate::users::xp_needed_for_level(level, 3.0, 1.5);
+        xp += crate::users::xp_needed_for_level(level, state.cfg.xp_base, state.cfg.xp_pow);
     }
     xp = xp.max(0);
     let _ = sqlx::query("UPDATE users SET level = $1, xp = $2 WHERE uid = $3")

@@ -55,6 +55,32 @@ pub fn xp_needed_for_level(level: i64, base: f64, pow: f64) -> i64 {
     ((base * lv.powf(pow)) as i64).max(1)
 }
 
+/// そのアカウントが今まで稼いだ総経験値 (Python totalEarnedFor相当)
+pub fn total_earned(level: i64, xp: i64, base: f64, pow: f64) -> i64 {
+    let mut total = xp.max(0);
+    let mut lv = 1;
+    while lv < clamp_level(level) {
+        total += xp_needed_for_level(lv, base, pow);
+        lv += 1;
+    }
+    total
+}
+
+/// 総経験値から (level, xp) を再計算 (Python levelXpFromTotal相当)
+pub fn level_xp_from_total(total: i64, base: f64, pow: f64) -> (i64, i64) {
+    let mut rest = total.max(0);
+    let mut level = 1;
+    for _ in 0..100000 {
+        let need = xp_needed_for_level(level, base, pow);
+        if rest < need {
+            break;
+        }
+        rest -= need;
+        level += 1;
+    }
+    (level, rest)
+}
+
 pub fn parse_inventory(raw: &str, keys: &[String]) -> HashMap<String, i64> {
     let mut out = HashMap::new();
     for k in keys {

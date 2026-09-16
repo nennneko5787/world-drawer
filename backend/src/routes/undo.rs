@@ -81,7 +81,7 @@ pub async fn undo(
     let uid: String = u.get(1);
     // 最新履歴
     let last = sqlx::query(
-        "SELECT id, uid, c, t, at, undone, xp FROM history
+        "SELECT id, uid, c, t, at, undone, xp, rewardInk, rewardAmount FROM history
          WHERE x = $1 AND y = $2 ORDER BY id DESC LIMIT 1",
     )
     .bind(body.x)
@@ -121,6 +121,30 @@ pub async fn undo(
         }
     } else {
         return err(StatusCode::CONFLICT, "changed");
+    }
+    // 1つ前の有効履歴とprevの突合 (不正prevでの任意復元を防ぐ。undone行は無視)
+    let older = sqlx::query(
+        "SELECT c, t FROM history
+          WHERE x = $1 AND y = $2 AND NOT undone AND id < $3 ORDER BY id DESC LIMIT 1",
+    )
+    .bind(body.x)
+    .bind(body.y)
+    .bind(hid)
+    .fetch_optional(&mut *tx)
+    .await
+    .unwrap_or(None);
+    match (&older, body.prev_empty) {
+        (None, true) => {}
+        (Some(o), false) => {
+            use sqlx::Row;
+            let oc: i32 = o.get(0);
+            let ot: String = crate::ws_proto::bits_to_ink(o.get::<i16, _>(1));
+            let want_c = crate::color::hex_to_int(&body.prev_c.to_lowercase());
+            if Some(oc) != want_c || ot != body.prev_t {
+                return err(StatusCode::CONFLICT, "changed");
+            }
+        }
+        _ => return err(StatusCode::CONFLICT, "changed"),
     }
     // 復元
     if body.prev_empty {
@@ -174,6 +198,15 @@ pub async fn undo(
     for p in ht.split('+') {
         if keys.iter().any(|k| k == p) {
             *inv.entry(p.to_string()).or_insert(0) += 1;
+        }
+    }
+    // 当選報酬の没収 (使用済み分は枯渇時に0止め)
+    let reward_ink: Option<String> = h.get(7);
+    let reward_amount: i64 = h.get::<i32, _>(8) as i64;
+    if let Some(ink) = reward_ink {
+        if reward_amount > 0 {
+            let cur = inv.get(&ink).copied().unwrap_or(0);
+            inv.insert(ink, (cur - reward_amount).max(0));
         }
     }
     let inv_json = serde_json::to_string(&inv).unwrap_or_default();

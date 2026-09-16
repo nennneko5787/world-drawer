@@ -21,7 +21,7 @@ pub async fn history(State(state): State<AppState>, Query(q): Query<Q>) -> Respo
     let limit = q.limit.unwrap_or(20).clamp(1, 100);
     let rows = if let Some(b) = q.before_id {
         sqlx::query(
-            "SELECT h.id, h.uid, COALESCE(u.name,'ななし'), COALESCE(u.color,'#22aa66'),
+            "SELECT h.id, h.uid, COALESCE(u.name,'ななし'), COALESCE(u.color,2245734),
                     h.c, h.t, h.at,
                     CASE WHEN u.showCountry = 1 THEN u.country ELSE NULL END,
                     COALESCE(u.level,1)
@@ -38,7 +38,7 @@ pub async fn history(State(state): State<AppState>, Query(q): Query<Q>) -> Respo
         .unwrap_or_default()
     } else {
         sqlx::query(
-            "SELECT h.id, h.uid, COALESCE(u.name,'ななし'), COALESCE(u.color,'#22aa66'),
+            "SELECT h.id, h.uid, COALESCE(u.name,'ななし'), COALESCE(u.color,2245734),
                     h.c, h.t, h.at,
                     CASE WHEN u.showCountry = 1 THEN u.country ELSE NULL END,
                     COALESCE(u.level,1)

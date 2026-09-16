@@ -17,7 +17,7 @@
 //! - 4 hello (C→S 可変): [4, tlen u16, ticket, slen u16, turnstileToken]
 //! - 5 watch (C→S 可変): [5, count u16, (tx i32, ty i32)×count]
 //! - 6 helloOk (S→C 9B固定): [6, ok, err, uid6]
-//!     err: 0=none 1=badTicket 2=turnstileRequired 3=noUser
+//!     err: 0=none 1=badTicket 2=turnstileRequired 3=noUser 4=sockLimit
 //! - 7 join (S→C 可変): [7, uid6, namelen u8, name, r,g,b, level u16]
 
 /// kindバイト
@@ -34,6 +34,8 @@ pub const HELLO_ERR_NONE: u8 = 0;
 pub const HELLO_ERR_BAD_TICKET: u8 = 1;
 pub const HELLO_ERR_TURNSTILE: u8 = 2;
 pub const HELLO_ERR_NO_USER: u8 = 3;
+/// 同一IPの同時接続上限 (maxSocketsPerIp)
+pub const HELLO_ERR_SOCK_LIMIT: u8 = 4;
 
 /// watchのタイル数上限 (interest管理の外枠)
 pub const WATCH_TILE_CAP: usize = 512;

@@ -286,7 +286,7 @@
       const res = await fetch(`${apiBase()}/api/account/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: loginCode.value, password: loginPassword.value, turnstile_token: ts }),
+        body: JSON.stringify({ code: loginCode.value, password: loginPassword.value, turnstile_token: ts, from_token: token || "" }),
       });
       const data = await res.json();
       if (!data.ok) {

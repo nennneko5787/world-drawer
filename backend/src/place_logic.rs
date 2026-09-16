@@ -6,6 +6,13 @@ use std::collections::HashSet;
 pub const VALID_INKS: &[&str] = &["glow", "rainbow", "ghost", "chalk", "shield"];
 pub const MAX_GHOST_COATS: i32 = 5;
 
+/// カーソル照合 (Python canvas.py の CURSOR_FRESH_SEC / CURSOR_MAX_DIST と同値)。
+/// 配置点からチェビシェフ距離16以内・5秒以内のカーソル到達を要求する。
+pub const CURSOR_FRESH_SEC: f64 = 5.0;
+pub const CURSOR_MAX_DIST: i32 = 16;
+/// 不一致時の再判定待ち (Python CURSOR_WAIT_SEC と同値)
+pub const CURSOR_WAIT_MS: u64 = 350;
+
 pub fn in_bounds(x: i32, y: i32, limit: i32) -> bool {
     x.abs() <= limit && y.abs() <= limit
 }

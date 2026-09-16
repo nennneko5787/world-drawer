@@ -121,23 +121,36 @@ pub mod ws_route {
         let client_ip = ip::resolve_client_ip(&peer_s, &cf, &xff, &nets);
         // hello前レート制限 (偽token連打→siteverify増幅対策)
         if !rate::allow(&mut state.redis, "hello", &client_ip, 5, 60.0).await {
+            tracing::warn!("ws drop: hello-rate ip={client_ip}");
             return;
         }
         let (mut sink, mut stream) = socket.split();
         // 初手hello (Binary) を10秒待つ。Textは使わない
         let first = tokio::time::timeout(Duration::from_secs(10), stream.next()).await;
         let Ok(Some(Ok(Message::Binary(b)))) = first else {
+            tracing::warn!("ws drop: no-hello ip={client_ip}");
             return;
         };
         let Some((ticket, ts_token)) = ws_proto::parse_hello(&b) else {
+            tracing::warn!("ws drop: bad-hello ip={client_ip}");
             return;
         };
         let Some(token) = state.hub.take_ticket(&ticket) else {
+            tracing::warn!("ws drop: bad-ticket ip={client_ip}");
             let _ = sink
                 .send(hello_ok(false, ws_proto::HELLO_ERR_BAD_TICKET, ""))
                 .await;
             return;
         };
+        // 同一IPの同時接続を制限 (多アカウント荒らし対策)。IP不明時は数えない
+        let max_socks = state.cfg.max_sockets_per_ip.max(1) as usize;
+        if client_ip != "unknown" && state.hub.sockets_from_ip(&client_ip) >= max_socks {
+            tracing::warn!("ws drop: sock-limit ip={client_ip}");
+            let _ = sink
+                .send(hello_ok(false, ws_proto::HELLO_ERR_SOCK_LIMIT, ""))
+                .await;
+            return;
+        }
         // Turnstile必須 (ページ表示の度)
         let enforce = state
             .cfg
@@ -153,6 +166,7 @@ pub mod ws_route {
                 .map(|t| t.secret_key.clone())
                 .unwrap_or_default();
             if !turnstile::verify(&secret, &ts_token, &client_ip, 10).await {
+                tracing::warn!("ws drop: turnstile ip={client_ip}");
                 let _ = sink
                     .send(hello_ok(false, ws_proto::HELLO_ERR_TURNSTILE, ""))
                     .await;
@@ -168,6 +182,7 @@ pub mod ws_route {
         .await
         .unwrap_or(None);
         let Some(r) = row else {
+            tracing::warn!("ws drop: no-user ip={client_ip}");
             let _ = sink
                 .send(hello_ok(false, ws_proto::HELLO_ERR_NO_USER, ""))
                 .await;
@@ -185,6 +200,9 @@ pub mod ws_route {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<WsOut>(64);
         state.hub.sinks.insert(sid.clone(), (info.uid.clone(), tx));
         state.hub.infos.insert(sid.clone(), info.clone());
+        // 荒らし対策の紐付け (noSocket・maxSockets・cursor判定用)
+        state.hub.bind(&sid, &token, &client_ip);
+        tracing::info!("ws hello ok uid={} ip={client_ip}", info.uid);
         // presence joinを全体へ (稀なのでbroadcast可)
         {
             let (jr, jg, jb) = crate::color::hex_to_rgb(&info.color);
@@ -231,12 +249,14 @@ pub mod ws_route {
                 };
                 match b.first().copied() {
                     Some(2) if b.len() >= 15 => {
-                        // cursor (購読タイル宛にバイナリ中継)
+                        // cursor (購読タイル宛にバイナリ中継 + 位置記録)
                         let x = i32::from_le_bytes([b[1], b[2], b[3], b[4]]);
                         let y = i32::from_le_bytes([b[5], b[6], b[7], b[8]]);
                         if x.abs() > 1_000_000 || y.abs() > 1_000_000 {
                             continue;
                         }
+                        // 記録は毎回 (中継の間引きとは無関係。配置時の照合用)
+                        hub2.note_cursor(&sid2, x, y);
                         let key = format!("{x},{y}");
                         let now = std::time::Instant::now();
                         if key == last_cell
@@ -283,6 +303,7 @@ pub mod ws_route {
             _ = recv_fut => {}
         }
         if let Some(info) = state.hub.remove(&sid) {
+            tracing::info!("ws bye uid={} ip={client_ip}", info.uid);
             state
                 .hub
                 .broadcast_all(&ws_proto::leave_bin(&info.uid), Some(&sid));

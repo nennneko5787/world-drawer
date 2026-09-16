@@ -304,6 +304,11 @@
   async function connectSocket() {
     // asyncの隙間での二重起動防止 (二重ticket+二重接続の原因)
     if (socket || wsGiveUp || wsConnecting) return;
+    if (!token) {
+      // セッション未確立 (新規時) は待つ。空Bearerでticketを叩くとmissingTokenになる
+      setTimeout(connectSocket, 2000);
+      return;
+    }
     wsConnecting = true;
     try {
       const ts = await getTurnstileToken();
@@ -333,7 +338,7 @@
             wsFailCount += 1;
             try { ws.close(); } catch {}
             socket = null;
-            onWsFailed(err === 1 ? "badTicket" : err === 2 ? "turnstileRequired" : err === 3 ? "noUser" : "");
+            onWsFailed(err === 1 ? "badTicket" : err === 2 ? "turnstileRequired" : err === 3 ? "noUser" : err === 4 ? "sockLimit" : "");
             return;
           }
           helloDone = true;
