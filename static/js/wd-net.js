@@ -76,8 +76,17 @@
     // 購読タイルをWSへ通知 (ズームアウト時も止めない。サーバ上限に収める)
     const watchKey = need.join(";");
     if (socket && socketReady && socket.readyState === 1 && watchKey !== lastWatchSent) {
-      lastWatchSent = watchKey;
-      try { socket.send(watchBin(need)); } catch {}
+      let wbuf = null;
+      try {
+        wbuf = watchBin(need);
+      } catch (err) {
+        console.error(err);
+      }
+      if (wbuf) {
+        lastWatchSent = watchKey;
+        // closeレースの送信失敗だけ無視。エンコード失敗は上で記録済み
+        try { socket.send(wbuf); } catch {}
+      }
     }
     if (need.length > TILE_REQ_CAP) {
       // 濫用防止の外枠。購読は上で送ったので実況は止まらない
@@ -294,84 +303,8 @@
     }
   }
 
-  let socket = null;
-  let socketReady = false;
-  let wsFailCount = 0;
-  let wsGiveUp = false;
-  let wsConnecting = false;
-  // 素WS (Socket.IO廃止): ticket + Turnstile必須。ページ表示の度に検証。
-  // 失敗時は指数バックオフで最大3回まで (無限ウィジェット防止)。それ以上は手動リロード。
-  async function connectSocket() {
-    // asyncの隙間での二重起動防止 (二重ticket+二重接続の原因)
-    if (socket || wsGiveUp || wsConnecting) return;
-    if (!token) {
-      // セッション未確立 (新規時) は待つ。空Bearerでticketを叩くとmissingTokenになる
-      setTimeout(connectSocket, 2000);
-      return;
-    }
-    wsConnecting = true;
-    try {
-      if (wsFailCount === 0) toast(t("connectingToast"));
-      const ts = await getTurnstileToken();
-      if (wsGiveUp) return;
-      const ticket = await fetchWsTicket();
-      const ws = new WebSocket(wsUrl());
-      ws.binaryType = "arraybuffer";
-      let helloDone = false;
-      socket = ws;
-      ws.onopen = () => {
-        ws.send(helloBin(ticket, ts));
-      };
-      ws.onmessage = (ev) => {
-        // 完全バイナリ。Textフレームは送受信ともに使わない
-        if (!(ev.data instanceof ArrayBuffer)) return;
-        const buf = ev.data;
-        if (!buf || buf.byteLength < 1) return;
-        const kind = new DataView(buf).getUint8(0);
-        if (kind === 6 && buf.byteLength >= 9) {
-          // helloOk
-          const v = new DataView(buf);
-          const ok = v.getUint8(1) !== 0, err = v.getUint8(2);
-          const uid = binUid(v, 3);
-          if (!ok) {
-            helloDone = true;
-            wsConnecting = false;
-            wsFailCount += 1;
-            try { ws.close(); } catch {}
-            socket = null;
-            onWsFailed(err === 1 ? "badTicket" : err === 2 ? "turnstileRequired" : err === 3 ? "noUser" : err === 4 ? "sockLimit" : "");
-            return;
-          }
-          helloDone = true;
-          wsConnecting = false;
-          wsFailCount = 0;
-          socketReady = true;
-          toast(t("connectedToast"));
-          if (uid) {
-            myUid = uid;
-            myUidEl.textContent = `#${myUid}`;
-          }
-          fetchViewport();
-          return;
-        }
-        if (kind === 7 && buf.byteLength >= 13) {
-          // join (最小13B: 空名の理論値。実務上は名前入り)
-          // join
-          const v = new DataView(buf);
-          const uid = binUid(v, 1);
-          const nl = v.getUint8(7);
-          if (buf.byteLength < 8 + nl + 5) return;
-          const name = _td.decode(new Uint8Array(buf, 8, nl));
-          const o = 8 + nl;
-          const color = rgbHex(v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2));
-          const level = v.getUint16(o + 3, true);
-          applyRemote({ uid, name, color, level });
-          refreshUserList();
-          return;
-        }
-        onWsBin(buf);
-      };
   // ---- WSバイナリ (完全。pixel 20B / cursor 15B / leave 7B / hello,watch可変 / helloOk 9B / join可変) ----
+  // トップレベルに置くこと。connectSocket() の内側だと fetchViewport/sendCursor から見えない
   const _td = new TextDecoder();
   const INK_BITS = ["chalk", "ghost", "glow", "rainbow", "shield"];
   function bitsToInk(bits) {
@@ -464,6 +397,84 @@
       markDirty();
     }
   }
+
+  let socket = null;
+  let socketReady = false;
+  let wsFailCount = 0;
+  let wsGiveUp = false;
+  let wsConnecting = false;
+  // 素WS (Socket.IO廃止): ticket + Turnstile必須。ページ表示の度に検証。
+  // 失敗時は指数バックオフで最大3回まで (無限ウィジェット防止)。それ以上は手動リロード。
+  async function connectSocket() {
+    // asyncの隙間での二重起動防止 (二重ticket+二重接続の原因)
+    if (socket || wsGiveUp || wsConnecting) return;
+    if (!token) {
+      // セッション未確立 (新規時) は待つ。空Bearerでticketを叩くとmissingTokenになる
+      setTimeout(connectSocket, 2000);
+      return;
+    }
+    wsConnecting = true;
+    try {
+      if (wsFailCount === 0) toast(t("connectingToast"));
+      const ts = await getTurnstileToken();
+      if (wsGiveUp) return;
+      const ticket = await fetchWsTicket();
+      const ws = new WebSocket(wsUrl());
+      ws.binaryType = "arraybuffer";
+      let helloDone = false;
+      socket = ws;
+      ws.onopen = () => {
+        ws.send(helloBin(ticket, ts));
+      };
+      ws.onmessage = (ev) => {
+        // 完全バイナリ。Textフレームは送受信ともに使わない
+        if (!(ev.data instanceof ArrayBuffer)) return;
+        const buf = ev.data;
+        if (!buf || buf.byteLength < 1) return;
+        const kind = new DataView(buf).getUint8(0);
+        if (kind === 6 && buf.byteLength >= 9) {
+          // helloOk
+          const v = new DataView(buf);
+          const ok = v.getUint8(1) !== 0, err = v.getUint8(2);
+          const uid = binUid(v, 3);
+          if (!ok) {
+            helloDone = true;
+            wsConnecting = false;
+            wsFailCount += 1;
+            try { ws.close(); } catch {}
+            socket = null;
+            onWsFailed(err === 1 ? "badTicket" : err === 2 ? "turnstileRequired" : err === 3 ? "noUser" : err === 4 ? "sockLimit" : "");
+            return;
+          }
+          helloDone = true;
+          wsConnecting = false;
+          wsFailCount = 0;
+          socketReady = true;
+          toast(t("connectedToast"));
+          if (uid) {
+            myUid = uid;
+            myUidEl.textContent = `#${myUid}`;
+          }
+          fetchViewport();
+          return;
+        }
+        if (kind === 7 && buf.byteLength >= 13) {
+          // join (最小13B: 空名の理論値。実務上は名前入り)
+          // join
+          const v = new DataView(buf);
+          const uid = binUid(v, 1);
+          const nl = v.getUint8(7);
+          if (buf.byteLength < 8 + nl + 5) return;
+          const name = _td.decode(new Uint8Array(buf, 8, nl));
+          const o = 8 + nl;
+          const color = rgbHex(v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2));
+          const level = v.getUint16(o + 3, true);
+          applyRemote({ uid, name, color, level });
+          refreshUserList();
+          return;
+        }
+        onWsBin(buf);
+      };
       ws.onclose = () => {
         socket = null;
         socketReady = false;
@@ -600,9 +611,17 @@
       if (key === lastCursorCell && nowMs - lastCursorSent < 800) return;
       if (nowMs - lastCursorSent < cursorMinMs) return;
     }
+    let cbuf = null;
+    try {
+      cbuf = cursorBin(x, y);
+    } catch (err) {
+      console.error(err);
+      return;
+    }
     lastCursorSent = nowMs;
     lastCursorCell = key;
-    try { socket.send(cursorBin(x, y)); } catch {}
+    // closeレースの送信失敗だけ無視。エンコード失敗は上で記録済み
+    try { socket.send(cbuf); } catch {}
   }
 
   async function refreshOnlineUsers() {
