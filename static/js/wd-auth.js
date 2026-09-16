@@ -46,16 +46,9 @@
     document.body.appendChild(el);
     return el;
   }
-  // Turnstile表示中は背景もすりガラスにする (操作ブロック兼用)
-  function ensureTsBackdrop() {
-    let el = document.getElementById("ts-backdrop");
-    if (el) return el;
-    el = document.createElement("div");
-    el.id = "ts-backdrop";
-    el.className = "hidden";
-    document.body.appendChild(el);
-    return el;
-  }
+  // invisible実行: ウィジェットUIを出さずheadlessに検証する。
+  // appearance interaction-only のため、判定に操作が必要な稀な場合のみ
+  // チェックボックスがslot位置に出る (それ以外はbackdrop等なし)
   function getTurnstileToken() {
     _tsChain = _tsChain.catch(() => {}).then(_mintTurnstileToken);
     return _tsChain;
@@ -63,8 +56,6 @@
   function _mintTurnstileToken() {
     const key = turnstileSiteKey();
     if (!key || typeof turnstile === "undefined") return Promise.resolve("");
-    const backdrop = ensureTsBackdrop();
-    backdrop.classList.remove("hidden");
     return new Promise((resolve) => {
       let done = false;
       let id = null;
@@ -76,7 +67,6 @@
         if (done) return;
         done = true;
         clearTimeout(timer);
-        backdrop.classList.add("hidden");
         try {
           if (id !== null) turnstile.remove(id);
         } catch {}
@@ -88,15 +78,17 @@
         id = turnstile.render(slot, {
           sitekey: key,
           theme: dark ? "dark" : "light",
+          execution: "execute",
+          appearance: "interaction-only",
           callback: finish,
           "expired-callback": () => finish(""),
           "error-callback": () => finish(""),
         });
+        turnstile.execute(id);
       } catch {
         finish("");
         return;
       }
-      // checkbox時はユーザ操作待ち (15秒で諦め)
       timer = setTimeout(() => finish(""), 15000);
     });
   }

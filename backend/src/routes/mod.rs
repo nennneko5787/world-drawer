@@ -119,8 +119,9 @@ pub mod ws_route {
     ) {
         let nets = ip::parse_nets(&state.cfg.trusted_proxies);
         let client_ip = ip::resolve_client_ip(&peer_s, &cf, &xff, &nets);
-        // hello前レート制限 (偽token連打→siteverify増幅対策)
-        if !rate::allow(&mut state.redis, "hello", &client_ip, 5, 60.0).await {
+        // hello前レート制限 (偽token連打→siteverify増幅対策)。
+        // 通常利用 (複数タブ・リロード・自動再試行) に支障のない30/分まで緩和
+        if !rate::allow(&mut state.redis, "hello", &client_ip, 30, 60.0).await {
             tracing::warn!("ws drop: hello-rate ip={client_ip}");
             return;
         }

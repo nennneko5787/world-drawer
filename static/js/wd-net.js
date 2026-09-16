@@ -311,6 +311,7 @@
     }
     wsConnecting = true;
     try {
+      if (wsFailCount === 0) toast(t("connectingToast"));
       const ts = await getTurnstileToken();
       if (wsGiveUp) return;
       const ticket = await fetchWsTicket();
@@ -345,6 +346,7 @@
           wsConnecting = false;
           wsFailCount = 0;
           socketReady = true;
+          toast(t("connectedToast"));
           if (uid) {
             myUid = uid;
             myUidEl.textContent = `#${myUid}`;
