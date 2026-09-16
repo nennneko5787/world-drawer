@@ -72,9 +72,12 @@ def asset_version() -> str:
     return h.hexdigest()[:12]
 
 
-def build_tags(*, lang: str, page: str, base: str, path: str) -> str:
+def build_tags(*, lang: str, page: str, base: str, path: str, img_base: str) -> str:
     title, desc = OG_TEXTS[page][lang]
     esc = html.escape
+    # og:imageはAPI側の動的レンダ (/og-image.png) を指す。別ドメインで問題ない
+    # (クローラが素直GETするためCORSは無関係)。og:urlはサイト側のまま。
+    img = img_base.rstrip("/") + "/og-image.png"
     lines = [
         f'<meta name="description" content="{esc(desc, quote=True)}">',
         f'<link rel="canonical" href="{esc(base + path, quote=True)}">',
@@ -83,7 +86,7 @@ def build_tags(*, lang: str, page: str, base: str, path: str) -> str:
         f'<meta property="og:title" content="{esc(title, quote=True)}">',
         f'<meta property="og:description" content="{esc(desc, quote=True)}">',
         f'<meta property="og:url" content="{esc(base + path, quote=True)}">',
-        f'<meta property="og:image" content="{esc(base + "/og-image.png", quote=True)}">',
+        f'<meta property="og:image" content="{esc(img, quote=True)}">',
         '<meta property="og:image:width" content="1200">',
         '<meta property="og:image:height" content="630">',
         '<meta property="og:image:type" content="image/png">',
@@ -96,7 +99,7 @@ def build_tags(*, lang: str, page: str, base: str, path: str) -> str:
         '<meta name="twitter:card" content="summary_large_image">',
         f'<meta name="twitter:title" content="{esc(title, quote=True)}">',
         f'<meta name="twitter:description" content="{esc(desc, quote=True)}">',
-        f'<meta name="twitter:image" content="{esc(base + "/og-image.png", quote=True)}">',
+        f'<meta name="twitter:image" content="{esc(img, quote=True)}">',
         '<meta name="theme-color" content="#ffffff">',
     ]
     return "\n    ".join(lines)
@@ -106,7 +109,7 @@ def render_page(name: str, page: str, lang: str, ver: str, base: str,
                 api: str, ws: str, sitekey: str) -> str:
     raw = (PAGES / name).read_text(encoding="utf-8")
     title, _ = OG_TEXTS[page][lang]
-    tags = build_tags(lang=lang, page=page, base=base, path="/" + page if page != "index" else "/")
+    tags = build_tags(lang=lang, page=page, base=base, path="/" + page if page != "index" else "/", img_base=api)
     out = HTML_LANG_RE.sub(f'<html\\1lang="{lang}"', raw, count=1)
     out = TITLE_RE.sub(lambda m: f"{m.group(1)}{html.escape(title)}{m.group(2)}", out, count=1)
     if "<!-- OGP-START -->" in out and "<!-- OGP-END -->" in out:
