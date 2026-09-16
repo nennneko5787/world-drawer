@@ -96,8 +96,7 @@
     const res = await apiFetch("/api/ws-ticket", { method: "POST" });
     const data = await res.json();
     if (!data.ok || !data.ticket) throw new Error("ticket failed");
-    // 旧サーバ互換: フラグ無しは要求あり扱い (検証側に倒す)
-    return { ticket: data.ticket, turnstileRequired: data.turnstileRequired !== false };
+    return { ticket: data.ticket, turnstileRequired: data.turnstileRequired === true };
   }
   // サーバが要求した時だけTurnstileを実行するPOST。先に空トークンで試し、
   // turnstileRequiredで返ってきたら1回だけトークン付きで再送する。
