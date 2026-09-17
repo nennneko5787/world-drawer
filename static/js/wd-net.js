@@ -27,14 +27,14 @@
     myShowCountry = data.showCountry ?? true;
     countryChk.checked = myShowCountry;
   }
-  // ---------- viewport fetching (視野+余白だけ取得) ----------
+  // ---------- viewport fetching (視野だけ取得。余白の先読みはしない) ----------
   function visibleBbox() {
     const clamp = (v) => Math.max(-coordLimit, Math.min(coordLimit, v));
     return {
-      minX: clamp(Math.floor(-cam.x / cam.zoom) - fetchMargin),
-      minY: clamp(Math.floor(-cam.y / cam.zoom) - fetchMargin),
-      maxX: clamp(Math.ceil((viewW() - cam.x) / cam.zoom) + fetchMargin),
-      maxY: clamp(Math.ceil((viewH() - cam.y) / cam.zoom) + fetchMargin),
+      minX: clamp(Math.floor(-cam.x / cam.zoom)),
+      minY: clamp(Math.floor(-cam.y / cam.zoom)),
+      maxX: clamp(Math.ceil((viewW() - cam.x) / cam.zoom)),
+      maxY: clamp(Math.ceil((viewH() - cam.y) / cam.zoom)),
     };
   }
 
@@ -42,9 +42,10 @@
   // 全量bbox取得はしない (MB級JSONの根絶)。消去の取りこぼしはタイル単位で照合する
   // truncatedは廃止: サーバは読める分だけ返し、残りはpendingで知らせる。促しトーストなし
   const TILE = 128;
-  const TILE_REQ_CAP = 4096; // サーバのneed解析上限に合わせる
-  const CHASE_MAX = 3; // 1パンでの追いかけ再取得の上限
+  const TILE_REQ_CAP = 4096; // サーバのneed解析上限 (視野がこれを超えたらRESTは送らない)
+  const CHASE_MAX = 8; // 1パンでの追いかけ再取得の上限
   const CHASE_CELLS = 20000; // これ以上のセル数を返した回は追いかけない (弱い鯖を叩き続けない)
+  const CHASE_DELAY_MS = 80; // 追いかけの間隔 (バースト防止・描画を挟む)
   const tileVers = new Map(); // "tx,ty" -> v
   const tileCells = new Map(); // "tx,ty" -> Set("x,y")
   async function fetchMeta() {
@@ -68,11 +69,12 @@
     const box = visibleBbox();
     const tx0 = Math.floor(box.minX / TILE), tx1 = Math.floor(box.maxX / TILE);
     const ty0 = Math.floor(box.minY / TILE), ty1 = Math.floor(box.maxY / TILE);
+    // 見えているタイルだけ送る。優先付けはしない (順序は単なる行順)
     const need = [];
     for (let tx = tx0; tx <= tx1; tx++) {
       for (let ty = ty0; ty <= ty1; ty++) need.push(`${tx},${ty}`);
     }
-    // 購読タイルをWSへ通知 (ズームアウト時も止めない。サーバ上限に収める)
+    // 購読タイルをWSへ通知 (ズームアウト時も止めない。サーバ上限はwatchBin側で切る)
     const watchKey = need.join(";");
     if (socket && socketReady && socket.readyState === 1 && watchKey !== lastWatchSent) {
       let wbuf = null;
@@ -110,11 +112,11 @@
       }
       pruneFar(box);
       zoneDirty = true;
-      // 残りがあれば視野が変わらないうちは追いかける (上限付きで自然収束。
+      // 残りがあれば視野が変わらないうちは同じ視野で追いかける (上限付きで自然収束。
       // 巨大応答の直後は叩き続けない)
       const pending = typeof data.pending === "number" ? data.pending : 0;
       if (pending > 0 && progressed && cells < CHASE_CELLS && chase < CHASE_MAX && seq === fetchSeq) {
-        fetchViewport(chase + 1);
+        setTimeout(() => { if (seq === fetchSeq) fetchViewport(chase + 1); }, CHASE_DELAY_MS);
       }
     } catch (err) {
       console.error(err);
@@ -520,6 +522,12 @@
     setTimeout(connectSocket, 3000 * Math.max(1, wsFailCount));
   }
   function onPixel(p) {
+      // 視野外のWS差分は保持しない (見えた範囲だけ持つ。戻ればfetchViewportで取り直す)。
+      // ついでに画面外の変化で静的レイヤーを焼き直さない (遠方の実況で重くしない)
+      const m = fetchMargin + 512;
+      const vx0 = -cam.x / cam.zoom - m, vx1 = (viewW() - cam.x) / cam.zoom + m;
+      const vy0 = -cam.y / cam.zoom - m, vy1 = (viewH() - cam.y) / cam.zoom + m;
+      if (p.x < vx0 || p.x > vx1 || p.y < vy0 || p.y > vy1) return;
       const key = `${p.x},${p.y}`;
       const prev = pixels.get(key) || null;
       const tkey = `${Math.floor(p.x / TILE)},${Math.floor(p.y / TILE)}`;

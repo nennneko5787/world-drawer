@@ -131,6 +131,7 @@
       lastPinchMid = mid;
       if (pinchDist > 0) {
         zoomAt(mid.x, mid.y, dist / pinchDist);
+        scheduleViewportFetch(); // ピンチ中も視野を追従 (離すまで空白にしない。250msデバウンス)
       }
       pinchDist = dist;
       touchHold = null;
@@ -180,6 +181,7 @@
         markStatic();
         // 移動したのでホールド解除。離しても配置しない (パンとして扱う)
         touchHold = null;
+        scheduleViewportFetch(); // パン中も視野を追従 (離すまで空白にしない。250msデバウンス)
         // 右ドラッグ中はFirefoxのcontextmenuが出ないよう抑止期間を延長
         if (downButton === 2) suppressContextUntil = Date.now() + 800;
       }

@@ -115,7 +115,7 @@
   const inkName = (k) => String(k || "").split("+").map((p) => t("inkL_" + p)).join("+");
 
   const coordLimit = 1000000;
-  const fetchMargin = 256; // 視野の外側に余分に取得するセル数
+  const fetchMargin = 256; // 視野外の保持余白セル数 (要求は視野きっかり。保持・WS選別用)
   const maxCache = 150000; // 手元に保持するピクセル数の上限
   const maxDrafts = 20000; // 設計図の保持上限
   // 端末タイムゾーン (国旗の推定用。CF-IPCountryが無い場合の代替)
