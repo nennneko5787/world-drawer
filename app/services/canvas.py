@@ -264,6 +264,8 @@ async def consumeIpBucket(ip: str, now: float) -> None:
 
 
 async def pruneHistoryCells(db: DbTx) -> None:
+    if cfg.maxHistoryCells <= 0:
+        return
     row = await db.fetchOne("SELECT COUNT(*) FROM (SELECT DISTINCT x, y FROM history) AS t")
     cellCount = int(row[0]) if row else 0
     overflow = cellCount - cfg.maxHistoryCells
@@ -363,11 +365,13 @@ async def executePlace(  # noqa: PLR0913 — 配置処理の引数は削れな�
             reward[1] if reward else 0,
         ),
     )
-    await db.execute(
-        "DELETE FROM history WHERE x = ? AND y = ? AND id NOT IN"
-        " (SELECT id FROM history WHERE x = ? AND y = ? ORDER BY at DESC, id DESC LIMIT ?)",
-        (x, y, x, y, cfg.maxHistoryPerCell),
-    )
+    # 0以下は無効 (履歴を残す)
+    if cfg.maxHistoryPerCell > 0:
+        await db.execute(
+            "DELETE FROM history WHERE x = ? AND y = ? AND id NOT IN"
+            " (SELECT id FROM history WHERE x = ? AND y = ? ORDER BY at DESC, id DESC LIMIT ?)",
+            (x, y, x, y, max(1, min(200, cfg.maxHistoryPerCell))),
+        )
     return {
         "ok": True,
         "x": x,

@@ -56,6 +56,7 @@
     <script src="/static/js/wd-admin.js" defer></script>
     <script src="/static/js/wd-markdown.js" defer></script>
     <script src="/static/js/wd-notices.js" defer></script>
+    <script src="/static/js/wd-ranking.js" defer></script>
     <script src="/static/js/wd-main.js" defer></script>
 </head>
 <body>
@@ -67,6 +68,7 @@
         <div id="cooldown" class="pill" data-i18n="ready">準備OK</div>
         <div id="level" class="pill" data-i18n-title="levelWord" title="レベル">Lv1 0/3xp</div>
         <button id="online" class="pill clickable" data-i18n-title="onlineTitle" title="オンライン中のユーザー一覧"><i class="bi bi-people"></i> <span id="onlineCount">1</span></button>
+        <button id="rankingBtn" class="pill clickable" data-i18n-title="rankingTitle" title="レベルランキング"><i class="bi bi-trophy"></i></button>
         <button id="accountBtn" class="pill clickable" data-i18n-title="accountTitle" title="アカウント引っ越し"><i class="bi bi-person"></i></button>
         <button id="adminBtn" class="pill clickable hidden" data-i18n-title="adminTitle" title="管理"><i class="bi bi-shield"></i></button>
         <a id="helpBtn" class="pill clickable" data-i18n-title="helpTitle" title="ヘルプ" href="/help"><i class="bi bi-question-circle"></i></a>
@@ -156,6 +158,11 @@
     <div id="userPanel" class="hidden">
         <div class="panelTitle"><span data-i18n="onlinePanel">オンライン</span><button id="userClose" data-i18n-title="close" title="閉じる"><i class="bi bi-x-lg"></i></button></div>
         <ul id="userList"></ul>
+    </div>
+
+    <div id="rankingPanel" class="hidden">
+        <div class="panelTitle"><span data-i18n="rankingTitle">レベルランキング</span><button id="rankingClose" data-i18n-title="close" title="閉じる"><i class="bi bi-x-lg"></i></button></div>
+        <ul id="rankingList"></ul>
     </div>
 
     <aside id="historyPanel" class="hidden">

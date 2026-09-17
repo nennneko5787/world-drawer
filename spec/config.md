@@ -25,7 +25,7 @@
 | `placePerMinPerIp` | `60` | IP共有配置上限/分（本番は180で運用） |
 | `chalkMinutes/shieldMinutes` | `30/60` | 期限 |
 | `rewardChance/rewardMin/rewardMax` | `0.30/1/5` | ガチャ（実装済み） |
-| `maxHistoryPerCell/maxHistoryCells` | `20/0(無効)` | 1セル上限は有効。セル数上限は履歴・ rollback保全のため既定無効 |
+| `maxHistoryPerCell/maxHistoryCells` | `0/0(無効)` | どちらも0で無効=残す。履歴・rollback保全のため既定無効 |
 
 ## 固定キー（読まない・仕様）
 

@@ -59,8 +59,8 @@ Python（`app/services/canvas.py:22-28,340-364`）と同値を正準とする。
 
 ## 履歴
 
-- 1セル上限 `maxHistoryPerCell`（既定20、現状ハードコード=設定化予定）。
-  超過分は `ORDER BY at DESC, id DESC` で削除。
+- 1セル上限 `maxHistoryPerCell`（既定0=無効、1〜200で有効化）。
+  有効時のみ超過分を `ORDER BY at DESC, id DESC` で削除。無効時は残す。
 - 履歴セル数の上限 `maxHistoryCells` は既定 **0（無効）**。履歴はロールバックの
   根拠のため残す。有効化すると超過分を古いセルから無言削除し、履歴表示・
   巻き戻しが効かなくなる（`place.rs:maybe_prune`、無効時はオーバーヘッドゼロ）。

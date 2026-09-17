@@ -36,6 +36,7 @@
 | `PUT /api/admin/notices/{id}` | `routes/notices.rs:update` | 管理者編集。`{title,body,translations?}` → `{ok,notice}` |
 | `DELETE /api/admin/notices/{id}` | `routes/notices.rs:remove` | 管理者削除。`{ok,id}` |
 | `GET /api/users` | `routes/users.rs:13` | WS不可時のフォールバック。`{online:[{uid,name,color,level}],count,truncated}`（仕様としてlean） |
+| `GET /api/ranking` | `routes/ranking.rs:list` | 公開。レベル順。`{ok,ranking:[{rank,uid,name,color,level,xp,country}],total}`（`limit` 1-100、既定100）。`level DESC,xp DESC,uid ASC`、同率は同順位。`country` は公開設定時のみ |
 | `GET /ws` | `routes/mod.rs:69` | WS（`ws-protocol.md`） |
 | `GET /og-image.png` | `routes/canvas.rs:142` | `ogp.rs` 原点中心レンダ。60s cache |
 | `GET /healthz` | `routes/mod.rs:65` | `ok` |

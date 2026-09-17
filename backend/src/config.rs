@@ -109,9 +109,9 @@ pub struct Config {
     #[serde(default = "d5r", alias = "reward_max")]
     pub reward_max: i64,
     // 履歴上限: 1セル件数と履歴持ちセル数。
-    // セル数上限は0で無効 (既定)。履歴はロールバックの根拠のため残す。
-    // 有効化すると古いセルから無言削除され、履歴表示・巻き戻しが効かなくなる
-    #[serde(default = "d20i", alias = "max_history_per_cell")]
+    // どちらも0で無効 (既定)。履歴はロールバックの根拠のため残す。
+    // 有効化すると古い方から無言削除され、履歴表示・巻き戻しが効かなくなる
+    #[serde(default = "d0i", alias = "max_history_per_cell")]
     pub max_history_per_cell: i64,
     #[serde(default = "d0i", alias = "max_history_cells")]
     pub max_history_cells: i64,

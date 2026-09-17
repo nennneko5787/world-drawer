@@ -54,6 +54,10 @@
   const userPanel = document.getElementById("userPanel");
   const userList = document.getElementById("userList");
   const userClose = document.getElementById("userClose");
+  const rankingBtn = document.getElementById("rankingBtn");
+  const rankingPanel = document.getElementById("rankingPanel");
+  const rankingList = document.getElementById("rankingList");
+  const rankingClose = document.getElementById("rankingClose");
   const historyPanel = document.getElementById("historyPanel");
   const historyTitle = document.getElementById("historyTitle");
   const historyList = document.getElementById("historyList");

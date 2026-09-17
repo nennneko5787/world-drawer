@@ -14,6 +14,7 @@ pub mod me;
 pub mod notices;
 pub mod place;
 pub mod profile;
+pub mod ranking;
 pub mod account;
 pub mod session;
 pub mod ticket;
@@ -67,6 +68,7 @@ pub fn router(state: AppState) -> Router {
             axum::routing::put(notices::update).delete(notices::remove),
         )
         .route("/api/users", axum::routing::get(users::list))
+        .route("/api/ranking", axum::routing::get(ranking::list))
         .route("/ws", axum::routing::get(crate::routes::ws_route::handle))
         .route("/og-image.png", axum::routing::get(canvas::og_image))
         .route("/healthz", axum::routing::get(|| async { "ok" }))

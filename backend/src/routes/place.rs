@@ -276,16 +276,19 @@ pub async fn place(
     .bind(reward.as_ref().map(|(_, n)| *n).unwrap_or(0))
     .execute(&mut *tx)
     .await;
-    let per_cell = state.cfg.max_history_per_cell.clamp(1, 200);
-    let _ = sqlx::query(
-        "DELETE FROM history WHERE x = $1 AND y = $2 AND id NOT IN
-         (SELECT id FROM history WHERE x = $1 AND y = $2 ORDER BY at DESC, id DESC LIMIT $3)",
-    )
-    .bind(body.x)
-    .bind(body.y)
-    .bind(per_cell)
-    .execute(&mut *tx)
-    .await;
+    let per_cell = state.cfg.max_history_per_cell;
+    // 0以下は無効 (履歴を残す)。有効時のみ1〜200に丸めて古い方から削除
+    if per_cell > 0 {
+        let _ = sqlx::query(
+            "DELETE FROM history WHERE x = $1 AND y = $2 AND id NOT IN
+             (SELECT id FROM history WHERE x = $1 AND y = $2 ORDER BY at DESC, id DESC LIMIT $3)",
+        )
+        .bind(body.x)
+        .bind(body.y)
+        .bind(per_cell.clamp(1, 200))
+        .execute(&mut *tx)
+        .await;
+    }
     if tx.commit().await.is_err() {
         return err(StatusCode::SERVICE_UNAVAILABLE, "busy");
     }

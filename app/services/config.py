@@ -49,9 +49,9 @@ rewardMax = 5
 shieldMinutes = 60  # シールドの保護時間 (分)。切れると上書き可に戻る
 chalkMinutes = 30  # チョークの保持時間 (分)。切れるとマスが消える
 
-# ---- 履歴上限 ----
-maxHistoryPerCell = 20
-maxHistoryCells = 50000
+# ---- 履歴上限 (どちらも0で無効=残す) ----
+maxHistoryPerCell = 0
+maxHistoryCells = 0
 
 # ---- アカウント ----
 minPasswordLen = 8
@@ -118,8 +118,8 @@ _INT_KEYS: dict[str, tuple[int, int]] = {
     "coordLimit": (1000, 100_000_000),
     "maxNameLen": (1, 50),
     "maxBboxPixels": (100, 1000000),
-    "maxHistoryPerCell": (1, 200),
-    "maxHistoryCells": (100, 1000000),
+    "maxHistoryPerCell": (0, 200),
+    "maxHistoryCells": (0, 1000000),
     "minPasswordLen": (4, 64),
     "maxPasswordLen": (8, 512),
     "sessionPerHour": (1, 10000),

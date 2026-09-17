@@ -102,7 +102,7 @@ uv run uvicorn main:app --port 5787
 | `rewardChance` / `rewardMin` / `rewardMax` | 特殊インクの当選確率と付与量 |
 | `shieldMinutes` | シールドの保護時間（分） |
 | `chalkMinutes` | チョークの保持時間（分） |
-| `maxHistoryPerCell` / `maxHistoryCells` | 履歴の保持上限 |
+| `maxHistoryPerCell` / `maxHistoryCells` | 履歴の保持上限 (どちらも0で無効=残す) |
 | `minPasswordLen` / `maxPasswordLen` / `sessionPerHour` / `loginMaxFails` / `loginLockSec` | アカウント関連の制限 |
 | `placePerMinPerIp` / `placeRadius` / `trustedLevel` | 荒らし対策（IP共有上限・低レベルの配置半径・半径制限が外れるレベル） |
 | `redisUrl` | 空なら単体動作。設定するとマルチワーカー対応（下記） |
