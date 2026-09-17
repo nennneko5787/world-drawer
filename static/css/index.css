@@ -52,6 +52,7 @@ button, select, input { touch-action: manipulation; }
   display: flex; align-items: center; gap: 6px;
 }
 .brand .bi { font-size: 15px; }
+.brand img.logo { width: 20px; height: 20px; object-fit: contain; }
 .pill {
   background: var(--chrome); color: var(--chrome-fg); border: 1px solid var(--border);
   padding: 7px 12px; border-radius: 999px; font-size: 13px;

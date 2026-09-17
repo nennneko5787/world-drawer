@@ -24,6 +24,9 @@ COMPRESSIBLE_SUFFIXES: frozenset[str] = frozenset({".js", ".css"})
 CONTENT_TYPES: dict[str, str] = {
     ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
 }
 CLIENT_MAX_AGE_SEC = 3600
 MAX_CACHE_ENTRIES = 256

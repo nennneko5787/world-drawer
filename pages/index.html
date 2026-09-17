@@ -7,7 +7,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>The world drawer | みんなで描く無限キャンバス</title>
-    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/static/logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="/static/logo.png">
     <!-- OGP-START -->
     <meta name="description" content="ブラウザで遊べる無限キャンバスのお絵かきボード。全員で1つの世界に1マスずつ描き、リアルタイムに同期。クールダウン・レベル・特殊インクつき。">
     <link rel="canonical" href="/">
@@ -58,7 +59,7 @@
     <canvas id="board"></canvas>
 
     <header id="topbar">
-        <div class="brand"><i class="bi bi-globe"></i><span>The world drawer</span></div>
+        <div class="brand"><img class="logo" src="/static/logo.png" alt=""><span>The world drawer</span></div>
         <div id="coords" class="pill" data-i18n-title="coordsTitle" title="カーソル位置のキャンバス座標">(0, 0)</div>
         <div id="cooldown" class="pill" data-i18n="ready">準備OK</div>
         <div id="level" class="pill" data-i18n-title="levelWord" title="レベル">Lv1 0/3xp</div>

@@ -31,6 +31,7 @@ body {
 }
 .helpWrap { max-width: 720px; margin: 24px auto 64px; padding: 0 16px; }
 .helpWrap h1 { font-size: 22px; }
+.helpWrap h1 img.logo { width: 26px; height: 26px; object-fit: contain; vertical-align: -5px; }
 .helpWrap h2 {
   font-size: 17px;
   margin-top: 28px;
