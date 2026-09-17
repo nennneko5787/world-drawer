@@ -264,6 +264,8 @@
     try {
       // ハンドオフ帰還時は断片を先に消費 (トークン発行より前)。リロード後は通常起動
       if ((await consumeHandoffPayload()) === "reloaded") return;
+      // 旧経由の到達時は一度だけ自動往復 (使用中なら何もしない)
+      if (await maybeAutoHandoff()) return;
       await maybeImportPrevOrigin();
       await ensureToken();
       await fetchMeta();

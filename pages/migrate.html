@@ -7,9 +7,10 @@
   - handoff (?to=...&handoff=1, top-level, manual button): first-party read,
     then location.replace(to + "/#mig=" + payload). The fragment never
     reaches any server. Always carries (receiver reports when empty).
-  - direct visit (top-level, old bookmarks): same handoff automatically,
-    but only when there is something to carry; otherwise plain forward.
-    Marked auto=1 so the receiver won't overwrite an active account.
+  - direct visit (top-level, old bookmarks) and auto round-trip
+    (?to=...&handoff=auto): same handoff automatically, but only when there
+    is something to carry; otherwise plain forward. Marked auto=1 so the
+    receiver won't overwrite an active account.
   - iframe (embedded): legacy best-effort auto import via postMessage.
     Silently empty under third-party storage partitioning.
   Note: Workers Static Assets 308-redirects /migrate.html to /migrate,
@@ -77,19 +78,20 @@
   try { to = originOf(new URLSearchParams(location.search).get("to") || ""); } catch (e) {}
   if (!allowed(to)) to = "";
   if (!to && allowed(originOf(document.referrer || ""))) to = originOf(document.referrer);
-  var handoff = false;
-  try { handoff = new URLSearchParams(location.search).get("handoff") === "1"; } catch (e) {}
+  var handoff = "";
+  try { handoff = new URLSearchParams(location.search).get("handoff") || ""; } catch (e) {}
   if (window.parent === window) {
     var dest = to || ALLOW[0] || "";
     if (!dest) return;
-    if (handoff && to) {
+    if (handoff === "1" && to) {
       // 手動ボタン: 常に運ぶ (空なら受け側が通知)。
       // トップ遷移 = ファーストパーティのため分離の影響なし。
       // 断片はサーバーに送られない。履歴にも残さない (replace)
       try { location.replace(to + "/#mig=" + buildHandoff(collectMig(), false)); } catch (e) {}
       return;
     }
-    // 直接訪問 (旧ブックマーク等): 運ぶものがあれば自動ハンドオフ、なければ素通し転送
+    // 直接訪問・自動遷移 (旧ブックマーク・新側からの自動往復。
+    // handoff=auto も同扱い): 運ぶものがあれば自動ハンドオフ、なければ素通し転送
     var auto = collectMig();
     try {
       if (Object.keys(auto).length) location.replace(dest + "/#mig=" + buildHandoff(auto, true));

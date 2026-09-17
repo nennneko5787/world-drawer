@@ -1,5 +1,6 @@
 // wd-migrate.js — ドメイン移行時の引っ越し。
 // 手動ボタンはトップ遷移ハンドオフ (旧 /migrate?to=..&handoff=1 → 新 /#mig=..)。
+// 旧経由の到達 (Referer) には一度だけ自動往復する (未使用時のみ。使用中は不干渉)。
 // ファーストパーティのため分離の影響なし。断片はサーバーに送られない。
 // 初訪時の自動分のみ隠しiframe (ベストエフォート。分離下では黙って空)。
 // wd-auth.js の後に読むこと (apiBase を使う)。実行は loadInitial() の先頭で
@@ -12,6 +13,8 @@
     "wd_draftTool", "wd_showDraft", "wd_draft", "wd_blocked", "wd_recentColors",
     "wd_palette", "wd_cam", "wd_chromeHidden"];
   var WD_MIG_JSON_KEYS = { wd_draft: 1, wd_blocked: 1, wd_recentColors: 1, wd_palette: 1, wd_cam: 1 };
+  // 自動往復の再発防止札 (セッション単位)。手動ボタンは見ない
+  var HANDOFF_ONCE = "wd_mig_handoff_once";
 
   function prevOrigins() {
     try {
@@ -142,6 +145,10 @@
       history.replaceState(null, "", location.pathname + location.search);
     } catch {}
     if (!payload || payload.v !== 1 || !payload.data || typeof payload.data !== "object") return null;
+    // 処理済み印 (直後の自動往復での再送を防ぐ。手動ボタンは見ない)
+    try {
+      sessionStorage.setItem(HANDOFF_ONCE, "1");
+    } catch (e) {}
     if (payload.auto === 1) {
       // 直接訪問の自動分: 使用中のアカウントがある場合は上書きしない (手動は確認済みのため上書きする)
       let hasToken = false;
@@ -180,6 +187,52 @@
       location.reload();
     } catch {}
     return "reloaded";
+  }
+
+  // 旧ドメイン経由の到達時に一度だけ自動ハンドオフへ送る (使用中アカウントでは送らない)。
+  // 旧 / → 新 (Referer 付き) → 旧 /migrate (ファーストパーティ読取) → 新 #mig で完結する。
+  // true = 遷移したため呼び元は中断すること。
+  async function maybeAutoHandoff() {
+    try {
+      try {
+        if (sessionStorage.getItem(HANDOFF_ONCE)) return false;
+      } catch (e) {
+        return false;
+      }
+      let from = "";
+      try {
+        const ref = document.referrer || "";
+        from = ref ? new URL(ref).origin : "";
+      } catch (e) {
+        from = "";
+      }
+      if (!from || prevOrigins().indexOf(from) < 0) return false;
+      let hasToken = false;
+      try {
+        hasToken = !!localStorage.getItem("wd_token");
+      } catch (e) {
+        return false;
+      }
+      if (hasToken && (await currentTokenFresh()) !== true) return false;
+      let self = "";
+      try {
+        self = location.origin || "";
+      } catch (e) {
+        self = "";
+      }
+      if (!self) return false;
+      try {
+        sessionStorage.setItem(HANDOFF_ONCE, "1");
+      } catch (e) {}
+      try {
+        location.href = from + "/migrate?to=" + encodeURIComponent(self) + "&handoff=auto";
+      } catch (e) {
+        return false;
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   async function maybeImportPrevOrigin(force) {
