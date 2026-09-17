@@ -32,7 +32,7 @@ MAX_CELL = 48
 GRID_COLOR = (233, 233, 233)
 AXIS_COLOR = (221, 119, 119)
 BADGE_BG = (20, 20, 20, 215)
-LOGO_TEXT = "The world drawer"
+LOGO_TEXT = "pixDraw"
 HEX_LEN = 6
 AXIS_WIDE_CELL = 8
 

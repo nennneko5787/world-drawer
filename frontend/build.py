@@ -27,34 +27,59 @@ DIST = BASE / "dist"
 
 LANGS = ("ja", "en", "ko", "zh-CN", "zh-TW")
 OG_LOCALE = {"ja": "ja_JP", "en": "en_US", "ko": "ko_KR", "zh-CN": "zh_CN", "zh-TW": "zh_TW"}
-SITE = "The world drawer"
+SITE = "pixDraw"
 
 OG_TEXTS = {
     "index": {
-        "ja": ("The world drawer - みんなでキャンバスに描こう！",
-               "The world drawerは誰でも自由に描ける、共同制作のオンライン・リアルタイムピクセルキャンバスです。キャンバスにたくさんのピクセルアートを描こう！"),
-        "en": ("The world drawer - Let's paint canvas!",
-               "The world drawer is collaborative, an online real-time pixel canvas where anyone can draw freely. Let's draw many pixel arts on canvas!"),
-        "ko": ("The world drawer - 캔버스에 그려봐요!",
-               "The world drawer는 누구나 자유롭게 그릴 수 있는 협업 온라인 실시간 픽셀 캔버스입니다. 캔버스에 멋진 픽셀 아트를 많이 그려봐요!"),
-        "zh-CN": ("The world drawer - 来画布上作画吧！",
-                 "The world drawer 是任何人都可以自由绘制的协作型在线实时像素画布。来画布上绘制许多像素画吧！"),
-        "zh-TW": ("The world drawer - 來畫布上作畫吧！",
-                 "The world drawer 是任何人都可以自由繪製的協作型線上即時像素畫布。來畫布上繪製許多像素畫吧！"),
+        "ja": (
+            "pixDraw - みんなでキャンバスに描こう！",
+            "pixDrawは誰でも自由に描ける、共同制作のオンライン・リアルタイムピクセルキャンバスです。キャンバスにたくさんのピクセルアートを描こう！",
+        ),
+        "en": (
+            "pixDraw - Let's paint canvas!",
+            "pixDraw is collaborative, an online real-time pixel canvas where anyone can draw freely. Let's draw many pixel arts on canvas!",
+        ),
+        "ko": (
+            "pixDraw - 캔버스에 그려봐요!",
+            "pixDraw는 누구나 자유롭게 그릴 수 있는 협업 온라인 실시간 픽셀 캔버스입니다. 캔버스에 멋진 픽셀 아트를 많이 그려봐요!",
+        ),
+        "zh-CN": (
+            "pixDraw - 来画布上作画吧！",
+            "pixDraw 是任何人都可以自由绘制的协作型在线实时像素画布。来画布上绘制许多像素画吧！",
+        ),
+        "zh-TW": (
+            "pixDraw - 來畫布上作畫吧！",
+            "pixDraw 是任何人都可以自由繪製的協作型線上即時像素畫布。來畫布上繪製許多像素畫吧！",
+        ),
     },
     "help": {
-        "ja": ("ヘルプ - The world drawer", "The world drawer の遊び方。基本操作・インク・レベルとクールダウン・設計図・履歴・アカウント引っ越し・荒らし対策・ルールを解説。"),
-        "en": ("Help - The world drawer", "How to play The world drawer: basics, inks, levels and cooldowns, blueprints, history, account transfer, anti-grief measures, and rules."),
-        "ko": ("도움말 - The world drawer", "The world drawer 플레이 방법: 기본 조작·잉크·레벨과 쿨다운·설계도·기록·계정 이전·어뷰징 대책·규칙 안내."),
-        "zh-CN": ("帮助 - The world drawer", "The world drawer 玩法说明：基本操作、墨水、等级与冷却、设计图、历史、账号迁移、防破坏措施、规则。"),
-        "zh-TW": ("說明 - The world drawer", "The world drawer 玩法說明：基本操作、墨水、等級與冷卻、設計圖、歷史、帳號遷移、防破壞措施、規則。"),
+        "ja": (
+            "ヘルプ - pixDraw",
+            "pixDraw の遊び方。基本操作・インク・レベルとクールダウン・設計図・履歴・アカウント引っ越し・荒らし対策・ルールを解説。",
+        ),
+        "en": (
+            "Help - pixDraw",
+            "How to play pixDraw: basics, inks, levels and cooldowns, blueprints, history, account transfer, anti-grief measures, and rules.",
+        ),
+        "ko": (
+            "도움말 - pixDraw",
+            "pixDraw 플레이 방법: 기본 조작·잉크·레벨과 쿨다운·설계도·기록·계정 이전·어뷰징 대책·규칙 안내.",
+        ),
+        "zh-CN": (
+            "帮助 - pixDraw",
+            "pixDraw 玩法说明：基本操作、墨水、等级与冷却、设计图、历史、账号迁移、防破坏措施、规则。",
+        ),
+        "zh-TW": (
+            "說明 - pixDraw",
+            "pixDraw 玩法說明：基本操作、墨水、等級與冷卻、設計圖、歷史、帳號遷移、防破壞措施、規則。",
+        ),
     },
     "admin": {
-        "ja": ("管理 - The world drawer", "管理者用の操作ページ。"),
-        "en": ("Admin - The world drawer", "Admin operations page."),
-        "ko": ("관리 - The world drawer", "관리자용 작업 페이지."),
-        "zh-CN": ("管理 - The world drawer", "管理员操作页面。"),
-        "zh-TW": ("管理 - The world drawer", "管理員操作頁面。"),
+        "ja": ("管理 - pixDraw", "管理者用の操作ページ。"),
+        "en": ("Admin - pixDraw", "Admin operations page."),
+        "ko": ("관리 - pixDraw", "관리자용 작업 페이지."),
+        "zh-CN": ("管理 - pixDraw", "管理员操作页面。"),
+        "zh-TW": ("管理 - pixDraw", "管理員操作頁面。"),
     },
 }
 
@@ -93,8 +118,11 @@ def build_tags(*, lang: str, page: str, base: str, path: str, img_base: str) -> 
         f'<meta property="og:image:alt" content="{esc(SITE, quote=True)}">',
         f'<meta property="og:locale" content="{OG_LOCALE[lang]}">',
     ]
-    lines += [f'<meta property="og:locale:alternate" content="{OG_LOCALE[o]}">'
-              for o in LANGS if o != lang]
+    lines += [
+        f'<meta property="og:locale:alternate" content="{OG_LOCALE[o]}">'
+        for o in LANGS
+        if o != lang
+    ]
     lines += [
         '<meta name="twitter:card" content="summary_large_image">',
         f'<meta name="twitter:title" content="{esc(title, quote=True)}">',
@@ -105,11 +133,14 @@ def build_tags(*, lang: str, page: str, base: str, path: str, img_base: str) -> 
     return "\n    ".join(lines)
 
 
-def render_page(name: str, page: str, lang: str, ver: str, base: str,
-                api: str, ws: str, sitekey: str) -> str:
+def render_page(
+    name: str, page: str, lang: str, ver: str, base: str, api: str, ws: str, sitekey: str
+) -> str:
     raw = (PAGES / name).read_text(encoding="utf-8")
     title, _ = OG_TEXTS[page][lang]
-    tags = build_tags(lang=lang, page=page, base=base, path="/" + page if page != "index" else "/", img_base=api)
+    tags = build_tags(
+        lang=lang, page=page, base=base, path="/" + page if page != "index" else "/", img_base=api
+    )
     out = HTML_LANG_RE.sub(f'<html\\1lang="{lang}"', raw, count=1)
     out = TITLE_RE.sub(lambda m: f"{m.group(1)}{html.escape(title)}{m.group(2)}", out, count=1)
     if "<!-- OGP-START -->" in out and "<!-- OGP-END -->" in out:
@@ -117,15 +148,18 @@ def render_page(name: str, page: str, lang: str, ver: str, base: str,
         _, tail = rest.split("<!-- OGP-END -->", 1)
         out = f"{head}<!-- OGP-START -->\n    {tags}\n    <!-- OGP-END -->{tail}"
     out = STATIC_RE.sub(rf"\1/static/\2?v={ver}", out)
-    out = out.replace('name="wd-wsonly" content="0"',
-                      'name="wd-wsonly" content="1"')
+    out = out.replace('name="wd-wsonly" content="0"', 'name="wd-wsonly" content="1"')
     # API/WS/Turnstile注入 (head末尾)
-    inject = (f'\n    <meta name="wd-api" content="{html.escape(api, quote=True)}">'
-              f'\n    <meta name="wd-ws" content="{html.escape(ws, quote=True)}">'
-              f'\n    <meta name="wd-turnstile-site" content="{html.escape(sitekey, quote=True)}">')
+    inject = (
+        f'\n    <meta name="wd-api" content="{html.escape(api, quote=True)}">'
+        f'\n    <meta name="wd-ws" content="{html.escape(ws, quote=True)}">'
+        f'\n    <meta name="wd-turnstile-site" content="{html.escape(sitekey, quote=True)}">'
+    )
     if sitekey:
-        inject += ('\n    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js"'
-                   ' async defer></script>')
+        inject += (
+            '\n    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js"'
+            " async defer></script>"
+        )
     out = out.replace("</head>", f"{inject}\n</head>", 1)
     return out
 
@@ -205,8 +239,11 @@ def main() -> int:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(p, dst)
 
-    specs = [("index.html", "index", "/"), ("help.html", "help", "/help"),
-             ("admin.html", "admin", "/admin")]
+    specs = [
+        ("index.html", "index", "/"),
+        ("help.html", "help", "/help"),
+        ("admin.html", "admin", "/admin"),
+    ]
     for name, page, path in specs:
         # 既定言語 (Accept-Languageなしのクローラ向け) は英語をそのまま配置
         for lang in LANGS:
@@ -235,8 +272,11 @@ def main() -> int:
     print(f"built dist/ ver={ver} base={base} api={api}")
     for label, val in (("siteUrl", base), ("apiBase", api), ("wsUrl", ws)):
         if "example.com" in val:
-            print(f"WARN: {label}が既定値のまま ({val})。"
-                  " config.local.jsonc か環境変数で設定してください", file=sys.stderr)
+            print(
+                f"WARN: {label}が既定値のまま ({val})。"
+                " config.local.jsonc か環境変数で設定してください",
+                file=sys.stderr,
+            )
     return 0
 
 

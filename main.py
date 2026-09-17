@@ -1,4 +1,4 @@
-"""The world drawer - entrypoint (配線のみ。実体は app/ 配下)。
+"""pixDraw - entrypoint (配線のみ。実体は app/ 配下)。
 
 - app/routes/: ページ・REST API
 - app/services/: データベース・ユーザー・キャンバス・presence・Socket.IO

@@ -1,4 +1,4 @@
-/* The world drawer 管理ページ (/admin)。curl専用だった操作を画面から行う。 */
+/* pixDraw 管理ページ (/admin)。curl専用だった操作を画面から行う。 */
 (() => {
   "use strict";
 

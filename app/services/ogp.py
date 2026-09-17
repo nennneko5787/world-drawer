@@ -22,71 +22,71 @@ OG_LOCALE: dict[str, str] = {
     "zh-TW": "zh_TW",
 }
 
-SITE_NAME = "The world drawer"
+SITE_NAME = "pixDraw"
 
 # ページと言語の組み合わせごとの (title, description)。クローラ・SEO用の短文に留める。
 OG_TEXTS: dict[str, dict[str, tuple[str, str]]] = {
     "index": {
         "ja": (
-            "The world drawer - みんなでキャンバスに描こう！",
-            "The world drawerは誰でも自由に描ける、共同制作のオンライン・"
+            "pixDraw - みんなでキャンバスに描こう！",
+            "pixDrawは誰でも自由に描ける、共同制作のオンライン・"
             "リアルタイムピクセルキャンバスです。キャンバスにたくさんの"
             "ピクセルアートを描こう！",
         ),
         "en": (
-            "The world drawer - Let's paint canvas!",
-            "The world drawer is collaborative, an online real-time pixel canvas "
+            "pixDraw - Let's paint canvas!",
+            "pixDraw is collaborative, an online real-time pixel canvas "
             "where anyone can draw freely. Let's draw many pixel arts on canvas!",
         ),
         "ko": (
-            "The world drawer - 캔버스에 그려봐요!",
-            "The world drawer는 누구나 자유롭게 그릴 수 있는 협업 온라인 실시간 "
+            "pixDraw - 캔버스에 그려봐요!",
+            "pixDraw는 누구나 자유롭게 그릴 수 있는 협업 온라인 실시간 "
             "픽셀 캔버스입니다. 캔버스에 멋진 픽셀 아트를 많이 그려봐요!",
         ),
         "zh-CN": (
-            "The world drawer - 来画布上作画吧！",
-            "The world drawer 是任何人都可以自由绘制的协作型在线实时像素画布。"  # noqa: RUF001
+            "pixDraw - 来画布上作画吧！",
+            "pixDraw 是任何人都可以自由绘制的协作型在线实时像素画布。"  # noqa: RUF001
             "来画布上绘制许多像素画吧！",
         ),
         "zh-TW": (
-            "The world drawer - 來畫布上作畫吧！",
-            "The world drawer 是任何人都可以自由繪製的協作型線上即時像素畫布。"  # noqa: RUF001
+            "pixDraw - 來畫布上作畫吧！",
+            "pixDraw 是任何人都可以自由繪製的協作型線上即時像素畫布。"  # noqa: RUF001
             "來畫布上繪製許多像素畫吧！",
         ),
     },
     "help": {
         "ja": (
-            "ヘルプ - The world drawer",
-            "The world drawer の遊び方。基本操作・インク・レベルとクールダウン・"
+            "ヘルプ - pixDraw",
+            "pixDraw の遊び方。基本操作・インク・レベルとクールダウン・"
             "設計図・履歴・アカウント引っ越し・荒らし対策・ルールを解説。",
         ),
         "en": (
-            "Help - The world drawer",
-            "How to play The world drawer: basics, inks, levels and cooldowns, "
+            "Help - pixDraw",
+            "How to play pixDraw: basics, inks, levels and cooldowns, "
             "blueprints, history, account transfer, anti-grief measures, and rules.",
         ),
         "ko": (
-            "도움말 - The world drawer",
-            "The world drawer 플레이 방법: 기본 조작·잉크·레벨과 쿨다운·설계도·"
+            "도움말 - pixDraw",
+            "pixDraw 플레이 방법: 기본 조작·잉크·레벨과 쿨다운·설계도·"
             "기록·계정 이전·어뷰징 대책·규칙 안내.",
         ),
         "zh-CN": (
-            "帮助 - The world drawer",
-            "The world drawer 玩法说明：基本操作、墨水、等级与冷却、设计图、"  # noqa: RUF001
+            "帮助 - pixDraw",
+            "pixDraw 玩法说明：基本操作、墨水、等级与冷却、设计图、"  # noqa: RUF001
             "历史、账号迁移、防破坏措施、规则。",
         ),
         "zh-TW": (
-            "說明 - The world drawer",
-            "The world drawer 玩法說明：基本操作、墨水、等級與冷卻、設計圖、"  # noqa: RUF001
+            "說明 - pixDraw",
+            "pixDraw 玩法說明：基本操作、墨水、等級與冷卻、設計圖、"  # noqa: RUF001
             "歷史、帳號遷移、防破壞措施、規則。",
         ),
     },
     "admin": {
-        "ja": ("管理 - The world drawer", "管理者用の操作ページ。"),
-        "en": ("Admin - The world drawer", "Admin operations page."),
-        "ko": ("관리 - The world drawer", "관리자용 작업 페이지."),
-        "zh-CN": ("管理 - The world drawer", "管理员操作页面。"),
-        "zh-TW": ("管理 - The world drawer", "管理員操作頁面。"),
+        "ja": ("管理 - pixDraw", "管理者用の操作ページ。"),
+        "en": ("Admin - pixDraw", "Admin operations page."),
+        "ko": ("관리 - pixDraw", "관리자용 작업 페이지."),
+        "zh-CN": ("管理 - pixDraw", "管理员操作页面。"),
+        "zh-TW": ("管理 - pixDraw", "管理員操作頁面。"),
     },
 }
 
