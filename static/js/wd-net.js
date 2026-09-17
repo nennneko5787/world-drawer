@@ -640,6 +640,15 @@
     } catch {}
   }
 
+  // シールド残り秒を見やすい単位に整形 (60秒→分、60分→時間、24時間→日)
+  function fmtDur(sec) {
+    const s = Math.max(0, Math.ceil(Number(sec) || 0));
+    if (s < 60) return t("durSec", { n: s });
+    if (s < 3600) return t("durMin", { n: Math.floor(s / 60) });
+    if (s < 86400) return t("durHour", { n: Math.floor(s / 3600) });
+    return t("durDay", { n: Math.floor(s / 86400) });
+  }
+
   async function place(x, y, forceTool) {
     if (Math.abs(x) > coordLimit || Math.abs(y) > coordLimit) {
       toast(t("outOfBounds"));
@@ -690,7 +699,7 @@
         } else if (data.error === "cursorMismatch") {
           toast(t("cursorMismatchToast"));
         } else if (data.error === "shielded") {
-          toast(t("shieldToast", { s: data.remaining ?? 0 }));
+          toast(t("shieldToast", { dur: fmtDur(data.remaining ?? 0) }));
         } else {
           toast(t("placeFailedToast", { error: data.error }));
         }

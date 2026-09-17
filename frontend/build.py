@@ -31,16 +31,16 @@ SITE = "The world drawer"
 
 OG_TEXTS = {
     "index": {
-        "ja": ("The world drawer | みんなで描く無限キャンバス",
-               "ブラウザで遊べる無限キャンバスのお絵かきボード。全員で1つの世界に1マスずつ描き、リアルタイムに同期。クールダウン・レベル・特殊インクつき。"),
-        "en": ("The world drawer | An infinite canvas for everyone",
-               "A browser-based infinite pixel canvas. Everyone paints one cell at a time into a single shared world, synced in real time."),
-        "ko": ("The world drawer | 함께 그리는 무한 캔버스",
-               "브라우저에서 즐기는 무한 캔버스 드로잉 보드. 모두가 하나의 세계에 한 칸씩 그리며 실시간으로 동기화됩니다."),
-        "zh-CN": ("The world drawer | 共同绘制的无限画布",
-                 "可在浏览器中游玩的无限画布绘画板。所有人在同一个世界中一次绘制一格，实时同步。"),
-        "zh-TW": ("The world drawer | 共同繪製的無限畫布",
-                 "可在瀏覽器中遊玩的無限畫布繪畫板。所有人在同一個世界中一次繪製一格，即時同步。"),
+        "ja": ("The world drawer - みんなでキャンバスに描こう！",
+               "The world drawerは誰でも自由に描ける、共同制作のオンライン・リアルタイムピクセルキャンバスです。キャンバスにたくさんのピクセルアートを描こう！"),
+        "en": ("The world drawer - Let's paint canvas!",
+               "The world drawer is collaborative, an online real-time pixel canvas where anyone can draw freely. Let's draw many pixel arts on canvas!"),
+        "ko": ("The world drawer - 캔버스에 그려봐요!",
+               "The world drawer는 누구나 자유롭게 그릴 수 있는 협업 온라인 실시간 픽셀 캔버스입니다. 캔버스에 멋진 픽셀 아트를 많이 그려봐요!"),
+        "zh-CN": ("The world drawer - 来画布上作画吧！",
+                 "The world drawer 是任何人都可以自由绘制的协作型在线实时像素画布。来画布上绘制许多像素画吧！"),
+        "zh-TW": ("The world drawer - 來畫布上作畫吧！",
+                 "The world drawer 是任何人都可以自由繪製的協作型線上即時像素畫布。來畫布上繪製許多像素畫吧！"),
     },
     "help": {
         "ja": ("ヘルプ - The world drawer", "The world drawer の遊び方。基本操作・インク・レベルとクールダウン・設計図・履歴・アカウント引っ越し・荒らし対策・ルールを解説。"),
@@ -208,10 +208,10 @@ def main() -> int:
     specs = [("index.html", "index", "/"), ("help.html", "help", "/help"),
              ("admin.html", "admin", "/admin")]
     for name, page, path in specs:
-        # 既定言語はそのまま配置
+        # 既定言語 (Accept-Languageなしのクローラ向け) は英語をそのまま配置
         for lang in LANGS:
             body = render_page(name, page, lang, ver, base, api, ws, sitekey)
-            if lang == "ja":
+            if lang == "en":
                 (DIST / name).write_text(body, encoding="utf-8")
             d = DIST / lang / ("" if page == "index" else page)
             if page == "index":

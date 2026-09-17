@@ -2,20 +2,20 @@
 <!-- Could you help with the development? https://github.com/nennneko5787/world-drawer -->
 
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The world drawer | みんなで描く無限キャンバス</title>
-    <link rel="icon" href="/static/logo.png" type="image/png">
-    <link rel="apple-touch-icon" href="/static/logo.png">
+    <title>The world drawer - Let's paint canvas!</title>
+    <link rel="icon" href="/static/img/logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="/static/img/logo.png">
     <!-- OGP-START -->
-    <meta name="description" content="ブラウザで遊べる無限キャンバスのお絵かきボード。全員で1つの世界に1マスずつ描き、リアルタイムに同期。クールダウン・レベル・特殊インクつき。">
+    <meta name="description" content="The world drawer is collaborative, an online real-time pixel canvas where anyone can draw freely. Let's draw many pixel arts on canvas!">
     <link rel="canonical" href="/">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="The world drawer">
-    <meta property="og:title" content="The world drawer | みんなで描く無限キャンバス">
-    <meta property="og:description" content="ブラウザで遊べる無限キャンバスのお絵かきボード。全員で1つの世界に1マスずつ描き、リアルタイムに同期。クールダウン・レベル・特殊インクつき。">
+    <meta property="og:title" content="The world drawer - Let's paint canvas!">
+    <meta property="og:description" content="The world drawer is collaborative, an online real-time pixel canvas where anyone can draw freely. Let's draw many pixel arts on canvas!">
     <meta property="og:url" content="/">
     <meta property="og:image" content="/og-image.png">
     <meta property="og:image:width" content="1200">
@@ -28,8 +28,8 @@
     <meta property="og:locale:alternate" content="zh_CN">
     <meta property="og:locale:alternate" content="zh_TW">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="The world drawer | みんなで描く無限キャンバス">
-    <meta name="twitter:description" content="ブラウザで遊べる無限キャンバスのお絵かきボード。全員で1つの世界に1マスずつ描き、リアルタイムに同期。クールダウン・レベル・特殊インクつき。">
+    <meta name="twitter:title" content="The world drawer - Let's paint canvas!">
+    <meta name="twitter:description" content="The world drawer is collaborative, an online real-time pixel canvas where anyone can draw freely. Let's draw many pixel arts on canvas!">
     <meta name="twitter:image" content="/og-image.png">
     <meta name="theme-color" content="#ffffff">
     <!-- OGP-END -->
@@ -59,7 +59,7 @@
     <canvas id="board"></canvas>
 
     <header id="topbar">
-        <div class="brand"><img class="logo" src="/static/logo.png" alt=""><span>The world drawer</span></div>
+        <div class="brand"><img class="logo" src="/static/img/logo.png" alt=""><span>The world drawer</span></div>
         <div id="coords" class="pill" data-i18n-title="coordsTitle" title="カーソル位置のキャンバス座標">(0, 0)</div>
         <div id="cooldown" class="pill" data-i18n="ready">準備OK</div>
         <div id="level" class="pill" data-i18n-title="levelWord" title="レベル">Lv1 0/3xp</div>
@@ -68,6 +68,7 @@
         <button id="adminBtn" class="pill clickable hidden" data-i18n-title="adminTitle" title="管理"><i class="bi bi-shield"></i></button>
         <a id="helpBtn" class="pill clickable" data-i18n-title="helpTitle" title="ヘルプ" href="/help"><i class="bi bi-question-circle"></i></a>
         <a id="discordBtn" class="pill clickable" data-i18n-title="discordTitle" title="Discord" href="https://discord.gg/p4HeuUvt99" target="_blank" rel="noopener"><i class="bi bi-discord"></i></a>
+        <a id="twitterBtn" class="pill clickable" data-i18n-title="twitterTitle" title="Twitter" href="https://x.com/TheWorldDrawer" target="_blank" rel="noopener"><i class="bi bi-twitter-x"></i></a>
         <button id="settingsBtn" class="pill clickable" data-i18n-title="settingsTitle" title="設定"><i class="bi bi-gear"></i></button>
     </header>
 

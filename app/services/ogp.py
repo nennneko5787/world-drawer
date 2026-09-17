@@ -28,30 +28,30 @@ SITE_NAME = "The world drawer"
 OG_TEXTS: dict[str, dict[str, tuple[str, str]]] = {
     "index": {
         "ja": (
-            "The world drawer | みんなで描く無限キャンバス",
-            "ブラウザで遊べる無限キャンバスのお絵かきボード。全員で1つの世界に"
-            "1マスずつ描き、リアルタイムに同期。クールダウン・レベル・特殊インクつき。",
+            "The world drawer - みんなでキャンバスに描こう！",
+            "The world drawerは誰でも自由に描ける、共同制作のオンライン・"
+            "リアルタイムピクセルキャンバスです。キャンバスにたくさんの"
+            "ピクセルアートを描こう！",
         ),
         "en": (
-            "The world drawer | An infinite canvas for everyone",
-            "A browser-based infinite pixel canvas. Everyone paints one cell at a time "
-            "into a single shared world, synced in real time — with cooldowns, levels, "
-            "and special inks.",
+            "The world drawer - Let's paint canvas!",
+            "The world drawer is collaborative, an online real-time pixel canvas "
+            "where anyone can draw freely. Let's draw many pixel arts on canvas!",
         ),
         "ko": (
-            "The world drawer | 함께 그리는 무한 캔버스",
-            "브라우저에서 즐기는 무한 캔버스 드로잉 보드. 모두가 하나의 세계에 한 칸씩 "
-            "그리며 실시간으로 동기화됩니다. 쿨다운·레벨·특수 잉크 포함.",
+            "The world drawer - 캔버스에 그려봐요!",
+            "The world drawer는 누구나 자유롭게 그릴 수 있는 협업 온라인 실시간 "
+            "픽셀 캔버스입니다. 캔버스에 멋진 픽셀 아트를 많이 그려봐요!",
         ),
         "zh-CN": (
-            "The world drawer | 共同绘制的无限画布",
-            "可在浏览器中游玩的无限画布绘画板。所有人在同一个世界中一次绘制一格，"  # noqa: RUF001
-            "实时同步。含冷却、等级和特殊墨水。",
+            "The world drawer - 来画布上作画吧！",
+            "The world drawer 是任何人都可以自由绘制的协作型在线实时像素画布。"  # noqa: RUF001
+            "来画布上绘制许多像素画吧！",
         ),
         "zh-TW": (
-            "The world drawer | 共同繪製的無限畫布",
-            "可在瀏覽器中遊玩的無限畫布繪畫板。所有人在同一個世界中一次繪製一格，"  # noqa: RUF001
-            "即時同步。含冷卻、等級和特殊墨水。",
+            "The world drawer - 來畫布上作畫吧！",
+            "The world drawer 是任何人都可以自由繪製的協作型線上即時像素畫布。"  # noqa: RUF001
+            "來畫布上繪製許多像素畫吧！",
         ),
     },
     "help": {
@@ -97,14 +97,14 @@ _TITLE_RE = re.compile(r"(<title[^>]*>).*?(</title>)", re.IGNORECASE | re.DOTALL
 
 
 def resolveLang(explicit: str | None, header: str = "") -> str:
-    """`?lang=` → `Accept-Language` → 日本語の順で OGP 言語を決める。"""
+    """`?lang=` → `Accept-Language` → 英語の順で OGP 言語を決める。"""
     lang = users.normalizeLang(explicit) or users.parseAcceptLanguage(header or "")
-    return lang if lang in SUPPORTED_LANGS else "ja"
+    return lang if lang in SUPPORTED_LANGS else "en"
 
 
 def pageText(page: str, lang: str) -> tuple[str, str]:
     table = OG_TEXTS.get(page, OG_TEXTS["index"])
-    return table.get(lang, table["ja"])
+    return table.get(lang, table["en"])
 
 
 def buildTags(
