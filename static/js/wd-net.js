@@ -47,7 +47,19 @@
   const CHASE_CELLS = 20000; // これ以上のセル数を返した回は追いかけない (弱い鯖を叩き続けない)
   const CHASE_DELAY_MS = 80; // 追いかけの間隔 (バースト防止・描画を挟む)
   const tileVers = new Map(); // "tx,ty" -> v
-  const tileCells = new Map(); // "tx,ty" -> Set("x,y")
+  const tileCells = new Map(); // "tx,ty" -> Set(pixel) 参照集合 (描画のタイル単位走査用)
+  // tileCells の追従 (全書き込み経路で呼ぶこと。参照で持つため Map.get が要らない)
+  function tileTouch(tkey, ref, add) {
+    if (ref == null) return;
+    let set = tileCells.get(tkey);
+    if (add) {
+      if (!set) { set = new Set(); tileCells.set(tkey, set); }
+      set.add(ref);
+    } else if (set) {
+      set.delete(ref);
+      if (set.size === 0) tileCells.delete(tkey);
+    }
+  }
   async function fetchMeta() {
     try {
       const meta = await (await fetch(`${apiBase()}/api/canvas`)).json();
@@ -126,30 +138,32 @@
     const had = tileCells.get(tkey) || new Set();
     const next = new Set();
     for (const [key, val] of Object.entries(fresh)) {
-      next.add(key);
       const cur = pixels.get(key);
       const coats = val.coats ?? 1;
       const ve = val.e || 0, vs = val.s || 0;
+      let ref = cur || null;
       if (!cur || cur.c !== val.c || cur.t !== val.t || (cur.coats ?? 1) !== coats
         || (cur.e || 0) !== ve || (cur.s || 0) !== vs) {
         // キー分解はsplitより手割り (巨大取得時の主スレッド停止を短縮)
         const ci = key.indexOf(",");
         const px = +key.slice(0, ci), py = +key.slice(ci + 1);
-        const cell = { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats, s: vs, sAt: Date.now(), e: ve, eAt: Date.now(), e0: val.e0 || ve };
-        trackPixelWrite(cur, cell);
-        pixels.set(key, cell);
+        ref = { c: val.c, t: val.t, by: val.by || null, x: px, y: py, coats, s: vs, sAt: Date.now(), e: ve, eAt: Date.now(), e0: val.e0 || ve };
+        trackPixelWrite(cur, ref);
+        pixels.set(key, ref);
         markStatic();
       }
+      if (ref) next.add(ref);
     }
     // タイル内にサーバー側で存在しないキャッシュは消去 (消しゴムの取りこぼし対策)
-    for (const key of had) {
-      if (!next.has(key)) {
-        trackPixelWrite(pixels.get(key), null);
-        pixels.delete(key);
+    for (const ref of had) {
+      if (!next.has(ref)) {
+        trackPixelWrite(ref, null);
+        pixels.delete(ref.x + "," + ref.y);
         markStatic();
       }
     }
-    tileCells.set(tkey, next);
+    if (next.size > 0) tileCells.set(tkey, next);
+    else tileCells.delete(tkey);
     tileVers.set(tkey, v);
   }
 
@@ -166,14 +180,9 @@
     for (const [key, val] of [...pixels.entries()]) {
       const x = val.x, y = val.y;
       if (x < box.minX - big || x > box.maxX + big || y < box.minY - big || y > box.maxY + big) {
-        trackPixelWrite(pixels.get(key), null);
+        trackPixelWrite(val, null);
         pixels.delete(key);
-        const tk = `${Math.floor(x / TILE)},${Math.floor(y / TILE)}`;
-        const set = tileCells.get(tk);
-        if (set) {
-          set.delete(key);
-          if (set.size === 0) tileCells.delete(tk);
-        }
+        tileTouch(`${Math.floor(x / TILE)},${Math.floor(y / TILE)}`, val, false);
         markStatic();
         if (pixels.size <= maxCache) break;
       }
@@ -522,39 +531,30 @@
     setTimeout(connectSocket, 3000 * Math.max(1, wsFailCount));
   }
   function onPixel(p) {
-      // 視野外のWS差分は保持しない (見えた範囲だけ持つ。戻ればfetchViewportで取り直す)。
-      // ついでに画面外の変化で静的レイヤーを焼き直さない (遠方の実況で重くしない)
+      // 視野外のWS差分も変数上は更新する (不整合防止)。重い静的レイヤー再構築だけ省く。
+      // 視点変化の全経路がmarkStaticするので描画漏れは起きない
       const m = fetchMargin + 512;
-      const vx0 = -cam.x / cam.zoom - m, vx1 = (viewW() - cam.x) / cam.zoom + m;
-      const vy0 = -cam.y / cam.zoom - m, vy1 = (viewH() - cam.y) / cam.zoom + m;
-      if (p.x < vx0 || p.x > vx1 || p.y < vy0 || p.y > vy1) return;
+      const far = p.x < -cam.x / cam.zoom - m || p.x > (viewW() - cam.x) / cam.zoom + m
+        || p.y < -cam.y / cam.zoom - m || p.y > (viewH() - cam.y) / cam.zoom + m;
       const key = `${p.x},${p.y}`;
       const prev = pixels.get(key) || null;
       const tkey = `${Math.floor(p.x / TILE)},${Math.floor(p.y / TILE)}`;
-      const touchTile = (add) => {
-        let set = tileCells.get(tkey);
-        if (add) {
-          if (!set) { set = new Set(); tileCells.set(tkey, set); }
-          set.add(key);
-        } else if (set) {
-          set.delete(key);
-          if (set.size === 0) tileCells.delete(tkey);
-        }
-      };
       if (p.t === "normal" && String(p.c).toLowerCase() === background.toLowerCase()) {
         trackPixelWrite(prev, null);
         pixels.delete(key);
-        touchTile(false);
+        tileTouch(tkey, prev, false);
       } else {
         const next = { c: p.c, t: p.t, by: p.by || null, x: p.x, y: p.y, coats: p.coats ?? 1, s: p.s || 0, sAt: Date.now(), e: p.e || 0, eAt: Date.now(), e0: p.e || 0 };
         trackPixelWrite(prev, next);
         pixels.set(key, next);
-        touchTile(true);
+        tileTouch(tkey, prev, false);
+        tileTouch(tkey, next, true);
       }
       zoneDirty = true;
-      markStatic();
       if (pendingUndo && `${pendingUndo.x},${pendingUndo.y}` === key && p.by !== myUid) cancelUndo();
       if (historyMode && historyKey === key) showHistory(p.x, p.y);
+      if (far) return;
+      markStatic();
   }
 
   // カーソルは10秒で画面から消える。その分の再描画を予約 (連打防止の単発)
@@ -697,13 +697,17 @@
         return;
       }
       const prevForUndo = prevPix ? { c: prevPix.c, t: prevPix.t, coats: prevPix.coats ?? 1 } : null;
+      const placeTkey = `${Math.floor(x / TILE)},${Math.floor(y / TILE)}`;
       if (inkToUse === "erase") {
         trackPixelWrite(prevPix, null);
         pixels.delete(key);
+        tileTouch(placeTkey, prevPix, false);
       } else {
         const next = { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x, y, coats: data.pixel.coats ?? 1, s: data.pixel.s || 0, sAt: Date.now(), e: data.pixel.e || 0, eAt: Date.now(), e0: data.pixel.e0 || data.pixel.e || 0 };
         trackPixelWrite(prevPix, next);
         pixels.set(key, next);
+        tileTouch(placeTkey, prevPix, false);
+        tileTouch(placeTkey, next, true);
       }
       cooldownUntil = data.cooldownUntil * 1000;
       inventory = data.inventory;
@@ -768,13 +772,17 @@
       }
       const key = `${target.x},${target.y}`;
       const prevUndoPix = pixels.get(key) || null;
+      const undoTkey = `${Math.floor(target.x / TILE)},${Math.floor(target.y / TILE)}`;
       if (data.pixel.erased) {
         trackPixelWrite(prevUndoPix, null);
         pixels.delete(key);
+        tileTouch(undoTkey, prevUndoPix, false);
       } else {
         const next = { c: data.pixel.c, t: data.pixel.t, by: data.by || myUid || null, x: target.x, y: target.y, coats: data.pixel.coats ?? 1, s: data.pixel.s || 0, sAt: Date.now(), e: data.pixel.e || 0, eAt: Date.now(), e0: data.pixel.e0 || data.pixel.e || 0 };
         trackPixelWrite(prevUndoPix, next);
         pixels.set(key, next);
+        tileTouch(undoTkey, prevUndoPix, false);
+        tileTouch(undoTkey, next, true);
       }
       inventory = data.inventory;
       refreshInkUI();

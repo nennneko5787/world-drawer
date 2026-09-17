@@ -110,6 +110,7 @@
     }
   }
   let lastEphemeralDrawT = 0; // シールド・チョークのみの再描画の間引き用 (500ms精度で十分)
+  let lastShieldDrawT = 0; // 同上 (リネーム残滓の未宣言参照だったため定義。無いと描画ループが死ぬ)
   // 特殊インク1マス描画 (静的・動的共通。t は描画先)。
   // save/restoreとshadowBlur乱用を避け、必要分だけ設定・復元する
   function paintSpecialTo(t, val, cx, cy, z, time, animateRainbow, glowFx) {
@@ -193,6 +194,8 @@
             if (val) {
               trackPixelWrite(val, null);
               pixels.delete(key);
+              // tileCells も追従 (描画のタイル単位走査の土台。死に参照を残さない)
+              tileTouch(`${Math.floor(val.x / TILE)},${Math.floor(val.y / TILE)}`, val, false);
               dropped++;
             }
             chalkKeys.delete(key);
@@ -263,6 +266,20 @@
     updateCooldownUI();
     requestAnimationFrame(render);
   }
+  // 視野内のタイル集合だけ列挙 (tileCells 経由。全件走査しない)。
+  // tileCells は全書き込み経路で追従している前提。コールバックはタイル単位なので
+  // 呼び出し回数は視野タイル数程度 (都度生成クロージャの多態化は無視できる)
+  function forVisibleTileSets(x0, x1, y0, y1, cb) {
+    const tx0 = Math.floor(x0 / TILE), tx1 = Math.floor(x1 / TILE);
+    const ty0 = Math.floor(y0 / TILE), ty1 = Math.floor(y1 / TILE);
+    for (let tx = tx0; tx <= tx1; tx++) {
+      for (let ty = ty0; ty <= ty1; ty++) {
+        const set = tileCells.get(`${tx},${ty}`);
+        if (!set || set.size === 0) continue;
+        cb(set);
+      }
+    }
+  }
   // 静的レイヤー描画 (背景・設計図・ピクセル・ゾーン・軸・グリッド)。
   // t が静的offscreenなら焼き付け、最高画質では直接描画する
   function paintStaticTo(t, vw, vh, x0, x1, y0, y1, time, dl, useLegacy) {
@@ -303,7 +320,8 @@
     // t は単体 ("glow") または重ねがけ ("ghost+glow")。効果は合成して描く
     if (useLegacy) {
       // 最高画質: 従来の1マスずつ描画 (発光の影つき・虹アニメ常時)。重いが忠実
-      for (const val of pixels.values()) {
+      forVisibleTileSets(x0, x1, y0, y1, (set) => {
+      for (const val of set) {
         const x = val.x, y = val.y;
         if (x == null || y == null) continue;
         if (x < x0 || x > x1 || y < y0 || y > y1) continue;
@@ -344,6 +362,7 @@
         }
         t.restore();
       }
+      });
     } else {
       // 色バッチ高速描画。動く虹・チョークは動的パスに回し、ここでは焼き付けない
       pixelBatchMap.clear();
@@ -353,7 +372,8 @@
       chalkCache.length = 0;
       const hasBlocked = blocked.size > 0;
       const zx = cam.zoom, cx = cam.x, cy = cam.y;
-      for (const val of pixels.values()) {
+      forVisibleTileSets(x0, x1, y0, y1, (set) => {
+      for (const val of set) {
         const x = val.x, y = val.y;
         if (x < x0 || x > x1 || y < y0 || y > y1) continue;
         if (hasBlocked && val.by && blocked.has(val.by)) continue; // 非表示ID
@@ -373,6 +393,7 @@
         if ((val.s || 0) > 0) shieldCache.push(val);
         if ((val.e || 0) > 0) chalkCache.push(val);
       }
+      });
       if (pixelBatchMap.size > 0) {
         for (const [color, arr] of pixelBatchMap) {
           t.fillStyle = color;
