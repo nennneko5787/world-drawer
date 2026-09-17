@@ -305,7 +305,13 @@
           sessionStorage.removeItem("wd_mig_done");
           if (sessionStorage.getItem("wd_mig_partial")) {
             sessionStorage.removeItem("wd_mig_partial");
-            toast(t("migratedPartialToast"));
+            let skipped = [];
+            try {
+              skipped = JSON.parse(sessionStorage.getItem("wd_mig_skipped") || "[]") || [];
+            } catch {}
+            sessionStorage.removeItem("wd_mig_skipped");
+            const names = (typeof migSkippedNames === "function" ? migSkippedNames(skipped) : []).filter((s) => !!s);
+            toast(names.length ? t("migratedPartialToast", { items: names.join(", ") }) : t("migratedToast"));
           } else {
             toast(t("migratedToast"));
           }

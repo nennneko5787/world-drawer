@@ -55,6 +55,8 @@
 ## `POST /api/admin/ban {ip, seconds?}`（実装済み）
 
 - 変更なし。執行側（`anti-grief.md`）の修正で実効化される。
+- loopback・unspecified（v4-mapped含む）は `badIp` で拒否する
+ （tunnel終端の127.0.0.1等の誤ban防止）。既存のban行は残るため解除は手動。
 
 ## お知らせ管理（`routes/notices.rs`）
 

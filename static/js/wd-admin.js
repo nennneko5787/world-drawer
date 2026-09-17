@@ -67,7 +67,7 @@
     try {
       const data = await adminPost("/api/admin/ban", { ip: adminTarget.ip, seconds: 86400 });
       if (!data.ok) {
-        toast(t(data.error === "forbidden" ? "adminForbidden" : "commError"));
+        toast(t(data.error === "forbidden" ? "adminForbidden" : data.error === "badIp" ? "adminBadIp" : "commError"));
         return;
       }
       toast(t("adminBanDone", { ip: data.ip }));

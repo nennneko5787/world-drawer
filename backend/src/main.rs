@@ -43,6 +43,9 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cfg = config::load()?;
+    // 誤設定の早期発見用 (admin空・proxy未信頼はここで分かる)
+    tracing::info!("trusted_proxies: {:?}", cfg.trusted_proxies);
+    tracing::info!("admin_uids: {} configured", cfg.admin_uids.len());
     let pool = db::connect(&cfg).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
 

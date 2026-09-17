@@ -123,6 +123,27 @@
     return JSON.parse(new TextDecoder().decode(bytes));
   }
 
+  // 部分引っ越しで落としたキーの表示名一覧
+  var MIG_SKIP_LABELS = {
+    wd_draft: "migSkipDraft",
+    wd_cam: "migSkipCam",
+    wd_palette: "migSkipPalette",
+    wd_recentColors: "migSkipRecent",
+    wd_blocked: "migSkipBlocked",
+  };
+  function migSkippedNames(list) {
+    const out = [];
+    for (const k of list || []) {
+      const key = MIG_SKIP_LABELS[k];
+      try {
+        out.push(key ? t(key) : String(k));
+      } catch {
+        out.push(String(k));
+      }
+    }
+    return out;
+  }
+
   // リダイレクトハンドオフの消費。起動直後 (トークン発行前) に呼ぶこと。
   // "reloaded" = 書込→リロード済み / "empty" = 空のため通知済み /
   // "skipped" = 自動分を使用中アカウントのため見送り / null = ハンドオフなし
@@ -180,8 +201,15 @@
     } catch {}
     try {
       sessionStorage.setItem("wd_mig_done", "1");
-      if (payload.partial) sessionStorage.setItem("wd_mig_partial", "1");
-      else sessionStorage.removeItem("wd_mig_partial");
+      if (payload.partial) {
+        sessionStorage.setItem("wd_mig_partial", "1");
+        try {
+          sessionStorage.setItem("wd_mig_skipped", JSON.stringify(payload.skipped || []));
+        } catch (e) {}
+      } else {
+        sessionStorage.removeItem("wd_mig_partial");
+        sessionStorage.removeItem("wd_mig_skipped");
+      }
     } catch {}
     try {
       location.reload();

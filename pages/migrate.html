@@ -66,13 +66,17 @@
   }
   function buildHandoff(data, auto) {
     var flag = auto ? 1 : 0;
-    var full = b64urlEncode({ v: 1, auto: flag, partial: 0, data: data });
+    var full = b64urlEncode({ v: 1, auto: flag, partial: 0, skipped: [], data: data });
     if (full.length <= MIG_BUDGET) return full;
     var small = {};
+    var dropped = [];
     for (var k in data) {
-      if (Object.prototype.hasOwnProperty.call(data, k) && !WD_BULKY[k]) small[k] = data[k];
+      if (!Object.prototype.hasOwnProperty.call(data, k)) continue;
+      if (WD_BULKY[k]) dropped.push(k);
+      else small[k] = data[k];
     }
-    return b64urlEncode({ v: 1, auto: flag, partial: 1, data: small });
+    if (!dropped.length) return full; // 縮まないのでそのまま運ぶ (稀)
+    return b64urlEncode({ v: 1, auto: flag, partial: 1, skipped: dropped, data: small });
   }
   var to = "";
   try { to = originOf(new URLSearchParams(location.search).get("to") || ""); } catch (e) {}

@@ -227,7 +227,7 @@
     try {
       const data = await post("/api/admin/ban", { ip, seconds });
       if (!data.ok) {
-        $("admMsg").textContent = t(data.error === "forbidden" ? "adminForbidden" : data.error === "badIp" ? "commError" : "commError");
+        $("admMsg").textContent = t(data.error === "forbidden" ? "adminForbidden" : data.error === "badIp" ? "adminBadIp" : "commError");
         return;
       }
       $("admMsg").textContent = data.banned ? t("adminBanDone", { ip: data.ip }) : t("admUnbanned", { ip: data.ip });

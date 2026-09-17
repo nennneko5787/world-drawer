@@ -278,8 +278,18 @@ pub async fn ban(
             .into_response();
     }
     let ip = body.ip.trim().to_string();
-    if ip.parse::<std::net::IpAddr>().is_err() {
-        return (StatusCode::BAD_REQUEST, r#"{"ok":false,"error":"badIp"}"#).into_response();
+    let parsed: std::net::IpAddr = match ip.parse() {
+        Ok(a) => a,
+        Err(_) => {
+            return (StatusCode::BAD_REQUEST, r#"{"ok":false,"error":"badIp"}"#)
+                .into_response();
+        }
+    };
+    // 自分・プロキシはban対象にできない (誤banの巻き添え防止。
+    // 127.0.0.1を塞ぐとtunnel経由の正常系まで巻き込む)
+    if is_unbannable(&parsed) {
+        return (StatusCode::BAD_REQUEST, r#"{"ok":false,"error":"badIp"}"#)
+            .into_response();
     }
     let secs = body.seconds.unwrap_or(86400.0);
     if secs <= 0.0 {
@@ -298,4 +308,54 @@ pub async fn ban(
     }
     let out = serde_json::json!({"ok": true, "ip": ip, "banned": true, "until": until});
     (StatusCode::OK, axum::Json(out)).into_response()
+}
+
+/// ban対象にできないIP (自分・プロキシ・未指定)。誤banの巻き添え防止。
+fn is_unbannable(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v) => v.is_loopback() || v.is_unspecified(),
+        std::net::IpAddr::V6(v) => {
+            v.is_loopback()
+                || v.is_unspecified()
+                || v.to_ipv4_mapped()
+                    .map(|m| m.is_loopback() || m.is_unspecified())
+                    .unwrap_or(false)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_unbannable;
+
+    #[test]
+    fn loopback_and_unspecified_rejected() {
+        for s in [
+            "127.0.0.1",
+            "127.0.0.2",
+            "::1",
+            "0.0.0.0",
+            "::",
+            "::ffff:127.0.0.1",
+            "::ffff:0.0.0.0",
+        ] {
+            let ip: std::net::IpAddr = s.parse().unwrap();
+            assert!(is_unbannable(&ip), "{s}");
+        }
+    }
+
+    #[test]
+    fn normal_addrs_allowed() {
+        for s in [
+            "1.2.3.4",
+            "8.8.8.8",
+            "2001:db8::1",
+            "192.168.1.5",
+            "10.0.0.2",
+            "::ffff:8.8.8.8",
+        ] {
+            let ip: std::net::IpAddr = s.parse().unwrap();
+            assert!(!is_unbannable(&ip), "{s}");
+        }
+    }
 }
