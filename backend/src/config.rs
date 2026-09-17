@@ -50,8 +50,8 @@ pub struct Config {
     pub site_url: String,
     #[serde(default, alias = "cors_origins")]
     pub cors_origins: Vec<String>,
-    #[serde(default, alias = "admin_tokens")]
-    pub admin_tokens: Vec<String>,
+    #[serde(default, alias = "adminUIDs")]
+    pub admin_uids: Vec<String>,
     // ドメイン移行時の引っ越し元オリジン (新サイト側のみ。Rustは配信しないため参照用)
     #[serde(default, alias = "previous_origins")]
     pub previous_origins: Vec<String>,
@@ -178,6 +178,17 @@ impl Config {
             .iter()
             .filter_map(|s| s.parse().ok())
             .collect()
+    }
+
+    /// 管理者UIDか (プロフィール欄の #xxxxxx。先頭#・前後空白を許容)。
+    pub fn is_admin_uid(&self, uid: &str) -> bool {
+        let cleaned = uid.trim().trim_start_matches('#');
+        if cleaned.is_empty() {
+            return false;
+        }
+        self.admin_uids
+            .iter()
+            .any(|a| a.trim().trim_start_matches('#') == cleaned)
     }
 }
 

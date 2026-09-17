@@ -54,6 +54,7 @@
     <script src="/static/js/wd-toolbar.js" defer></script>
     <script src="/static/js/wd-panels.js" defer></script>
     <script src="/static/js/wd-admin.js" defer></script>
+    <script src="/static/js/wd-notices.js" defer></script>
     <script src="/static/js/wd-main.js" defer></script>
 </head>
 <body>
@@ -70,6 +71,7 @@
         <a id="helpBtn" class="pill clickable" data-i18n-title="helpTitle" title="ヘルプ" href="/help"><i class="bi bi-question-circle"></i></a>
         <a id="discordBtn" class="pill clickable" data-i18n-title="discordTitle" title="Discord" href="https://discord.gg/p4HeuUvt99" target="_blank" rel="noopener"><i class="bi bi-discord"></i></a>
         <a id="twitterBtn" class="pill clickable" data-i18n-title="twitterTitle" title="Twitter" href="https://x.com/pixDraw" target="_blank" rel="noopener"><i class="bi bi-twitter-x"></i></a>
+        <button id="noticesBtn" class="pill clickable" data-i18n-title="noticesTitle" title="お知らせ"><i class="bi bi-megaphone"></i> <span id="noticesBadge" class="hidden"></span></button>
         <button id="settingsBtn" class="pill clickable" data-i18n-title="settingsTitle" title="設定"><i class="bi bi-gear"></i></button>
     </header>
 
@@ -194,6 +196,11 @@
             <button id="adminRollback" data-i18n="adminRollback">巻き戻し</button>
             <button id="adminBanIp" data-i18n="adminBanIp">IP禁止(24h)</button>
         </div>
+    </aside>
+
+    <aside id="noticesPanel" class="hidden">
+        <div class="panelTitle"><span data-i18n="noticesTitle">お知らせ</span><button id="noticesClose" data-i18n-title="close" title="閉じる"><i class="bi bi-x-lg"></i></button></div>
+        <ul id="noticesList"></ul>
     </aside>
 
     <div id="toast-wrap"></div>

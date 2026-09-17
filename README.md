@@ -28,7 +28,7 @@ uv sync
 初回起動時に `data/world.db`（SQLite）が自動作成されます。旧JSON保存（`data/canvas.json` 等）があれば初回のみ自動取り込みします。
 
 `config.jsonc` は無記入のままで動きます。公開する場合は `siteUrl`、
-管理画面を使う場合は `adminTokens` を設定してください（詳細は下の
+管理画面を使う場合は `adminUIDs` を設定してください（詳細は下の
 設定表・公開例を参照）。
 
 ### 多人数向けの追加セットアップ（PostgreSQL・Redis・nginx）

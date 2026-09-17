@@ -3,6 +3,13 @@
 管理ページ（`static/js/admin-page.js`・`wd-admin.js`）を動かすための最小集合。
 現状Rustは `presence` のみ等でページがほぼ表示できないため、以下へ拡張する。
 
+## 認証（UID制）
+
+- `Authorization: Bearer <token>` から `users` を引いてUIDを求め、
+  `adminUIDs` に含まれるUIDのみ許可。トークン直指定（旧 `adminTokens`・
+  `wd_adminToken`）は廃止。`/admin` ページは `wd_token`（セッション）のみ使う。
+- `isAdmin`（`/api/me`・`/api/session`）もUIDで判定する。
+
 ## `POST /api/admin/status`
 
 ```json
@@ -48,3 +55,12 @@
 ## `POST /api/admin/ban {ip, seconds?}`（実装済み）
 
 - 変更なし。執行側（`anti-grief.md`）の修正で実効化される。
+
+## お知らせ管理（`routes/notices.rs`）
+
+- `POST /api/admin/notices {title, body}` → `{ok, notice}`。
+  `title` は前後空白除去・200文字・空は `badTitle`。`body` は20000文字まで。
+- `PUT /api/admin/notices/{id} {title, body}` → `{ok, notice}`。不存在は `{ok:false,error:noNotice}`。
+- `DELETE /api/admin/notices/{id}` → `{ok, id}`。不存在は `noNotice`。
+- 一覧 `GET /api/notices` は公開（`api.md` 参照）。フロントはトップバーの
+  ボタン＋モーダルで表示し、未読数バッジ（`wd_notices_seen`）を付ける。

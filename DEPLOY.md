@@ -38,7 +38,7 @@ cat > config.local.jsonc <<'EOF'
   "siteUrl": "https://www.example.com",
   "corsOrigins": ["https://www.example.com"],
   "trustedProxies": ["127.0.0.1", "::1"],
-  "adminTokens": ["<自分のwd_token>"],
+  "adminUIDs": ["<自分のUID (#なし6文字)>"],
   "turnstile": {
     "enforce": true,
     "siteKey": "<TURNSTILE_SITE_KEY>",
@@ -129,7 +129,7 @@ npx wrangler pages deploy dist/ --project-name world-drawer
 curl https://api.example.com/healthz
 curl https://api.example.com/api/bounds
 # ブラウザ: https://www.example.com → Turnstile通過 → 描画・配置・WSカーソル確認
-# 管理: localStorageのwd_tokenをadminTokensに入れて /admin
+# 管理: プロフィール欄の #UID をadminUIDsに入れて /admin (トークン制は廃止)
 ```
 
 ## 6. 運用

@@ -7,7 +7,9 @@
 - `Authorization: Bearer <token>` のみ。body/query内のtokenは受付ない
  （`backend/src/auth.rs`、フロント `static/js/wd-auth.js:27-37` もBearerのみ送信）。
 - 長さ0・65文字以上は `401 missingToken`。
-- 管理系はBearerが `adminTokens` のいずれかと一致すること（定数時間比較風、`admin.rs:9-17`）。
+- 管理系はBearerのトークンから `users` を引いてUIDを求め、そのUIDが `adminUIDs`
+  のいずれかと一致すること（`admin.rs:9-24`・`config.rs:is_admin_uid`）。
+  トークン直指定（旧 `adminTokens`）は廃止。
 
 ## エンドポイント
 
@@ -29,6 +31,10 @@
 | `POST /api/admin/lookup` | `routes/admin.rs:47` | `admin.md` 参照 |
 | `POST /api/admin/rollback` | `routes/admin.rs:76` | `admin.md` 参照 |
 | `POST /api/admin/ban` | `routes/admin.rs:218` | `{ip,seconds?}`。`seconds<=0` で解除 |
+| `GET /api/notices` | `routes/notices.rs:list` | 公開一覧（新しい順）。`{ok,notices:[{id,title,body,createdAt,updatedAt}]}`（`limit` 1-500、既定100） |
+| `POST /api/admin/notices` | `routes/notices.rs:create` | 管理者投稿。`{title,body}` → `{ok,notice}` |
+| `PUT /api/admin/notices/{id}` | `routes/notices.rs:update` | 管理者編集。`{title,body}` → `{ok,notice}` |
+| `DELETE /api/admin/notices/{id}` | `routes/notices.rs:remove` | 管理者削除。`{ok,id}` |
 | `GET /api/users` | `routes/users.rs:13` | WS不可時のフォールバック。`{online:[{uid,name,color,level}],count,truncated}`（仕様としてlean） |
 | `GET /ws` | `routes/mod.rs:69` | WS（`ws-protocol.md`） |
 | `GET /og-image.png` | `routes/canvas.rs:142` | `ogp.rs` 原点中心レンダ。60s cache |
@@ -45,7 +51,7 @@ WS経由placeは存在しない。クライアント（`static/js/wd-net.js:608-
 `missingToken` `noUser` `outOfBounds` `badColor` `unknownInk` `noInk`
 `cooldown` `shielded` `tooFar` `banned` `ipBusy` `badPrev` `tooLate`
 `changed` `noUndo` `badPassword` `badLogin` `locked` `turnstileRequired`
-`badUid` `badIp` `rateLimited` `forbidden` `busy`
+`badUid` `badIp` `badTitle` `noNotice` `rateLimited` `forbidden` `busy`
 
 ## ピクセルセルの形
 

@@ -6,14 +6,21 @@ use axum::response::{IntoResponse, Response};
 use redis::AsyncCommands;
 use serde::Deserialize;
 
-fn is_admin(state: &AppState, headers: &HeaderMap) -> bool {
+pub(crate) async fn is_admin(state: &AppState, headers: &HeaderMap) -> bool {
     let Ok(tok) = auth::bearer(headers) else {
         return false;
     };
-    // 定数時間比較寄り (件数が少ないため単純比較+長さ一致)
-    state.cfg.admin_tokens.iter().any(|a| {
-        a.len() == tok.len() && a.bytes().zip(tok.bytes()).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
-    })
+    let row = sqlx::query("SELECT uid FROM users WHERE token = $1")
+        .bind(&tok)
+        .fetch_optional(&state.pool)
+        .await
+        .unwrap_or(None);
+    let Some(r) = row else {
+        return false;
+    };
+    use sqlx::Row;
+    let uid: String = r.get(0);
+    state.cfg.is_admin_uid(&uid)
 }
 
 #[derive(Deserialize)]
@@ -34,7 +41,7 @@ pub struct BanBody {
 }
 
 pub async fn status(State(mut state): State<AppState>, headers: HeaderMap) -> Response {
-    if !is_admin(&state, &headers) {
+    if !is_admin(&state, &headers).await {
         return (StatusCode::FORBIDDEN, r#"{"ok":false,"error":"forbidden"}"#)
             .into_response();
     }
@@ -76,7 +83,7 @@ pub async fn lookup(
     headers: HeaderMap,
     body: axum::Json<LookupBody>,
 ) -> Response {
-    if !is_admin(&state, &headers) {
+    if !is_admin(&state, &headers).await {
         return (StatusCode::FORBIDDEN, r#"{"ok":false,"error":"forbidden"}"#)
             .into_response();
     }
@@ -121,7 +128,7 @@ pub async fn rollback(
     headers: HeaderMap,
     body: axum::Json<RollbackBody>,
 ) -> Response {
-    if !is_admin(&state, &headers) {
+    if !is_admin(&state, &headers).await {
         return (StatusCode::FORBIDDEN, r#"{"ok":false,"error":"forbidden"}"#)
             .into_response();
     }
@@ -266,7 +273,7 @@ pub async fn ban(
     headers: HeaderMap,
     body: axum::Json<BanBody>,
 ) -> Response {
-    if !is_admin(&state, &headers) {
+    if !is_admin(&state, &headers).await {
         return (StatusCode::FORBIDDEN, r#"{"ok":false,"error":"forbidden"}"#)
             .into_response();
     }

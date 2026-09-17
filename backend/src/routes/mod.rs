@@ -11,6 +11,7 @@ pub mod admin;
 pub mod canvas;
 pub mod history;
 pub mod me;
+pub mod notices;
 pub mod place;
 pub mod profile;
 pub mod account;
@@ -59,6 +60,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/admin/lookup", axum::routing::post(admin::lookup))
         .route("/api/admin/rollback", axum::routing::post(admin::rollback))
         .route("/api/admin/ban", axum::routing::post(admin::ban))
+        .route("/api/notices", axum::routing::get(notices::list))
+        .route("/api/admin/notices", axum::routing::post(notices::create))
+        .route(
+            "/api/admin/notices/{id}",
+            axum::routing::put(notices::update).delete(notices::remove),
+        )
         .route("/api/users", axum::routing::get(users::list))
         .route("/ws", axum::routing::get(crate::routes::ws_route::handle))
         .route("/og-image.png", axum::routing::get(canvas::og_image))

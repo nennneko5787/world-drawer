@@ -81,7 +81,7 @@ pub async fn create(
             Ok(done) if done.rows_affected() == 1 => {
                 let body = serde_json::json!({
                     "ok": true, "token": token, "uid": uid,
-                    "isAdmin": state.cfg.admin_tokens.iter().any(|a| a == &token),
+                    "isAdmin": state.cfg.is_admin_uid(&uid),
                     "profile": {"name": name, "color": crate::color::int_to_hex(color)},
                     "inventory": {"glow":0,"rainbow":0,"ghost":0,"chalk":0,"shield":0},
                     "cooldownUntil": 0.0,

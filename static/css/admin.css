@@ -18,6 +18,18 @@
 }
 .admRow input[type="number"] { width: 90px; }
 #admToken, #admUid { flex: 1; min-width: 140px; }
+#admNoticeTitle { flex: 1; min-width: 200px; }
+#admNoticeBody {
+  flex: 1; min-width: 200px; min-height: 90px;
+  font-size: 14px; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--page); color: var(--fg);
+  resize: vertical;
+}
+#admNoticeCancel.hidden { display: none; }
+.admNotice { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.admNotice h4 { margin: 0 0 4px; font-size: 14px; }
+.admNotice p { margin: 0 0 6px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.admNotice .admMuted { margin: 0 0 6px; }
 .admRow button {
   font-size: 14px;
   padding: 6px 14px;

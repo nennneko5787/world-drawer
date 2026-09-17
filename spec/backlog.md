@@ -10,12 +10,13 @@
 
 ## P1（荒らし対応・ admin・運用）
 
-- [x] **U2 半径制限** — 実装済み（nearPixelのみ・COUNT不使用）。
-- [x] **B6 undo突合強化** — 実装済み（older有効履歴との突合）。
+- [x] **U2 半径制限** — 実装済み（nearPixelのみ・COUNT不使用）。- [x] **B6 undo突合強化** — 実装済み（older有効履歴との突合）。
 - [x] **B4 rollbackのconfig値使用** — 修正済み。
 - [x] **U3 引っ越し統合** — 実装済み（`from_token`・行ロック・帰属付け替え）。
 - [x] **U6 管理API拡張** — 実装済み（banned一覧・lookup拡張・`noteLastIp`・events平坦化）。
 - [x] **U4 OGP画像** — 実装済み（`ogp.rs`・依存なしPNG・60秒cache）。
+- [x] **U7 管理UID制** — 実装済み（`adminUIDs`・Bearer→UID解決・`wd_adminToken`廃止・`/admin`はセッションのみ）。
+- [x] **U8 お知らせ** — 実装済み（`notices`テーブル・公開一覧＋管理CRUD・トップバーボタン＋モーダル＋未読バッジ・`/admin`投稿UI・5言語）。
 
 ## P2（整合・小粒）
 

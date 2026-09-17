@@ -61,10 +61,9 @@
   "maxSocketsPerIp": 64,
 
   // ---- 管理者 ----
-  // adminTokens: 管理画面を出すセッションのトークン一覧。
-  // 自分のトークンはブラウザの開発者ツールで localStorage の wd_token 値を確認。
+  // adminUIDs: 管理画面を使えるユーザーのUID一覧 (プロフィール欄の #xxxxxx 6文字)。
   // 空のままなら管理機能は無効。変更は再起動後に反映。
-  "adminTokens": [],
+  "adminUIDs": [],
 
   // ---- ドメイン移行時の引っ越し ----
   // previousOrigins: 旧サイトのオリジン一覧。新サイト側のみ設定。

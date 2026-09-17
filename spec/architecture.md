@@ -29,7 +29,7 @@ Cloudflare Pages (dist/)          Rust API (backend/, Axum)
 
 | 用途 | 場所 | 備考 |
 | --- | --- | --- |
-| 正本 | Postgres（`backend/migrations/*.sql`） | `pixels` / `users` / `history` / `meta` |
+| 正本 | Postgres（`backend/migrations/*.sql`） | `pixels` / `users` / `history` / `notices` / `meta` |
 | レート・ban・最終IP | Redis `wd:rate:*` / `wd:bans` / `wd:lastip` | 障害時はfail-open（可用性優先） |
 | タイル版 | プロセス内メモリ（`tiles.rs`） | 再起動で0に戻る（次回fetchで再取得されるため無害） |
 | WS購読・接続 | プロセス内メモリ（`ws.rs` Hub） | **レプリカ跨ぎのファンアウトなし** |
@@ -45,4 +45,5 @@ WS配信（購読タイル宛）とタイル版がレプリカごとに分断さ
 - `pixels(x, y, c INT, t SMALLINT, by, coats SMALLINT, shieldUntil, chalkUntil)`、`PRIMARY KEY(x,y)`
 - `users(token, uid, name, color INT, inventory, cooldownUntil, level, xp, transferCode, passwordHash, country, showCountry)`
 - `history(id, x, y, uid, c INT, t SMALLINT, at, undone BOOL, xp, rewardInk, rewardAmount)`
+- `notices(id, title, body, createdAt, updatedAt)`（`migrations/005_notices.sql`。新しい順に `id DESC` で読む）
 - ink bitmask: `chalk=1 ghost=2 glow=4 rainbow=8 shield=16 normal=0 erase=32`（`ws_proto.rs:41-43`）

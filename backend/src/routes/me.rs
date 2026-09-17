@@ -39,11 +39,12 @@ pub async fn me(
     ];
     let _ = peer;
     let level = users::clamp_level(r.get::<i32, _>(6) as i64);
-    let is_admin = state.cfg.admin_tokens.iter().any(|a| a == &token);
+    let uid: String = r.get::<String, _>(1);
+    let is_admin = state.cfg.is_admin_uid(&uid);
     let body = serde_json::json!({
         "token": token,
         "isAdmin": is_admin,
-        "uid": r.get::<String, _>(1),
+        "uid": uid,
         "profile": {"name": r.get::<String, _>(2), "color": crate::color::int_to_hex(r.get::<i32, _>(3))},
         "inventory": users::parse_inventory(&inv, &keys),
         "cooldownUntil": r.get::<f64, _>(5),

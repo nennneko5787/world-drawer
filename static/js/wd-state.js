@@ -105,6 +105,11 @@
   const adminResult = document.getElementById("adminResult");
   const adminRollbackBtn = document.getElementById("adminRollback");
   const adminBanBtn = document.getElementById("adminBanIp");
+  const noticesBtn = document.getElementById("noticesBtn");
+  const noticesBadge = document.getElementById("noticesBadge");
+  const noticesPanel = document.getElementById("noticesPanel");
+  const noticesList = document.getElementById("noticesList");
+  const noticesClose = document.getElementById("noticesClose");
   const toolbarEl = document.getElementById("toolbar");
   const chromeToggle = document.getElementById("chromeToggle");
   const fpsVal = document.getElementById("fpsVal");

@@ -5,7 +5,7 @@
   const __modalPanels = [];
   function __collectModals() {
     if (__modalPanels.length) return __modalPanels;
-    for (const id of ["settingsPanel", "userPanel", "historyPanel", "accountPanel", "adminPanel", "colorPanel"]) {
+    for (const id of ["settingsPanel", "userPanel", "historyPanel", "accountPanel", "adminPanel", "noticesPanel", "colorPanel"]) {
       const el = document.getElementById(id);
       if (el) {
         el.classList.add("wd-modal");

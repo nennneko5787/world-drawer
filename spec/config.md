@@ -11,7 +11,7 @@
 | `redisUrl` | （必須） | Redis接続 |
 | `listen` | `127.0.0.1:5787` | 待ち受け |
 | `corsOrigins` | `[]` | Pages URL列挙 |
-| `adminTokens` | `[]` | 管理Bearer一覧 |
+| `adminUIDs` | `[]` | 管理UID一覧（プロフィール欄の #xxxxxx。先頭#・前後空白を許容） |
 | `previousOrigins` | `[]` | 移行元オリジン (Pages側のみ使用。新サイトで旧URL列挙) |
 | `trustedProxies` | `[]` | ヘッダ信用する相手（既定 `config.jsonc` で `127.0.0.1,::1`） |
 | `turnstile` | enforce:true | `siteKey/secretKey/timeoutSec` |

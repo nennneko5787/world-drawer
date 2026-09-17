@@ -1,4 +1,4 @@
-/* pixDraw 管理ページ (/admin)。curl専用だった操作を画面から行う。 */
+/* pixDraw 管理ページ (/admin)。管理者UID制・お知らせ投稿付き。 */
 (() => {
   "use strict";
 
@@ -7,20 +7,37 @@
   let authed = false;
   let adminTarget = null; // {uid, ip}
   let autoTimer = 0;
+  let myUid = "";
+  let editingNoticeId = 0;
 
-  function adminToken() {
+  function apiBase() {
     try {
-      return localStorage.getItem("wd_adminToken") || localStorage.getItem("wd_token") || "";
+      const m = document.querySelector('meta[name="wd-api"]');
+      if (m && m.content) return String(m.content).replace(/\/$/, "");
+    } catch {}
+    return "";
+  }
+
+  function sessionToken() {
+    try {
+      return localStorage.getItem("wd_token") || "";
     } catch {
       return "";
     }
   }
 
   async function post(path, body) {
-    const res = await fetch(path, {
+    const res = await fetch(`${apiBase()}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${adminToken()}` },
-      body: JSON.stringify({ ...body }),
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${sessionToken()}` },
+      body: JSON.stringify({ ...(body || {}) }),
+    });
+    return await res.json();
+  }
+
+  async function get(path) {
+    const res = await fetch(`${apiBase()}${path}`, {
+      headers: { "Authorization": `Bearer ${sessionToken()}` },
     });
     return await res.json();
   }
@@ -31,10 +48,14 @@
     return el;
   }
 
-  function setAuthed(ok) {
+  function setAuthed(ok, uid) {
     authed = ok;
     $("admBody").classList.toggle("hidden", !ok);
-    $("admAuthLine").textContent = t(ok ? "admAuthOk" : "admAuthNg");
+    if (ok) {
+      $("admAuthLine").textContent = uid ? `#${uid} · ${t("admAuthOk")}` : t("admAuthOk");
+    } else {
+      $("admAuthLine").textContent = t("admAuthNg");
+    }
   }
 
   function statCard(num, label) {
@@ -128,13 +149,19 @@
 
   async function refreshAll() {
     try {
+      // 自UIDの表示用に /api/me を先に読む (失敗しても管理判定は status で行う)
+      try {
+        const me = await get("/api/me");
+        if (me && me.uid) myUid = me.uid;
+      } catch {}
       const d = await post("/api/admin/status", {});
       if (!d.ok) {
         setAuthed(false);
         return;
       }
-      setAuthed(true);
+      setAuthed(true, myUid);
       renderStatus(d);
+      fetchNotices();
     } catch {
       setAuthed(false);
     }
@@ -214,21 +241,115 @@
     await ban(ip, 0);
   }
 
-  $("admTokenSave").onclick = () => {
+  // ---- お知らせ CRUD ----
+  function resetNoticeForm() {
+    editingNoticeId = 0;
+    $("admNoticeTitle").value = "";
+    $("admNoticeBody").value = "";
+    $("admNoticePost").textContent = t("noticesPost");
+    $("admNoticeCancel").classList.add("hidden");
+  }
+
+  async function fetchNotices() {
+    const host = $("admNoticeList");
+    if (!host) return;
+    host.innerHTML = "";
     try {
-      const v = ($("admToken").value || "").trim();
-      if (v) localStorage.setItem("wd_adminToken", v);
-      else localStorage.removeItem("wd_adminToken");
+      const data = await get("/api/notices?limit=100");
+      if (!data.ok) return;
+      for (const n of data.notices || []) {
+        const box = document.createElement("div");
+        box.className = "admNotice";
+        const h = document.createElement("h4");
+        h.textContent = `#${n.id} ${n.title}`;
+        box.appendChild(h);
+        const p = document.createElement("p");
+        p.textContent = n.body || "";
+        box.appendChild(p);
+        const meta = document.createElement("p");
+        meta.className = "admMuted";
+        meta.textContent = fmtTime(n.updatedAt || n.createdAt);
+        box.appendChild(meta);
+        const row = document.createElement("div");
+        row.className = "admRow";
+        const editBtn = document.createElement("button");
+        editBtn.textContent = t("noticesEdit");
+        editBtn.onclick = () => {
+          editingNoticeId = n.id;
+          $("admNoticeTitle").value = n.title || "";
+          $("admNoticeBody").value = n.body || "";
+          $("admNoticePost").textContent = t("noticesUpdate");
+          $("admNoticeCancel").classList.remove("hidden");
+          $("admNoticeCancel").textContent = t("close");
+        };
+        const delBtn = document.createElement("button");
+        delBtn.textContent = t("noticesDelete");
+        delBtn.onclick = () => deleteNotice(n.id);
+        row.appendChild(editBtn);
+        row.appendChild(delBtn);
+        box.appendChild(row);
+        host.appendChild(box);
+      }
+      if ((data.notices || []).length === 0) {
+        const p = document.createElement("p");
+        p.className = "admMuted";
+        p.textContent = t("noticesEmpty");
+        host.appendChild(p);
+      }
     } catch {}
-    refreshAll();
-  };
-  $("admTokenSession").onclick = () => {
+  }
+
+  async function submitNotice() {
+    const title = ($("admNoticeTitle").value || "").trim();
+    const body = ($("admNoticeBody").value || "").trim();
+    if (!title) {
+      $("admMsg").textContent = t("noticesTitlePh");
+      return;
+    }
     try {
-      localStorage.removeItem("wd_adminToken");
-    } catch {}
-    $("admToken").value = "";
-    refreshAll();
-  };
+      let data;
+      if (editingNoticeId) {
+        const res = await fetch(`${apiBase()}/api/admin/notices/${editingNoticeId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${sessionToken()}` },
+          body: JSON.stringify({ title, body }),
+        });
+        data = await res.json();
+      } else {
+        data = await post("/api/admin/notices", { title, body });
+      }
+      if (!data.ok) {
+        $("admMsg").textContent = t(data.error === "forbidden" ? "adminForbidden" : "commError");
+        return;
+      }
+      $("admMsg").textContent = t(editingNoticeId ? "noticesUpdated" : "noticesPosted");
+      resetNoticeForm();
+      fetchNotices();
+    } catch {
+      $("admMsg").textContent = t("commError");
+    }
+  }
+
+  async function deleteNotice(id) {
+    if (!confirm(t("noticesConfirmDel"))) return;
+    try {
+      const res = await fetch(`${apiBase()}/api/admin/notices/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${sessionToken()}` },
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        $("admMsg").textContent = t(data.error === "forbidden" ? "adminForbidden" : "commError");
+        return;
+      }
+      $("admMsg").textContent = t("noticesDeleted");
+      if (editingNoticeId === id) resetNoticeForm();
+      fetchNotices();
+    } catch {
+      $("admMsg").textContent = t("commError");
+    }
+  }
+
   $("admRefresh").onclick = refreshAll;
   $("admAuto").onchange = () => {
     clearInterval(autoTimer);
@@ -247,10 +368,14 @@
     }
     ban(adminTarget.ip, Number($("admDuration").value) || 86400);
   };
+  if ($("admNoticePost")) $("admNoticePost").onclick = submitNotice;
+  if ($("admNoticeCancel")) $("admNoticeCancel").onclick = resetNoticeForm;
 
+  // 旧wd_adminTokenが残っていれば掃除 (UID制では不要)
   try {
-    $("admToken").value = localStorage.getItem("wd_adminToken") || "";
+    localStorage.removeItem("wd_adminToken");
   } catch {}
-  if (adminToken()) refreshAll();
+  resetNoticeForm();
+  if (sessionToken()) refreshAll();
   else setAuthed(false);
 })();

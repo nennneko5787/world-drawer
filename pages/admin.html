@@ -59,11 +59,6 @@
         </p>
 
         <h2><span data-i18n="adminTitle">管理</span></h2>
-        <div class="admRow">
-            <input id="admToken" data-i18n-ph="admTokenPh" placeholder="管理トークン" autocomplete="off" spellcheck="false">
-            <button id="admTokenSave" data-i18n="admTokenUse">使う</button>
-            <button id="admTokenSession" data-i18n="admUseSession">セッションを使う</button>
-        </div>
         <p id="admAuthLine" class="admMuted"></p>
 
         <div id="admBody" class="hidden">
@@ -101,6 +96,20 @@
                 <button id="admBanBtn" data-i18n="admBan">禁止する</button>
             </div>
             <p id="admMsg" class="admMuted"></p>
+
+            <h2 data-i18n="admSecNotices">お知らせ投稿</h2>
+            <p class="admMuted" data-i18n="admNoticesHint">管理者UIDのみ投稿・編集・削除できます</p>
+            <div class="admRow">
+                <input id="admNoticeTitle" data-i18n-ph="noticesTitlePh" placeholder="タイトル" autocomplete="off" spellcheck="false" maxlength="200">
+            </div>
+            <div class="admRow">
+                <textarea id="admNoticeBody" data-i18n-ph="noticesBodyPh" placeholder="本文" rows="4" maxlength="20000"></textarea>
+            </div>
+            <div class="admRow">
+                <button id="admNoticePost" data-i18n="noticesPost">投稿</button>
+                <button id="admNoticeCancel" class="hidden" data-i18n="close">閉じる</button>
+            </div>
+            <div id="admNoticeList"></div>
         </div>
     </main>
 </body>

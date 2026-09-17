@@ -3,7 +3,7 @@
 // await されるため、ensureToken (新規セッション発行) より先に完了する。
 // 成功時は localStorage へ書き込んで reload し、2周目で通常起動する。
 "use strict";
-  var WD_MIG_KEYS = ["wd_token", "wd_adminToken", "wd_name", "wd_userColor", "wd_lang",
+  var WD_MIG_KEYS = ["wd_token", "wd_name", "wd_userColor", "wd_lang",
     "wd_theme", "wd_showAxes", "wd_showZone", "wd_simplify", "wd_quality",
     "wd_glow", "wd_showShield", "wd_cursorRate", "wd_rightClick", "wd_middleClick",
     "wd_draftTool", "wd_showDraft", "wd_draft", "wd_blocked", "wd_recentColors",
@@ -134,7 +134,6 @@
         if (!Object.keys(clean).length) continue;
         if (clean.wd_token && !(await verifyMigToken(clean.wd_token))) {
           delete clean.wd_token;
-          delete clean.wd_adminToken;
         }
         try {
           for (const k of Object.keys(clean)) {
