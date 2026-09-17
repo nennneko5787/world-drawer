@@ -53,16 +53,7 @@ pub async fn place(
 
     // IP解決 (trustedProxies経由のみヘッダ信用)
     let nets = ip::parse_nets(&state.cfg.trusted_proxies);
-    let peer_s = peer.ip().to_string();
-    let cf = headers
-        .get("cf-connecting-ip")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    let xff = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    let client_ip = ip::resolve_client_ip(&peer_s, cf, xff, &nets);
+    let client_ip = ip::client_ip_from_headers(&headers, &peer, &nets);
 
     // ban執行 (管理banを配置で効かせる。Redis障害時は通す)
     if rate::ban_remaining(&mut state.redis, &client_ip).await > 0.0 {

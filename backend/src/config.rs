@@ -174,22 +174,54 @@ fn d60f() -> f64 {
 
 impl Config {
     pub fn cors_origins(&self) -> Vec<axum::http::HeaderValue> {
-        self.cors_origins
+        // `corsOrigins` が空でも `siteUrl` があればそこだけは許可する。
+        // 空のまま `allow_origin([])` にすると全オリジン拒否になり、
+        // Pages→APIのRESTが全滅して /admin が常に非管理者表示になる。
+        let mut out: Vec<axum::http::HeaderValue> = self
+            .cors_origins
             .iter()
             .filter_map(|s| s.parse().ok())
-            .collect()
+            .collect();
+        if out.is_empty() {
+            if let Ok(v) = self.site_url.trim().trim_end_matches('/').parse() {
+                if !self.site_url.trim().is_empty() {
+                    out.push(v);
+                }
+            }
+        }
+        out
     }
 
     /// 管理者UIDか (プロフィール欄の #xxxxxx。先頭#・前後空白を許容)。
+    /// 比較はASCII大小無視 (UID生成は小文字だが、手入力の大文字を救う)。
     pub fn is_admin_uid(&self, uid: &str) -> bool {
-        let cleaned = uid.trim().trim_start_matches('#');
+        let cleaned = normalize_uid(uid);
         if cleaned.is_empty() {
             return false;
         }
         self.admin_uids
             .iter()
-            .any(|a| a.trim().trim_start_matches('#') == cleaned)
+            .map(|a| normalize_uid(a))
+            .any(|a| a == cleaned)
     }
+}
+
+/// UID正規化: 前後空白・先頭#・ASCII大小文字を吸収する。
+pub fn normalize_uid(raw: &str) -> String {
+    raw.trim()
+        .trim_start_matches('#')
+        .trim()
+        .to_ascii_lowercase()
+}
+
+/// 管理操作対象UIDの正規化 (`#` 付き貼り付け・大文字・前後空白を吸収)。
+/// DBは小文字6文字のため小文字化して返す。空ならNone。
+pub fn normalize_target_uid(raw: &str) -> Option<String> {
+    let c = normalize_uid(raw);
+    if c.is_empty() {
+        return None;
+    }
+    Some(c.chars().take(16).collect())
 }
 
 fn strip_jsonc(text: &str) -> String {
@@ -358,5 +390,38 @@ mod tests {
         let v: serde_json::Value =
             serde_json::from_str(&remove_trailing_commas(&strip_jsonc(text))).unwrap();
         assert_eq!(v["siteUrl"], "https://x.example");
+    }
+
+    #[test]
+    fn admin_uid_matches_hash_case_space() {
+        let cfg = Config {
+            admin_uids: vec!["#AbC123 ".to_string()],
+            ..Default::default()
+        };
+        assert!(cfg.is_admin_uid("abc123"));
+        assert!(cfg.is_admin_uid("#ABC123"));
+        assert!(cfg.is_admin_uid("  abc123  "));
+        assert!(!cfg.is_admin_uid("zzz999"));
+        assert!(!cfg.is_admin_uid(""));
+        assert!(!cfg.is_admin_uid("#"));
+    }
+
+    #[test]
+    fn target_uid_strips_hash() {
+        assert_eq!(normalize_target_uid("#abc123"), Some("abc123".to_string()));
+        assert_eq!(normalize_target_uid("  #ABC123 "), Some("abc123".to_string()));
+        assert_eq!(normalize_target_uid(""), None);
+        assert_eq!(normalize_target_uid("   #  "), None);
+    }
+
+    #[test]
+    fn cors_falls_back_to_site_url() {
+        let cfg = Config {
+            site_url: "https://www.example.com".to_string(),
+            cors_origins: vec![],
+            ..Default::default()
+        };
+        let origins = cfg.cors_origins();
+        assert_eq!(origins.len(), 1);
     }
 }

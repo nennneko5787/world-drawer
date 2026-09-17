@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 pub(crate) async fn is_admin(state: &AppState, headers: &HeaderMap) -> bool {
     let Ok(tok) = auth::bearer(headers) else {
+        tracing::warn!("admin deny: missingToken");
         return false;
     };
     let row = sqlx::query("SELECT uid FROM users WHERE token = $1")
@@ -16,11 +17,17 @@ pub(crate) async fn is_admin(state: &AppState, headers: &HeaderMap) -> bool {
         .await
         .unwrap_or(None);
     let Some(r) = row else {
+        tracing::warn!("admin deny: noUser for token");
         return false;
     };
     use sqlx::Row;
     let uid: String = r.get(0);
-    state.cfg.is_admin_uid(&uid)
+    if state.cfg.is_admin_uid(&uid) {
+        return true;
+    }
+    // トークン自体は漏らさずUIDだけ出す。設定ミス (別UID・大文字・#等) の切り分け用。
+    tracing::warn!("admin deny: uid=#{uid} not in adminUIDs");
+    false
 }
 
 #[derive(Deserialize)]
@@ -87,7 +94,10 @@ pub async fn lookup(
         return (StatusCode::FORBIDDEN, r#"{"ok":false,"error":"forbidden"}"#)
             .into_response();
     }
-    let uid = body.uid.trim().chars().take(16).collect::<String>();
+    // `#xxxxxx` 貼り付け・大文字を吸収する (プロフィール欄は `#` 付き表示のため)。
+    let Some(uid) = crate::config::normalize_target_uid(&body.uid) else {
+        return (StatusCode::OK, r#"{"ok":false,"error":"noUser"}"#).into_response();
+    };
     let row = sqlx::query(
         "SELECT token, uid, name, color, level, xp, inventory, country, showCountry
          FROM users WHERE uid = $1",
@@ -132,7 +142,9 @@ pub async fn rollback(
         return (StatusCode::FORBIDDEN, r#"{"ok":false,"error":"forbidden"}"#)
             .into_response();
     }
-    let uid = body.uid.trim().chars().take(16).collect::<String>();
+    let Some(uid) = crate::config::normalize_target_uid(&body.uid) else {
+        return (StatusCode::BAD_REQUEST, r#"{"ok":false,"error":"badUid"}"#).into_response();
+    };
     let limit = body.limit.unwrap_or(1000).clamp(1, 5000);
     if uid.is_empty() {
         return (StatusCode::BAD_REQUEST, r#"{"ok":false,"error":"badUid"}"#).into_response();

@@ -97,19 +97,12 @@ pub mod ws_route {
         headers: HeaderMap,
         State(state): State<AppState>,
     ) -> Response {
-        let peer_s = peer.ip().to_string();
-        let cf = headers
-            .get("cf-connecting-ip")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_string();
-        let xff = headers
-            .get("x-forwarded-for")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_string();
+        // Tunnel終端 (127.0.0.1) 経由のときだけ CF/XFF系を信用する。
+        // 解決はupgrade前に確定させる (serve側では文字列だけ使う)。
+        let nets = ip::parse_nets(&state.cfg.trusted_proxies);
+        let client_ip = ip::client_ip_from_headers(&headers, &peer, &nets);
         ws.on_upgrade(move |socket| async move {
-            serve(socket, state, peer_s, cf, xff).await;
+            serve(socket, state, client_ip).await;
         })
     }
 
@@ -120,12 +113,8 @@ pub mod ws_route {
     async fn serve(
         socket: WebSocket,
         mut state: AppState,
-        peer_s: String,
-        cf: String,
-        xff: String,
+        client_ip: String,
     ) {
-        let nets = ip::parse_nets(&state.cfg.trusted_proxies);
-        let client_ip = ip::resolve_client_ip(&peer_s, &cf, &xff, &nets);
         // hello前レート制限 (偽token連打→siteverify増幅対策)。
         // 通常利用 (複数タブ・リロード・自動再試行) に支障のない30/分まで緩和
         if !rate::allow(&mut state.redis, "hello", &client_ip, 30, 60.0).await {

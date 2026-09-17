@@ -43,9 +43,20 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cfg = config::load()?;
-    // 誤設定の早期発見用 (admin空・proxy未信頼はここで分かる)
+    // 誤設定の早期発見用 (admin空・proxy未信頼・CORS空はここで分かる)
     tracing::info!("trusted_proxies: {:?}", cfg.trusted_proxies);
+    {
+        let parsed = crate::ip::parse_nets(&cfg.trusted_proxies);
+        tracing::info!("trusted_proxies parsed: {}/{}", parsed.len(), cfg.trusted_proxies.len());
+        if !cfg.trusted_proxies.is_empty() && parsed.is_empty() {
+            tracing::warn!("trusted_proxies has entries but none parsed (check CIDR/IP format)");
+        }
+    }
     tracing::info!("admin_uids: {} configured", cfg.admin_uids.len());
+    if cfg.admin_uids.is_empty() {
+        tracing::warn!("adminUIDs is empty: /admin will deny everyone until configured + restarted");
+    }
+    tracing::info!("cors_origins: {:?}", cfg.cors_origins);
     let pool = db::connect(&cfg).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
 
@@ -78,6 +89,8 @@ async fn main() -> anyhow::Result<()> {
                 .allow_methods([
                     axum::http::Method::GET,
                     axum::http::Method::POST,
+                    axum::http::Method::PUT,
+                    axum::http::Method::DELETE,
                     axum::http::Method::OPTIONS,
                 ])
                 .allow_headers([

@@ -23,16 +23,7 @@ pub async fn create(
     body: axum::Json<CreateBody>,
 ) -> Response {
     let nets = ip::parse_nets(&state.cfg.trusted_proxies);
-    let peer_s = peer.ip().to_string();
-    let cf = headers
-        .get("cf-connecting-ip")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    let xff = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    let client_ip = ip::resolve_client_ip(&peer_s, cf, xff, &nets);
+    let client_ip = ip::client_ip_from_headers(&headers, &peer, &nets);
 
     // Turnstile必須
     let enforce = state.cfg.turnstile.as_ref().map(|t| t.enforce).unwrap_or(true);

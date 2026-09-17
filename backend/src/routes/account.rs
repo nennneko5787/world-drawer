@@ -94,19 +94,11 @@ fn subtle_eq(a: &str, b: &str) -> bool {
 async fn gate(
     state: &mut AppState,
     headers: &HeaderMap,
-    peer_s: &str,
+    peer: &SocketAddr,
     ts: Option<&str>,
 ) -> Result<String, Response> {
     let nets = ip::parse_nets(&state.cfg.trusted_proxies);
-    let cf = headers
-        .get("cf-connecting-ip")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    let xff = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    let client_ip = ip::resolve_client_ip(peer_s, cf, xff, &nets);
+    let client_ip = ip::client_ip_from_headers(headers, peer, &nets);
     let enforce = state.cfg.turnstile.as_ref().map(|t| t.enforce).unwrap_or(true);
     if enforce {
         let (secret, timeout) = state
@@ -137,8 +129,7 @@ pub async fn issue(
         return (StatusCode::UNAUTHORIZED, r#"{"ok":false,"error":"missingToken"}"#)
             .into_response();
     };
-    let peer_s = peer.ip().to_string();
-    if gate(&mut state, &headers, &peer_s, body.turnstile_token.as_deref())
+    if gate(&mut state, &headers, &peer, body.turnstile_token.as_deref())
         .await
         .is_err()
     {
@@ -177,8 +168,7 @@ pub async fn login(
     headers: HeaderMap,
     body: axum::Json<LoginBody>,
 ) -> Response {
-    let peer_s = peer.ip().to_string();
-    let gate_r = gate(&mut state, &headers, &peer_s, body.turnstile_token.as_deref()).await;
+    let gate_r = gate(&mut state, &headers, &peer, body.turnstile_token.as_deref()).await;
     let Ok(client_ip) = gate_r else {
         return (
             StatusCode::FORBIDDEN,
