@@ -282,7 +282,8 @@ button.pill.clickable { cursor: pointer; font: inherit; }
 #toast-wrap {
   position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 8px; align-items: center;
-  pointer-events: none; z-index: 30;
+  /* モーダル(50)・Turnstile枠(60)より上で常時可視。操作は妨げない */
+  pointer-events: none; z-index: 70;
 }
 .toast {
   background: var(--toast); color: var(--toast-fg); padding: 10px 16px;

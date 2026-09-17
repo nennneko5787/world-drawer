@@ -21,16 +21,16 @@
   }
 
   async function forceImportPrev() {
-    if (!prevOrigins().length) {
+    const origins = prevOrigins();
+    if (!origins.length) {
       toast(t("commError"));
       return;
     }
     // 使用中の記録がある場合は上書き確認 (未使用なら無言で引っ越す)
     if ((await currentTokenFresh()) !== true && !confirm(t("importOverwriteConfirm"))) return;
-    try {
-      sessionStorage.removeItem("wd_mig_tried");
-    } catch {}
-    if (!(await maybeImportPrevOrigin(true))) toast(t("importPrevEmpty"));
+    // トップ遷移ハンドオフ (ファーストパーティのため分離の影響なし)。
+    // 隠しiframeは分離下で空になるため手動では使わない
+    location.href = origins[0] + "/migrate?to=" + encodeURIComponent(location.origin) + "&handoff=1";
   }
 
   try {

@@ -3,10 +3,17 @@
   Deploy this file (as built: dist/migrate.html) so that it is served at the
   OLD origin's /migrate path (extensionless), and exclude /migrate (and
   /migrate.html) from the redirect to the new site.
-  It reads this origin's localStorage and hands it to the new site once
-  via postMessage (explicit target origin only). No data in URL/history.
+  Two handover paths (explicit target origin only):
+  - handoff (?to=...&handoff=1, top-level, manual button): first-party read,
+    then location.replace(to + "/#mig=" + payload). The fragment never
+    reaches any server. Always carries (receiver reports when empty).
+  - direct visit (top-level, old bookmarks): same handoff automatically,
+    but only when there is something to carry; otherwise plain forward.
+    Marked auto=1 so the receiver won't overwrite an active account.
+  - iframe (embedded): legacy best-effort auto import via postMessage.
+    Silently empty under third-party storage partitioning.
   Note: Workers Static Assets 308-redirects /migrate.html to /migrate,
-  so the new site reads the clean path. -->
+  so readers use the clean path. -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -23,6 +30,9 @@
     "wd_glow", "wd_showShield", "wd_cursorRate", "wd_rightClick", "wd_middleClick",
     "wd_draftTool", "wd_showDraft", "wd_draft", "wd_blocked", "wd_recentColors",
     "wd_palette", "wd_cam", "wd_chromeHidden"];
+  // 断片の安全枠 (encoded文字数)。超えたら設計図等の bulky なキーを落とす
+  var WD_BULKY = { wd_draft: 1, wd_cam: 1, wd_palette: 1, wd_recentColors: 1, wd_blocked: 1 };
+  var MIG_BUDGET = 8000;
   var ALLOW = [];
   try {
     ALLOW = JSON.parse(
@@ -33,27 +43,62 @@
     try { return new URL(u).origin; } catch (e) { return ""; }
   }
   function allowed(o) { return !!o && ALLOW.indexOf(o) >= 0; }
+  function collectMig() {
+    var data = {};
+    try {
+      for (var i = 0; i < KEYS.length; i++) {
+        var v = null;
+        try { v = localStorage.getItem(KEYS[i]); } catch (e) { v = null; }
+        if (typeof v === "string" && v.length > 0 && v.length <= 1048576) data[KEYS[i]] = v;
+      }
+    } catch (e) {}
+    return data;
+  }
+  function b64urlEncode(obj) {
+    var bytes = new TextEncoder().encode(JSON.stringify(obj));
+    var bin = "";
+    var STEP = 32768;
+    for (var i = 0; i < bytes.length; i += STEP) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + STEP));
+    }
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function buildHandoff(data, auto) {
+    var flag = auto ? 1 : 0;
+    var full = b64urlEncode({ v: 1, auto: flag, partial: 0, data: data });
+    if (full.length <= MIG_BUDGET) return full;
+    var small = {};
+    for (var k in data) {
+      if (Object.prototype.hasOwnProperty.call(data, k) && !WD_BULKY[k]) small[k] = data[k];
+    }
+    return b64urlEncode({ v: 1, auto: flag, partial: 1, data: small });
+  }
   var to = "";
   try { to = originOf(new URLSearchParams(location.search).get("to") || ""); } catch (e) {}
   if (!allowed(to)) to = "";
   if (!to && allowed(originOf(document.referrer || ""))) to = originOf(document.referrer);
+  var handoff = false;
+  try { handoff = new URLSearchParams(location.search).get("handoff") === "1"; } catch (e) {}
   if (window.parent === window) {
-    // Direct visit (e.g. old bookmark): forward to the new site.
-    // The import itself runs there through the iframe below.
     var dest = to || ALLOW[0] || "";
-    if (dest) { try { location.replace(dest + "/"); } catch (e) {} }
+    if (!dest) return;
+    if (handoff && to) {
+      // 手動ボタン: 常に運ぶ (空なら受け側が通知)。
+      // トップ遷移 = ファーストパーティのため分離の影響なし。
+      // 断片はサーバーに送られない。履歴にも残さない (replace)
+      try { location.replace(to + "/#mig=" + buildHandoff(collectMig(), false)); } catch (e) {}
+      return;
+    }
+    // 直接訪問 (旧ブックマーク等): 運ぶものがあれば自動ハンドオフ、なければ素通し転送
+    var auto = collectMig();
+    try {
+      if (Object.keys(auto).length) location.replace(dest + "/#mig=" + buildHandoff(auto, true));
+      else location.replace(dest + "/");
+    } catch (e) {}
     return;
   }
   if (!to) return; // unknown parent: send nothing
-  var data = {};
-  try {
-    for (var i = 0; i < KEYS.length; i++) {
-      var v = null;
-      try { v = localStorage.getItem(KEYS[i]); } catch (e) { v = null; }
-      if (typeof v === "string" && v.length > 0 && v.length <= 1048576) data[KEYS[i]] = v;
-    }
-  } catch (e) {}
-  try { window.parent.postMessage({ wdMig: 1, data: data }, to); } catch (e) {}
+  try { window.parent.postMessage({ wdMig: 1, data: collectMig() }, to); } catch (e) {}
 })();
 </script>
 </body>

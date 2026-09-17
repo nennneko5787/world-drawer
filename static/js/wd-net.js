@@ -262,6 +262,8 @@
   // ---------- server sync (viewport only) ----------
   async function loadInitial() {
     try {
+      // ハンドオフ帰還時は断片を先に消費 (トークン発行より前)。リロード後は通常起動
+      if ((await consumeHandoffPayload()) === "reloaded") return;
       await maybeImportPrevOrigin();
       await ensureToken();
       await fetchMeta();
@@ -299,7 +301,12 @@
       try {
         if (sessionStorage.getItem("wd_mig_done")) {
           sessionStorage.removeItem("wd_mig_done");
-          toast(t("migratedToast"));
+          if (sessionStorage.getItem("wd_mig_partial")) {
+            sessionStorage.removeItem("wd_mig_partial");
+            toast(t("migratedPartialToast"));
+          } else {
+            toast(t("migratedToast"));
+          }
         }
       } catch {}
       try {

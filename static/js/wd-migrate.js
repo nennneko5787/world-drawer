@@ -1,4 +1,7 @@
-// wd-migrate.js — ドメイン移行時の旧サイト自動引っ越し (iframe + postMessage)。
+// wd-migrate.js — ドメイン移行時の引っ越し。
+// 手動ボタンはトップ遷移ハンドオフ (旧 /migrate?to=..&handoff=1 → 新 /#mig=..)。
+// ファーストパーティのため分離の影響なし。断片はサーバーに送られない。
+// 初訪時の自動分のみ隠しiframe (ベストエフォート。分離下では黙って空)。
 // wd-auth.js の後に読むこと (apiBase を使う)。実行は loadInitial() の先頭で
 // await されるため、ensureToken (新規セッション発行) より先に完了する。
 // 成功時は localStorage へ書き込んで reload し、2周目で通常起動する。
@@ -106,6 +109,77 @@
     } catch {
       return true;
     }
+  }
+
+  function b64urlDecodePayload(s) {
+    let b64 = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  // リダイレクトハンドオフの消費。起動直後 (トークン発行前) に呼ぶこと。
+  // "reloaded" = 書込→リロード済み / "empty" = 空のため通知済み /
+  // "skipped" = 自動分を使用中アカウントのため見送り / null = ハンドオフなし
+  async function consumeHandoffPayload() {
+    let m = null;
+    try {
+      m = (location.hash || "").match(/^#mig=([A-Za-z0-9\-_=]+)$/);
+    } catch {
+      m = null;
+    }
+    if (!m) return null;
+    let payload = null;
+    try {
+      payload = b64urlDecodePayload(m[1]);
+    } catch {
+      payload = null;
+    }
+    // 断片は即除去 (リロードループ防止)
+    try {
+      history.replaceState(null, "", location.pathname + location.search);
+    } catch {}
+    if (!payload || payload.v !== 1 || !payload.data || typeof payload.data !== "object") return null;
+    if (payload.auto === 1) {
+      // 直接訪問の自動分: 使用中のアカウントがある場合は上書きしない (手動は確認済みのため上書きする)
+      let hasToken = false;
+      try {
+        hasToken = !!localStorage.getItem("wd_token");
+      } catch {
+        hasToken = false;
+      }
+      if (hasToken && (await currentTokenFresh()) !== true) return "skipped";
+    }
+    const clean = sanitizeMig(payload.data);
+    if (!Object.keys(clean).length) {
+      toast(t("importPrevEmpty"));
+      return "empty";
+    }
+    if (clean.wd_token && !(await verifyMigToken(clean.wd_token))) {
+      delete clean.wd_token;
+    }
+    if (!Object.keys(clean).length) {
+      toast(t("importPrevEmpty"));
+      return "empty";
+    }
+    try {
+      for (const k of Object.keys(clean)) {
+        try {
+          localStorage.setItem(k, clean[k]);
+        } catch {}
+      }
+    } catch {}
+    try {
+      sessionStorage.setItem("wd_mig_done", "1");
+      if (payload.partial) sessionStorage.setItem("wd_mig_partial", "1");
+      else sessionStorage.removeItem("wd_mig_partial");
+    } catch {}
+    try {
+      location.reload();
+    } catch {}
+    return "reloaded";
   }
 
   async function maybeImportPrevOrigin(force) {
