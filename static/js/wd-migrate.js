@@ -106,23 +106,26 @@
     }
   }
 
-  async function maybeImportPrevOrigin() {
+  async function maybeImportPrevOrigin(force) {
     try {
-      if (migTried()) return;
+      if (!force && migTried()) return false;
       let hasToken = false;
       try {
         hasToken = !!localStorage.getItem("wd_token");
       } catch {
-        return;
+        return false;
       }
-      if (hasToken) {
-        markMigTried();
-        return;
+      if (hasToken && !force) {
+        // 新側で発行済みでも未使用 (Lv1・xp0) なら上書き引っ越しする
+        if ((await currentTokenFresh()) !== true) {
+          markMigTried();
+          return false;
+        }
       }
       const origins = prevOrigins();
       if (!origins.length) {
         markMigTried();
-        return;
+        return false;
       }
       for (const origin of origins) {
         const data = await importOnce(origin, 4000);
@@ -145,13 +148,36 @@
         } catch {}
         markMigTried();
         location.reload();
-        await new Promise(() => {}); // reload まで待機 (到達しない)
-        return;
+        return true;
       }
       markMigTried();
+      return false;
     } catch {
       try {
         markMigTried();
       } catch {}
+      return false;
+    }
+  }
+
+  // 現在トークンの使用状況。true=未所持or未使用 / false=進行あり / null=不明
+  async function currentTokenFresh() {
+    let tok = "";
+    try {
+      tok = localStorage.getItem("wd_token") || "";
+    } catch {
+      return null;
+    }
+    if (!tok) return true;
+    try {
+      const res = await fetch(`${apiBase()}/api/me`, {
+        headers: { "Authorization": `Bearer ${tok}` },
+      });
+      if (!res.ok) return null;
+      const j = await res.json();
+      if (!j || j.uid == null) return null;
+      return (j.level || 1) <= 1 && (j.xp || 0) <= 0;
+    } catch {
+      return null;
     }
   }

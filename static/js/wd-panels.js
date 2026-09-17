@@ -20,6 +20,30 @@
     }
   }
 
+  async function forceImportPrev() {
+    if (!prevOrigins().length) {
+      toast(t("commError"));
+      return;
+    }
+    // 使用中の記録がある場合は上書き確認 (未使用なら無言で引っ越す)
+    if ((await currentTokenFresh()) !== true && !confirm(t("importOverwriteConfirm"))) return;
+    try {
+      sessionStorage.removeItem("wd_mig_tried");
+    } catch {}
+    if (!(await maybeImportPrevOrigin(true))) toast(t("importPrevEmpty"));
+  }
+
+  try {
+    const importPrevBtn = document.getElementById("importPrevBtn");
+    if (importPrevBtn) {
+      if (!prevOrigins().length) {
+        document.getElementById("importPrevSection")?.classList.add("hidden");
+      } else {
+        importPrevBtn.onclick = forceImportPrev;
+      }
+    }
+  } catch {}
+
   function formatTime(at) {
     try {
       return new Date(at * 1000).toLocaleString(window.wdI18n.locale);

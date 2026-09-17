@@ -126,5 +126,5 @@
   "listen": "127.0.0.1:5787",
   "apiBase": "https://api.example.com",
   "wsUrl": "wss://api.example.com/ws",
-  "corsOrigins": ["https://draw.nennneko5787.net"],
+  "corsOrigins": [],
 }
