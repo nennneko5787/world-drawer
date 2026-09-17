@@ -66,6 +66,16 @@
   // 空のままなら管理機能は無効。変更は再起動後に反映。
   "adminTokens": [],
 
+  // ---- ドメイン移行時の引っ越し ----
+  // previousOrigins: 旧サイトのオリジン一覧。新サイト側のみ設定。
+  // 初訪時 (wd_token未所持時) に旧オリジンの /migrate.html を隠しiframeで
+  // 読み、localStorage (セッション・設定・設計図等) を自動で引き継ぐ。
+  // 同一DBを使い回す場合のみセッション (レベル・インク) も復活する。
+  // 例: ["https://old.example.com"]
+  // 旧ドメイン側には dist/migrate.html を /migrate.html に配置し、
+  // そのパスだけリダイレクト対象外にすること。空なら無効。
+  "previousOrigins": [],
+
   // ---- OGP ----
   // siteUrl: 公開URL (og:url / og:image を絶対URLにするため)。
   // 空文字ならリクエストの Host から推定。例: "https://example.com"
@@ -116,5 +126,5 @@
   "listen": "127.0.0.1:5787",
   "apiBase": "https://api.example.com",
   "wsUrl": "wss://api.example.com/ws",
-  "corsOrigins": [],
+  "corsOrigins": ["https://draw.nennneko5787.net"],
 }

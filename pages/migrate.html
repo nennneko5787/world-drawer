@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<!-- world-drawer domain-migration shim.
+  Deploy this file (as built: dist/migrate.html) at the OLD origin's
+  /migrate.html, and exclude that path from the redirect to the new site.
+  It reads this origin's localStorage and hands it to the new site once
+  via postMessage (explicit target origin only). No data in URL/history. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<title>Migration</title>
+<meta name="wd-migrate-allow" content="<!--WD_MIGRATE_ALLOW-->">
+</head>
+<body>
+<script>
+(function () {
+  "use strict";
+  var KEYS = ["wd_token", "wd_adminToken", "wd_name", "wd_userColor", "wd_lang",
+    "wd_theme", "wd_showAxes", "wd_showZone", "wd_simplify", "wd_quality",
+    "wd_glow", "wd_showShield", "wd_cursorRate", "wd_rightClick", "wd_middleClick",
+    "wd_draftTool", "wd_showDraft", "wd_draft", "wd_blocked", "wd_recentColors",
+    "wd_palette", "wd_cam", "wd_chromeHidden"];
+  var ALLOW = [];
+  try {
+    ALLOW = JSON.parse(
+      (document.querySelector('meta[name="wd-migrate-allow"]') || {}).content || "[]"
+    ) || [];
+  } catch (e) { ALLOW = []; }
+  function originOf(u) {
+    try { return new URL(u).origin; } catch (e) { return ""; }
+  }
+  function allowed(o) { return !!o && ALLOW.indexOf(o) >= 0; }
+  var to = "";
+  try { to = originOf(new URLSearchParams(location.search).get("to") || ""); } catch (e) {}
+  if (!allowed(to)) to = "";
+  if (!to && allowed(originOf(document.referrer || ""))) to = originOf(document.referrer);
+  if (window.parent === window) {
+    // Direct visit (e.g. old bookmark): forward to the new site.
+    // The import itself runs there through the iframe below.
+    var dest = to || ALLOW[0] || "";
+    if (dest) { try { location.replace(dest + "/"); } catch (e) {} }
+    return;
+  }
+  if (!to) return; // unknown parent: send nothing
+  var data = {};
+  try {
+    for (var i = 0; i < KEYS.length; i++) {
+      var v = null;
+      try { v = localStorage.getItem(KEYS[i]); } catch (e) { v = null; }
+      if (typeof v === "string" && v.length > 0 && v.length <= 1048576) data[KEYS[i]] = v;
+    }
+  } catch (e) {}
+  try { window.parent.postMessage({ wdMig: 1, data: data }, to); } catch (e) {}
+})();
+</script>
+</body>
+</html>

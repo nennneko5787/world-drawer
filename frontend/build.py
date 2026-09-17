@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import json
 import os
 import re
 import shutil
@@ -134,7 +135,8 @@ def build_tags(*, lang: str, page: str, base: str, path: str, img_base: str) -> 
 
 
 def render_page(
-    name: str, page: str, lang: str, ver: str, base: str, api: str, ws: str, sitekey: str
+    name: str, page: str, lang: str, ver: str, base: str, api: str, ws: str, sitekey: str,
+    prev_origins: str = "",
 ) -> str:
     raw = (PAGES / name).read_text(encoding="utf-8")
     title, _ = OG_TEXTS[page][lang]
@@ -149,11 +151,12 @@ def render_page(
         out = f"{head}<!-- OGP-START -->\n    {tags}\n    <!-- OGP-END -->{tail}"
     out = STATIC_RE.sub(rf"\1/static/\2?v={ver}", out)
     out = out.replace('name="wd-wsonly" content="0"', 'name="wd-wsonly" content="1"')
-    # API/WS/Turnstile注入 (head末尾)
+    # API/WS/Turnstile/移行元注入 (head末尾)
     inject = (
         f'\n    <meta name="wd-api" content="{html.escape(api, quote=True)}">'
         f'\n    <meta name="wd-ws" content="{html.escape(ws, quote=True)}">'
         f'\n    <meta name="wd-turnstile-site" content="{html.escape(sitekey, quote=True)}">'
+        f'\n    <meta name="wd-prev-origins" content="{html.escape(prev_origins, quote=True)}">'
     )
     if sitekey:
         inject += (
@@ -226,6 +229,9 @@ def main() -> int:
     api = os.environ.get("WD_API") or cfg.get("apiBase") or "https://api.example.com"
     ws = os.environ.get("WD_WS") or cfg.get("wsUrl") or "wss://api.example.com/ws"
     sitekey = os.environ.get("TURNSTILE_SITE_KEY") or ts_cfg.get("siteKey", "")
+    raw_prev = cfg.get("previousOrigins") or []
+    prev_list = [str(o).strip().rstrip("/") for o in raw_prev if str(o).strip()]
+    prev_origins = ",".join(prev_list)
     ver = asset_version()
 
     if DIST.exists():
@@ -247,7 +253,7 @@ def main() -> int:
     for name, page, path in specs:
         # 既定言語 (Accept-Languageなしのクローラ向け) は英語をそのまま配置
         for lang in LANGS:
-            body = render_page(name, page, lang, ver, base, api, ws, sitekey)
+            body = render_page(name, page, lang, ver, base, api, ws, sitekey, prev_origins)
             if lang == "en":
                 (DIST / name).write_text(body, encoding="utf-8")
             d = DIST / lang / ("" if page == "index" else page)
@@ -257,6 +263,14 @@ def main() -> int:
             else:
                 d.mkdir(parents=True, exist_ok=True)
                 (d / "index.html").write_text(body, encoding="utf-8")
+
+    # 移行shim: 旧ドメイン側に配置する単体ファイル。許可親オリジンは
+    # このサイト自身 (base) のみ (postMessageの宛先詐称対策)。
+    mig_raw = (PAGES / "migrate.html").read_text(encoding="utf-8")
+    mig_allow = html.escape(json.dumps([base]), quote=True)
+    (DIST / "migrate.html").write_text(
+        mig_raw.replace("<!--WD_MIGRATE_ALLOW-->", mig_allow), encoding="utf-8"
+    )
 
     headers = """\
 /static/*

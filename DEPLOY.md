@@ -138,3 +138,27 @@ curl https://api.example.com/api/bounds
 - バックエンド更新: `docker build` → `docker restart wd-backend` (migrationは起動時自動)
 - 緊急時: `turnstile.enforce=false` + 再起動でTurnstileバイパス、Cloudflare Under Attack Mode
 - `data/world.db` はアーカイブとして残置。削除しないこと
+
+## 7. ドメイン移行 (旧サイトのデータを自動引っ越し)
+
+localStorageはオリジン単位のため、ドメイン変更後は空の別人に見える。
+以下で初訪時に旧サイトからセッション・設定・設計図等を自動で引き継げる
+(同一DBを使い回す場合のみレベル・インクも復活する)。
+
+```bash
+# 1. 新サイト側: config.local.jsonc に旧オリジンを列挙
+#    "previousOrigins": ["https://old.example.com"],
+# 2. フロント再ビルド＋再デプロイ (dist/migrate.html が生成される)
+# 3. 生成された dist/migrate.html を旧ドメインの /migrate.html に配置し、
+#    そのパスだけリダイレクト対象外にする (他は新ドメインへ転送のままで可)
+```
+
+- 仕組み: 新サイト初訪時 (wd_token未所持時) に旧 `/migrate.html` を隠しiframeで
+  読み、`postMessage` でデータを受け取り reload する (`static/js/wd-migrate.js`)。
+  無効トークンは `/api/me` で検証して除外し、設定のみ残す。
+- 安全のためshimはビルド時に許可親オリジン (新サイト自身) を埋め込み、
+  それ以外には何も送らない。新サイト側も `previousOrigins` とiframeの
+  `origin`・`source` を照合する。
+- 注意: `config.local.jsonc` はBOMなしUTF-8で保存すること
+  (Windowsメモ帳の既定はBOM付き。BOM付きだと起動ログに警告が出る)。
+  旧ドメインを丸ごと転送している場合は `/migrate.html` を除外しないと動かない。

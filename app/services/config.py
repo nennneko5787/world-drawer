@@ -71,6 +71,9 @@ maxSocketsPerIp = 64  # IPごとの同時socket接続上限 (CGNAT配下の家�
 # 管理者トークンの一覧 (対応するセッションに管理画面が出る)。空なら管理機能なし。
 # 自分のトークンはプロフィール欄の #ID ではなく localStorage の wd_token 値
 adminTokens: list[str] = []
+# ドメイン移行時の引っ越し元オリジン (新サイト側のみ)。空なら引っ越し無効。
+# 例: ["https://old.example.com"]。旧側には dist/migrate.html を配置する
+previousOrigins: list[str] = []
 
 # 信頼プロキシ (IP/CIDR)。ここからの接続のみ CF-Connecting-IP / X-Forwarded-For
 # を信用する。Cloudflare Tunnel (cloudflaredは自ホスト発) なら既定のままでよい。
@@ -305,6 +308,26 @@ def validateSiteUrl(value: object) -> str | None:
     return text
 
 
+def validateOriginList(value: object) -> list[str] | None:
+    """previousOrigins 用。https?://host 形式の重複なし一覧。空も可。"""
+    if not isinstance(value, list):
+        logger.warning("config.jsonc: previousOrigins must be a list, using default")
+        return None
+    out: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        text = item.strip().rstrip("/")
+        if not text or len(text) > 200:
+            continue
+        if not re.match(r"^https?://[^/\s]+$", text):
+            logger.warning("config.jsonc: previousOrigins ignored invalid entry: %s", item)
+            continue
+        if text not in out:
+            out.append(text)
+    return out
+
+
 def validateRedisUrl(value: object) -> str | None:
     if not isinstance(value, str):
         logger.warning("config.jsonc: redisUrl must be a string, using default")
@@ -359,6 +382,8 @@ def applyConfigKey(
         result = validateProxyList(value)
     elif key == "siteUrl":
         result = validateSiteUrl(value)
+    elif key == "previousOrigins":
+        result = validateOriginList(value)
     elif key in ("redisUrl", "databaseUrl"):
         result = validateUrlKey(key, value)
     elif key == "adminTokens":
@@ -373,7 +398,8 @@ def applyConfigKey(
 def readJsoncFile(path: Path) -> dict:
     """JSONCを辞書で読む。失敗時は警告して空辞書 (既定維持)。"""
     try:
-        raw = json.loads(removeTrailingCommas(stripJsonc(path.read_text(encoding="utf-8"))))
+        # utf-8-sig: Windowsメモ帳等のBOM付き保存でも読めるように
+        raw = json.loads(removeTrailingCommas(stripJsonc(path.read_text(encoding="utf-8-sig"))))
     except (OSError, ValueError) as err:
         logger.warning("%s parse error, using defaults: %s", path.name, err)
         return {}

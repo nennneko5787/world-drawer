@@ -262,6 +262,7 @@
   // ---------- server sync (viewport only) ----------
   async function loadInitial() {
     try {
+      await maybeImportPrevOrigin();
       await ensureToken();
       await fetchMeta();
       await fetchViewport(); // 視野タイルだけ取得
@@ -295,6 +296,12 @@
       refreshInkUI();
       refreshColorUI();
       refreshUserList();
+      try {
+        if (sessionStorage.getItem("wd_mig_done")) {
+          sessionStorage.removeItem("wd_mig_done");
+          toast(t("migratedToast"));
+        }
+      } catch {}
       try {
         if (sessionStorage.getItem("wd_merged")) {
           sessionStorage.removeItem("wd_merged");

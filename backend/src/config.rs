@@ -52,6 +52,9 @@ pub struct Config {
     pub cors_origins: Vec<String>,
     #[serde(default, alias = "admin_tokens")]
     pub admin_tokens: Vec<String>,
+    // ドメイン移行時の引っ越し元オリジン (新サイト側のみ。Rustは配信しないため参照用)
+    #[serde(default, alias = "previous_origins")]
+    pub previous_origins: Vec<String>,
     #[serde(default, alias = "trusted_proxies")]
     pub trusted_proxies: Vec<String>,
     #[serde(default)]
@@ -277,7 +280,9 @@ fn read_one(path: &PathBuf) -> serde_json::Value {
         Ok(s) => s,
         Err(_) => return empty_object(),
     };
-    let cleaned = remove_trailing_commas(&strip_jsonc(&raw));
+    // BOM付きUTF-8 (Windowsメモ帳等) でも読めるように先頭のBOMを除去
+    let raw = raw.strip_prefix('\u{FEFF}').unwrap_or(&raw);
+    let cleaned = remove_trailing_commas(&strip_jsonc(raw));
     match serde_json::from_str::<serde_json::Value>(&cleaned) {
         Ok(serde_json::Value::Object(map)) => serde_json::Value::Object(map),
         Ok(_) => {

@@ -55,10 +55,31 @@ def localizedPage(name: str, page: str, request: Request, lang: str | None) -> H
     )
     body = versionedStaticUrls(body)
     body = applyWsOnly(body)
+    body = applyPrevOrigins(body)
     return HTMLResponse(
         content=body,
         headers={"vary": "Accept-Language", "cache-control": "public, max-age=300"},
     )
+
+
+def applyPrevOrigins(body: str) -> str:
+    """移行元オリジンをmeta注入 (index.htmlのみ保有想定。なければ何もしない)。"""
+    if 'name="wd-prev-origins"' in body:
+        return body
+    origins = ",".join(cfg.previousOrigins or [])
+    inject = f'\n    <meta name="wd-prev-origins" content="{origins}">'
+    return body.replace("</head>", f"{inject}\n</head>", 1)
+
+
+def migrateShim(request: Request) -> HTMLResponse:
+    """旧ドメイン配置用の移行shim (開発サーバー用。許可親は自baseUrl)。"""
+    import html as _html
+    import json as _json
+
+    raw = (pagesDir / "migrate.html").read_text(encoding="utf-8")
+    allow = _html.escape(_json.dumps([baseUrlFor(request)]), quote=True)
+    body = raw.replace("<!--WD_MIGRATE_ALLOW-->", allow)
+    return HTMLResponse(content=body, headers={"cache-control": "no-store"})
 
 
 @router.get("/")
@@ -77,6 +98,12 @@ async def adminPage(request: Request, lang: str | None = None) -> HTMLResponse:
     resp = localizedPage("admin.html", "admin", request, lang)
     resp.headers["cache-control"] = "no-store"
     return resp
+
+
+@router.get("/migrate.html")
+async def migratePage(request: Request) -> HTMLResponse:
+    """ドメイン移行用shim。旧ドメイン側に置くファイルと同一内容 (開発用)。"""
+    return migrateShim(request)
 
 
 @router.get("/og-image.png")
