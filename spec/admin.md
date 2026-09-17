@@ -60,9 +60,17 @@
 
 ## お知らせ管理（`routes/notices.rs`）
 
-- `POST /api/admin/notices {title, body}` → `{ok, notice}`。
+- 日本語ベースが正準。`title`/`body` は日本語で必須、
+  他言語は `translations`（`{"en":{"title","body"},...}`）で保持する。
+  対象言語は `en/ko/zh-CN/zh-TW`（`ja`・対象外は無視、両方空の言語は削除）。
+  キーの大文字小文字・`_`/`-` 揺れは吸収する（`EN`・`zh_cn` 可）。
+- 表示側は `translations[表示言語]` があれば使い、無ければ項目ごと
+  （title/body別々）に日本語へフォールバックする（`wd-notices.js`）。
+- `POST /api/admin/notices {title, body, translations?}` → `{ok, notice}`。
   `title` は前後空白除去・200文字・空は `badTitle`。`body` は20000文字まで。
-- `PUT /api/admin/notices/{id} {title, body}` → `{ok, notice}`。不存在は `{ok:false,error:noNotice}`。
+  翻訳内も同じ制限。
+- `PUT /api/admin/notices/{id} {title, body, translations?}` → `{ok, notice}`。不存在は `{ok:false,error:noNotice}`。
 - `DELETE /api/admin/notices/{id}` → `{ok, id}`。不存在は `noNotice`。
-- 一覧 `GET /api/notices` は公開（`api.md` 参照）。フロントはトップバーの
+- 一覧 `GET /api/notices` は公開（`api.md` 参照）。各noticeに `translations` を含む。
+  本文はMarkdown描画（`wd-markdown.js`）。フロントはトップバーの
   ボタン＋モーダルで表示し、未読数バッジ（`wd_notices_seen`）を付ける。

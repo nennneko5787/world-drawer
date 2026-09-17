@@ -31,9 +31,9 @@
 | `POST /api/admin/lookup` | `routes/admin.rs:47` | `admin.md` 参照 |
 | `POST /api/admin/rollback` | `routes/admin.rs:76` | `admin.md` 参照 |
 | `POST /api/admin/ban` | `routes/admin.rs:218` | `{ip,seconds?}`。`seconds<=0` で解除 |
-| `GET /api/notices` | `routes/notices.rs:list` | 公開一覧（新しい順）。`{ok,notices:[{id,title,body,createdAt,updatedAt}]}`（`limit` 1-500、既定100） |
-| `POST /api/admin/notices` | `routes/notices.rs:create` | 管理者投稿。`{title,body}` → `{ok,notice}` |
-| `PUT /api/admin/notices/{id}` | `routes/notices.rs:update` | 管理者編集。`{title,body}` → `{ok,notice}` |
+| `GET /api/notices` | `routes/notices.rs:list` | 公開一覧（新しい順）。`{ok,notices:[{id,title,body,translations,createdAt,updatedAt}]}`（`limit` 1-500、既定100）。`title/body` は日本語ベース、`translations` は `{"en":{"title","body"}}` 形（未翻訳は空） |
+| `POST /api/admin/notices` | `routes/notices.rs:create` | 管理者投稿。`{title,body,translations?}` → `{ok,notice}` |
+| `PUT /api/admin/notices/{id}` | `routes/notices.rs:update` | 管理者編集。`{title,body,translations?}` → `{ok,notice}` |
 | `DELETE /api/admin/notices/{id}` | `routes/notices.rs:remove` | 管理者削除。`{ok,id}` |
 | `GET /api/users` | `routes/users.rs:13` | WS不可時のフォールバック。`{online:[{uid,name,color,level}],count,truncated}`（仕様としてlean） |
 | `GET /ws` | `routes/mod.rs:69` | WS（`ws-protocol.md`） |

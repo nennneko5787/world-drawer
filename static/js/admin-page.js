@@ -9,6 +9,39 @@
   let autoTimer = 0;
   let myUid = "";
   let editingNoticeId = 0;
+  // お知らせ翻訳の下書き (日本語ベースが正準)。編集中の言語だけ切替表示する。
+  const NOTICE_LANGS = ["ja", "en", "ko", "zh-CN", "zh-TW"];
+  let editLang = "ja";
+  let drafts = { ja: { title: "", body: "" } };
+  let lastNotices = [];
+
+  function stashDraft() {
+    drafts[editLang] = { title: $("admNoticeTitle").value || "", body: $("admNoticeBody").value || "" };
+  }
+
+  function loadDraft() {
+    const d = drafts[editLang] || { title: "", body: "" };
+    $("admNoticeTitle").value = d.title;
+    $("admNoticeBody").value = d.body;
+  }
+
+  // 利用者側と同じ表示言語選択 (日本語フォールバック)。
+  function localizeNotice(n) {
+    let lang = "ja";
+    try {
+      lang = window.wdI18n.lang || "ja";
+    } catch {}
+    if (lang !== "ja" && n.translations && typeof n.translations === "object") {
+      const tr = n.translations[lang];
+      if (tr && typeof tr === "object") {
+        return {
+          title: (typeof tr.title === "string" && tr.title) ? tr.title : (n.title || ""),
+          body: (typeof tr.body === "string" && tr.body) ? tr.body : (n.body || ""),
+        };
+      }
+    }
+    return { title: n.title || "", body: n.body || "" };
+  }
 
   function apiBase() {
     try {
@@ -244,82 +277,113 @@
   // ---- お知らせ CRUD ----
   function resetNoticeForm() {
     editingNoticeId = 0;
+    editLang = "ja";
+    drafts = { ja: { title: "", body: "" } };
+    if ($("admNoticeLang")) $("admNoticeLang").value = "ja";
     $("admNoticeTitle").value = "";
     $("admNoticeBody").value = "";
     $("admNoticePost").textContent = t("noticesPost");
     $("admNoticeCancel").classList.add("hidden");
   }
 
-  async function fetchNotices() {
+  function renderNoticeList(notices) {
     const host = $("admNoticeList");
     if (!host) return;
     host.innerHTML = "";
+    for (const n of notices || []) {
+      const box = document.createElement("div");
+      box.className = "admNotice";
+      const h = document.createElement("h4");
+      h.textContent = `#${n.id} ${localizeNotice(n).title}`;
+      box.appendChild(h);
+      // 本文プレビューも利用者側と同じMarkdown描画にする。
+      const p = document.createElement("div");
+      p.className = "mdBody";
+      const loc = localizeNotice(n);
+      if (typeof window.wdMarkdown === "function") p.innerHTML = window.wdMarkdown(loc.body);
+      else p.textContent = loc.body;
+      box.appendChild(p);
+      const meta = document.createElement("p");
+      meta.className = "admMuted";
+      meta.textContent = fmtTime(n.updatedAt || n.createdAt);
+      // 翻訳の有無が一目で分かるよう言語バッジを付ける。
+      try {
+        const langs = NOTICE_LANGS.filter((l) => l !== "ja" && n.translations && n.translations[l]);
+        if (langs.length > 0) meta.textContent += ` · ${langs.join("/")}`;
+      } catch {}
+      box.appendChild(meta);
+      const row = document.createElement("div");
+      row.className = "admRow";
+      const editBtn = document.createElement("button");
+      editBtn.textContent = t("noticesEdit");
+      editBtn.onclick = () => {
+        editingNoticeId = n.id;
+        drafts = { ja: { title: n.title || "", body: n.body || "" } };
+        for (const l of NOTICE_LANGS) {
+          if (l === "ja") continue;
+          const tr = (n.translations && n.translations[l]) || {};
+          drafts[l] = { title: tr.title || "", body: tr.body || "" };
+        }
+        loadDraft();
+        $("admNoticePost").textContent = t("noticesUpdate");
+        $("admNoticeCancel").classList.remove("hidden");
+        $("admNoticeCancel").textContent = t("close");
+      };
+      const delBtn = document.createElement("button");
+      delBtn.textContent = t("noticesDelete");
+      delBtn.onclick = () => deleteNotice(n.id);
+      row.appendChild(editBtn);
+      row.appendChild(delBtn);
+      box.appendChild(row);
+      host.appendChild(box);
+    }
+    if ((notices || []).length === 0) {
+      const p = document.createElement("p");
+      p.className = "admMuted";
+      p.textContent = t("noticesEmpty");
+      host.appendChild(p);
+    }
+  }
+
+  async function fetchNotices() {
     try {
       const data = await get("/api/notices?limit=100");
       if (!data.ok) return;
-      for (const n of data.notices || []) {
-        const box = document.createElement("div");
-        box.className = "admNotice";
-        const h = document.createElement("h4");
-        h.textContent = `#${n.id} ${n.title}`;
-        box.appendChild(h);
-        // 本文プレビューも利用者側と同じMarkdown描画にする。
-        const p = document.createElement("div");
-        p.className = "mdBody";
-        if (typeof window.wdMarkdown === "function") p.innerHTML = window.wdMarkdown(n.body || "");
-        else p.textContent = n.body || "";
-        box.appendChild(p);
-        const meta = document.createElement("p");
-        meta.className = "admMuted";
-        meta.textContent = fmtTime(n.updatedAt || n.createdAt);
-        box.appendChild(meta);
-        const row = document.createElement("div");
-        row.className = "admRow";
-        const editBtn = document.createElement("button");
-        editBtn.textContent = t("noticesEdit");
-        editBtn.onclick = () => {
-          editingNoticeId = n.id;
-          $("admNoticeTitle").value = n.title || "";
-          $("admNoticeBody").value = n.body || "";
-          $("admNoticePost").textContent = t("noticesUpdate");
-          $("admNoticeCancel").classList.remove("hidden");
-          $("admNoticeCancel").textContent = t("close");
-        };
-        const delBtn = document.createElement("button");
-        delBtn.textContent = t("noticesDelete");
-        delBtn.onclick = () => deleteNotice(n.id);
-        row.appendChild(editBtn);
-        row.appendChild(delBtn);
-        box.appendChild(row);
-        host.appendChild(box);
-      }
-      if ((data.notices || []).length === 0) {
-        const p = document.createElement("p");
-        p.className = "admMuted";
-        p.textContent = t("noticesEmpty");
-        host.appendChild(p);
-      }
+      lastNotices = data.notices || [];
+      renderNoticeList(lastNotices);
     } catch {}
   }
 
   async function submitNotice() {
-    const title = ($("admNoticeTitle").value || "").trim();
-    const body = ($("admNoticeBody").value || "").trim();
+    stashDraft();
+    const base = drafts.ja || { title: "", body: "" };
+    const title = (base.title || "").trim();
+    const body = (base.body || "").trim();
     if (!title) {
       $("admMsg").textContent = t("noticesTitlePh");
       return;
     }
+    // 日本語ベース以外は空でない言語だけ送る (空はサーバ側でも落とす)。
+    const translations = {};
+    for (const l of NOTICE_LANGS) {
+      if (l === "ja") continue;
+      const d = drafts[l] || { title: "", body: "" };
+      if ((d.title || "").trim() || (d.body || "").trim()) {
+        translations[l] = { title: d.title || "", body: d.body || "" };
+      }
+    }
     try {
+      const payload = { title, body, translations };
       let data;
       if (editingNoticeId) {
         const res = await fetch(`${apiBase()}/api/admin/notices/${editingNoticeId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${sessionToken()}` },
-          body: JSON.stringify({ title, body }),
+          body: JSON.stringify(payload),
         });
         data = await res.json();
       } else {
-        data = await post("/api/admin/notices", { title, body });
+        data = await post("/api/admin/notices", payload);
       }
       if (!data.ok) {
         $("admMsg").textContent = t(data.error === "forbidden" ? "adminForbidden" : "commError");
@@ -373,6 +437,15 @@
   };
   if ($("admNoticePost")) $("admNoticePost").onclick = submitNotice;
   if ($("admNoticeCancel")) $("admNoticeCancel").onclick = resetNoticeForm;
+  // 翻訳の編集言語切替 (入力中の他言語は下書き保持)
+  if ($("admNoticeLang")) $("admNoticeLang").onchange = () => {
+    stashDraft();
+    editLang = $("admNoticeLang").value || "ja";
+    if (!NOTICE_LANGS.includes(editLang)) editLang = "ja";
+    loadDraft();
+  };
+  // ページ言語切替時はプレビューを表示言語で描き直す。
+  window.wdLocaleRefresh = () => renderNoticeList(lastNotices);
 
   // 旧wd_adminTokenが残っていれば掃除 (UID制では不要)
   try {

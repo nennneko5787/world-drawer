@@ -39,6 +39,24 @@
     }
   }
 
+  // 表示言語の本文を選ぶ。日本語ベースが正準で、翻訳があれば使う。
+  // 項目ごと (title/body別々) にフォールバックする。
+  function localizeNotice(n) {
+    let lang = "ja";
+    try {
+      lang = window.wdI18n.lang || "ja";
+    } catch {}
+    if (lang !== "ja" && n.tr && typeof n.tr === "object") {
+      const tr = n.tr[lang];
+      if (tr && typeof tr === "object") {
+        const title = typeof tr.title === "string" && tr.title ? tr.title : n.title;
+        const body = typeof tr.body === "string" && tr.body ? tr.body : n.body;
+        return { title, body };
+      }
+    }
+    return { title: n.title, body: n.body };
+  }
+
   function renderNoticesList() {
     if (typeof noticesList === "undefined" || !noticesList) return;
     noticesList.innerHTML = "";
@@ -54,8 +72,9 @@
       li.className = "noticesItem";
       const head = document.createElement("div");
       head.className = "noticesHead";
+      const loc = localizeNotice(n);
       const title = document.createElement("b");
-      title.textContent = n.title;
+      title.textContent = loc.title;
       head.appendChild(title);
       const time = document.createElement("span");
       time.className = "noticesTime";
@@ -65,8 +84,8 @@
       const body = document.createElement("div");
       body.className = "noticesBody";
       // 本文はMarkdown描画 (リンク等)。描画器が無ければ素の文字列。
-      if (typeof window.wdMarkdown === "function") body.innerHTML = window.wdMarkdown(n.body);
-      else body.textContent = n.body;
+      if (typeof window.wdMarkdown === "function") body.innerHTML = window.wdMarkdown(loc.body);
+      else body.textContent = loc.body;
       li.appendChild(body);
       noticesList.appendChild(li);
     }
@@ -81,6 +100,7 @@
           id: Number(n.id) || 0,
           title: String(n.title || ""),
           body: String(n.body || ""),
+          tr: (n.translations && typeof n.translations === "object") ? n.translations : {},
           createdAt: Number(n.createdAt) || 0,
           updatedAt: Number(n.updatedAt) || 0,
         })).filter((n) => n.id > 0);
@@ -114,3 +134,13 @@
   // 初回取得 + 5分ごとに更新 (バッジ用。開いている時は一覧も更新)
   fetchNotices();
   setInterval(fetchNotices, 5 * 60 * 1000);
+  // 言語切替時は表示言語で描き直す (既存の更新処理は維持)
+  {
+    const prevRefresh = window.wdLocaleRefresh;
+    window.wdLocaleRefresh = () => {
+      try {
+        if (typeof prevRefresh === "function") prevRefresh();
+      } catch {}
+      renderNoticesList();
+    };
+  }
