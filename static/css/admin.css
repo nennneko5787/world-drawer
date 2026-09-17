@@ -30,6 +30,19 @@
 .admNotice h4 { margin: 0 0 4px; font-size: 14px; }
 .admNotice p { margin: 0 0 6px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .admNotice .admMuted { margin: 0 0 6px; }
+/* お知らせプレビュー (利用者側と同じMarkdown描画) */
+.mdBody { margin: 0 0 6px; font-size: 13px; overflow-wrap: anywhere; }
+.mdBody p { margin: 0 0 6px; white-space: normal; }
+.mdBody p:last-child { margin-bottom: 0; }
+.mdBody a { color: #1a73e8; overflow-wrap: anywhere; }
+:root[data-theme="dark"] .mdBody a { color: #8ab4f8; }
+.mdBody code { background: var(--seg, #f0f0f4); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+.mdBody pre { background: var(--seg, #f0f0f4); border-radius: 8px; padding: 6px 8px; overflow: auto; }
+.mdBody pre code { background: none; padding: 0; }
+.mdBody ul, .mdBody ol { margin: 4px 0 6px; padding-left: 20px; }
+.mdBody blockquote { margin: 4px 0 6px; padding: 2px 8px; border-left: 3px solid var(--border); }
+.mdBody h1, .mdBody h2, .mdBody h3, .mdBody h4, .mdBody h5, .mdBody h6 { margin: 6px 0 4px; font-size: 14px; }
+.mdBody hr { border: none; border-top: 1px solid var(--border); margin: 6px 0; }
 .admRow button {
   font-size: 14px;
   padding: 6px 14px;

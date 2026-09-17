@@ -263,8 +263,11 @@
         const h = document.createElement("h4");
         h.textContent = `#${n.id} ${n.title}`;
         box.appendChild(h);
-        const p = document.createElement("p");
-        p.textContent = n.body || "";
+        // 本文プレビューも利用者側と同じMarkdown描画にする。
+        const p = document.createElement("div");
+        p.className = "mdBody";
+        if (typeof window.wdMarkdown === "function") p.innerHTML = window.wdMarkdown(n.body || "");
+        else p.textContent = n.body || "";
         box.appendChild(p);
         const meta = document.createElement("p");
         meta.className = "admMuted";

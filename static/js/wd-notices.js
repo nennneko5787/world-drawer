@@ -64,7 +64,9 @@
       li.appendChild(head);
       const body = document.createElement("div");
       body.className = "noticesBody";
-      body.textContent = n.body;
+      // 本文はMarkdown描画 (リンク等)。描画器が無ければ素の文字列。
+      if (typeof window.wdMarkdown === "function") body.innerHTML = window.wdMarkdown(n.body);
+      else body.textContent = n.body;
       li.appendChild(body);
       noticesList.appendChild(li);
     }
