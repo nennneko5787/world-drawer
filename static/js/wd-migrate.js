@@ -66,7 +66,9 @@
       window.addEventListener("message", onMsg);
       timer = setTimeout(() => finish(null), timeoutMs);
       try {
-        frame.src = origin + "/migrate.html?to=" + encodeURIComponent(location.origin);
+        // 拡張子なしで読むこと。Workers Static Assetsは /migrate.html を
+        // /migrate へ308するため、.html付きURLは使えない
+        frame.src = origin + "/migrate?to=" + encodeURIComponent(location.origin);
         (document.body || document.documentElement).appendChild(frame);
       } catch {
         finish(null);

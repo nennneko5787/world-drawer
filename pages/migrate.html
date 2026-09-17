@@ -1,9 +1,12 @@
 <!DOCTYPE html>
 <!-- world-drawer domain-migration shim.
-  Deploy this file (as built: dist/migrate.html) at the OLD origin's
-  /migrate.html, and exclude that path from the redirect to the new site.
+  Deploy this file (as built: dist/migrate.html) so that it is served at the
+  OLD origin's /migrate path (extensionless), and exclude /migrate (and
+  /migrate.html) from the redirect to the new site.
   It reads this origin's localStorage and hands it to the new site once
-  via postMessage (explicit target origin only). No data in URL/history. -->
+  via postMessage (explicit target origin only). No data in URL/history.
+  Note: Workers Static Assets 308-redirects /migrate.html to /migrate,
+  so the new site reads the clean path. -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">

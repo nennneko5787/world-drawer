@@ -67,12 +67,13 @@
 
   // ---- ドメイン移行時の引っ越し ----
   // previousOrigins: 旧サイトのオリジン一覧。新サイト側のみ設定。
-  // 初訪時 (wd_token未所持時) に旧オリジンの /migrate.html を隠しiframeで
+  // 初訪時 (wd_token未所持時) に旧オリジンの /migrate を隠しiframeで
   // 読み、localStorage (セッション・設定・設計図等) を自動で引き継ぐ。
   // 同一DBを使い回す場合のみセッション (レベル・インク) も復活する。
   // 例: ["https://old.example.com"]
-  // 旧ドメイン側には dist/migrate.html を /migrate.html に配置し、
-  // そのパスだけリダイレクト対象外にすること。空なら無効。
+  // 旧ドメイン側には dist/migrate.html を /migrate として配信し、
+  // /migrate と /migrate.html をリダイレクト対象外にすること
+  // (/migrate.html は基盤が /migrate へ308するため拡張子なしで読む)。空なら無効。
   "previousOrigins": [],
 
   // ---- OGP ----
