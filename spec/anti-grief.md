@@ -25,6 +25,16 @@
   place/sessionは試行計数、loginのみ失敗計数。`unknown` IPも1バケツに計数する（両実装同一）。
 - Redis障害時は通す（fail-open、`rate.rs:37-41`）。
 
+## チャット制限（実装済み）
+
+- `chat`: 同一IP 10通/分（`chat.rs:CHAT_PER_MIN/WINDOW`）。超過は `rateLimited` +
+  `retryAfter` + `Retry-After` ヘッダー（`ipBusy` と同方式）。
+- 本文は1〜200文字（`CHAT_MAX_CHARS`）。空・超過は `badBody`。
+- ban執行点は配置と同じ（残秒>0なら `banned`。`chat.rs:post`）。
+- ブロック中UIDの発言はクライアント側で非表示・未読計数しない
+  （`wd-chat.js`。ピクセルのブロックと同一の `blocked` 集合）。
+- 最新200件のみ保持（`CHAT_KEEP`。投稿時に古い方から削除）。
+
 ## Turnstile
 
 - `session` / `account issue+login` / WS `hello` でページ表示の度に検証

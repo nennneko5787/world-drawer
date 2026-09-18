@@ -9,6 +9,7 @@ use crate::ws::Hub;
 
 pub mod admin;
 pub mod canvas;
+pub mod chat;
 pub mod history;
 pub mod me;
 pub mod notices;
@@ -54,6 +55,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/place", axum::routing::post(place::place))
         .route("/api/undo", axum::routing::post(undo::undo))
         .route("/api/history", axum::routing::get(history::history))
+        .route(
+            "/api/chat",
+            axum::routing::get(chat::list).post(chat::post),
+        )
         .route("/api/profile", axum::routing::post(profile::update))
         .route("/api/account/issue", axum::routing::post(account::issue))
         .route("/api/account/login", axum::routing::post(account::login))

@@ -114,6 +114,17 @@
   const noticesPanel = document.getElementById("noticesPanel");
   const noticesList = document.getElementById("noticesList");
   const noticesClose = document.getElementById("noticesClose");
+  const chatBtn = document.getElementById("chatBtn");
+  const chatBadge = document.getElementById("chatBadge");
+  const chatDock = document.getElementById("chatDock");
+  const chatList = document.getElementById("chatList");
+  const chatMore = document.getElementById("chatMore");
+  const chatNew = document.getElementById("chatNew");
+  const chatForm = document.getElementById("chatForm");
+  const chatInput = document.getElementById("chatInput");
+  const chatCount = document.getElementById("chatCount");
+  const chatSend = document.getElementById("chatSend");
+  const chatClose = document.getElementById("chatClose");
   const toolbarEl = document.getElementById("toolbar");
   const chromeToggle = document.getElementById("chromeToggle");
   const fpsVal = document.getElementById("fpsVal");
@@ -238,6 +249,7 @@
     }
     saveBlocked();
     refreshUserList();
+    try { if (typeof refreshChatList === "function") refreshChatList(); } catch {}
     markStatic();
   }
 

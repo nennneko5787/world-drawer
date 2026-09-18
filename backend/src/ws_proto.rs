@@ -19,6 +19,9 @@
 //! - 6 helloOk (S→C 9B固定): [6, ok, err, uid6]
 //!     err: 0=none 1=badTicket 2=turnstileRequired 3=noUser 4=sockLimit
 //! - 7 join (S→C 可変): [7, uid6, namelen u8, name, r,g,b, level u16]
+//! - 8 chat (S→C 可変): [8, id8 LE, at8 LE, uid6, namelen u8, name, r,g,b,
+//!     level u16 LE, bodylen u16 LE, body]
+//!     送信はRESTのみ (POST /api/chat)。WSは受信専用 (placeと同方式)。
 
 /// kindバイト
 pub const K_PIXEL: u8 = 1;
@@ -28,6 +31,7 @@ pub const K_HELLO: u8 = 4;
 pub const K_WATCH: u8 = 5;
 pub const K_HELLO_OK: u8 = 6;
 pub const K_JOIN: u8 = 7;
+pub const K_CHAT: u8 = 8;
 
 /// hello失敗理由 (HELLO_OK errcode)
 pub const HELLO_ERR_NONE: u8 = 0;
@@ -274,6 +278,79 @@ pub fn parse_join(b: &[u8]) -> Option<(String, String, (u8, u8, u8), i64)> {
     Some((uid, name, (b[o], b[o + 1], b[o + 2]), level))
 }
 
+/// CHAT可変長 (S→Cのみ。送信はPOST /api/chat):
+/// [8, id8 LE, at8 LE, uid6, namelen u8, name, r,g,b, level u16 LE,
+///  bodylen u16 LE, body]
+/// nameは200B・bodyは4096Bで文字境界丸め (サーバー側で200文字制限済みのため余裕)。
+pub fn chat_bin(
+    id: i64,
+    at: f64,
+    uid: &str,
+    name: &str,
+    r: u8,
+    g: u8,
+    bcol: u8,
+    level: i64,
+    body: &str,
+) -> Vec<u8> {
+    let nb = name.as_bytes();
+    let mut n = nb.len().min(200);
+    while n > 0 && !name.is_char_boundary(n) {
+        n -= 1;
+    }
+    let bb = body.as_bytes();
+    let mut m = bb.len().min(4096);
+    while m > 0 && !body.is_char_boundary(m) {
+        m -= 1;
+    }
+    let mut v = Vec::with_capacity(31 + n + m);
+    v.push(K_CHAT);
+    v.extend_from_slice(&id.to_le_bytes());
+    v.extend_from_slice(&at.to_le_bytes());
+    push_uid(&mut v, uid, 23);
+    v.push(n as u8);
+    v.extend_from_slice(&nb[..n]);
+    v.push(r);
+    v.push(g);
+    v.push(bcol);
+    v.extend_from_slice(&(level.clamp(1, 65535) as u16).to_le_bytes());
+    v.extend_from_slice(&(m as u16).to_le_bytes());
+    v.extend_from_slice(&bb[..m]);
+    v
+}
+
+/// CHAT解釈 → (id, at, uid, name, (r,g,b), level, body)
+#[allow(dead_code)] // フロント側コーデック。対称性の文書化+テスト用に温存
+pub fn parse_chat(
+    b: &[u8],
+) -> Option<(i64, f64, String, String, (u8, u8, u8), i64, String)> {
+    if b.len() < 31 || b[0] != K_CHAT {
+        return None;
+    }
+    let id = i64::from_le_bytes(b[1..9].try_into().ok()?);
+    let at = f64::from_le_bytes(b[9..17].try_into().ok()?);
+    let uid = std::str::from_utf8(&b[17..23])
+        .ok()
+        .unwrap_or("")
+        .trim_matches('\0')
+        .to_string();
+    let nl = b[23] as usize;
+    if b.len() < 24 + nl + 3 + 2 + 2 {
+        return None;
+    }
+    let name = std::str::from_utf8(&b[24..24 + nl]).ok()?.to_string();
+    let o = 24 + nl;
+    let level = u16::from_le_bytes([b[o + 3], b[o + 4]]) as i64;
+    let blen = u16::from_le_bytes([b[o + 5], b[o + 6]]) as usize;
+    if b.len() != o + 7 + blen {
+        return None;
+    }
+    let body = std::str::from_utf8(&b[o + 7..o + 7 + blen])
+        .ok()?
+        .to_string();
+    Some((id, at, uid, name, (b[o], b[o + 1], b[o + 2]), level, body))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -359,5 +436,24 @@ mod tests {
             Some(("abcdef".into(), "ななし".into(), (0x22, 0xaa, 0x66), 12))
         );
         assert_eq!(parse_join(&[]), None);
+    }
+
+    #[test]
+    fn chat_roundtrip() {
+        let b = chat_bin(123, 1700000000.5, "abcdef", "ななし", 0x22, 0xaa, 0x66, 12, "こんにちは");
+        assert_eq!(
+            parse_chat(&b),
+            Some((
+                123,
+                1700000000.5,
+                "abcdef".into(),
+                "ななし".into(),
+                (0x22, 0xaa, 0x66),
+                12,
+                "こんにちは".into()
+            ))
+        );
+        assert_eq!(parse_chat(&[]), None);
+        assert_eq!(parse_chat(&[K_CHAT, 0, 0]), None);
     }
 }

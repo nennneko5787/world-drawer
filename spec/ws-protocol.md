@@ -15,8 +15,18 @@ JSON比で pixel約110B→20B、cursor約90B→15Bのためこの形式を維持
 | 5 | watch | C→S 可変 | `[5, count u16, (tx i32, ty i32)×count]`（上限512） |
 | 6 | helloOk | S→C 9B | `[6, ok, err, uid6]`（err: 0 none / 1 badTicket / 2 turnstile / 3 noUser / 4 sockLimit） |
 | 7 | join | S→C 可変 | `[7, uid6, namelen u8, name, r,g,b, level u16]` |
+| 8 | chat | S→C 可変 | `[8, id8, at8, uid6, namelen u8, name, r,g,b, level u16, bodylen u16, body]` |
 
 uidは先頭6B（`push_uid`）。nameはUTF-8・最大200Bで文字境界丸め。
+chatのbodyはUTF-8（200文字制限済みのため最大でも1KB未満）。
+
+## チャット受信（仕様）
+
+- 送信は `POST /api/chat` のみ。WSのC→Sにchatは足さない（配置と同方式）。
+- サーバーは投稿成功時にkind=8を `broadcast_all`（送信者自身にも届く）。
+  クライアントはid重複排除のうえドックへ追記する。
+- クライアント実装は `static/js/wd-chat.js`（受信入口 `onChatBinMsg`）+
+  `static/js/wd-net.js:onWsBin` のkind=8分岐。
 
 ## 接続フロー
 

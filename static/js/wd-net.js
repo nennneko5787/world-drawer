@@ -427,6 +427,18 @@
       if (uid) remotes.delete(uid);
       refreshUserList();
       markDirty();
+      return;
+    }
+    if (kind === 8) {
+      // chat (wd-chat.jsの受信入口。未読バッジ・ドック追記はそちら)。
+      // wd-chat.jsより先に読まれるためwindow経由で呼ぶ
+      try {
+        if (typeof window.wdChatOnMsg === "function") window.wdChatOnMsg(buf);
+        else if (typeof onChatBinMsg === "function") onChatBinMsg(buf);
+      } catch (e) {
+        console.error(e);
+      }
+      return;
     }
   }
 
@@ -715,7 +727,13 @@
             { label: t("goToArtBtn"), fn: goToArt }
           );
         } else if (data.error === "ipBusy") {
-          toast(t("ipBusyToast"));
+          const retry = data.retryAfter ?? res.headers.get("Retry-After");
+          const s = retry != null && retry !== "" ? Number(retry) : null;
+          if (s != null && Number.isFinite(s)) {
+            toast(t("ipBusyRetryToast", { s }));
+          } else {
+            toast(t("ipBusyToast"));
+          }
         } else if (data.error === "noSocket") {
           toast(t("socketRequiredToast"));
         } else if (data.error === "cursorMismatch") {

@@ -11,3 +11,4 @@
   refreshUserList();
   refreshDraftUI();
   refreshAdminUI();
+  try { if (typeof initChat === "function") initChat(); } catch (e) { console.error(e); }

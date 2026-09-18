@@ -36,6 +36,8 @@
 | `PUT /api/admin/notices/{id}` | `routes/notices.rs:update` | 管理者編集。`{title,body,translations?}` → `{ok,notice}` |
 | `DELETE /api/admin/notices/{id}` | `routes/notices.rs:remove` | 管理者削除。`{ok,id}` |
 | `GET /api/users` | `routes/users.rs:13` | WS不可時のフォールバック。`{online:[{uid,name,color,level}],count,truncated}`（仕様としてlean） |
+| `GET /api/chat?limit&beforeId` | `routes/chat.rs:list` | 公開。`{ok,messages:[{id,uid,name,userColor,level,body,at}],hasMore}`（古い順ASC。`limit` 1-100、既定50。`beforeId`で遡及） |
+| `POST /api/chat` | `routes/chat.rs:post` | 投稿（`{body}` 1〜200文字）。成功時は `{ok,message}` + WS kind=8を全体配信 |
 | `GET /api/ranking` | `routes/ranking.rs:list` | 公開。レベル順。`{ok,ranking:[{rank,uid,name,color,level,xp,country}],total}`（`limit` 1-100、既定100）。`level DESC,xp DESC,uid ASC`、同率は同順位。`country` は公開設定時のみ |
 | `GET /ws` | `routes/mod.rs:69` | WS（`ws-protocol.md`） |
 | `GET /og-image.png` | `routes/canvas.rs:142` | `ogp.rs` 原点中心レンダ。60s cache |
@@ -52,7 +54,15 @@ WS経由placeは存在しない。クライアント（`static/js/wd-net.js:608-
 `missingToken` `noUser` `outOfBounds` `badColor` `unknownInk` `noInk`
 `cooldown` `shielded` `tooFar` `banned` `ipBusy` `badPrev` `tooLate`
 `changed` `noUndo` `badPassword` `badLogin` `locked` `turnstileRequired`
-`badUid` `badIp` `badTitle` `noNotice` `rateLimited` `forbidden` `busy`
+`badUid` `badIp` `badTitle` `noNotice` `badBody` `rateLimited` `forbidden` `busy`
+
+## チャット（仕様）
+
+- 送信はRESTのみ（`POST /api/chat`）。WSにchat送信は足さない（配置と同方式）。
+- 受信はWSバイナリ kind=8（`ws-protocol.md`）+ `GET /api/chat`（履歴・ポーリングfallback）。
+- 表示名・色・レベルはusersから都度解決（改名対応。historyと同方式）。
+- 本文はプレーンテキスト（Markdown・HTML描画なし。XSS対策でtextContentのみ）。
+- 最新200件のみ保持。超過分は投稿時に古い方から削除。
 
 ## ピクセルセルの形
 
