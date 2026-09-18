@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import secrets
 
 from fastapi import APIRouter, Request
@@ -232,7 +233,14 @@ async def apiPlace(body: PlaceInput, request: Request):
             status = 409
         else:
             status = 429 if result.get("error") in ("cooldown", "ipBusy") else 400
-        return JSONResponse(status_code=status, content=result)
+        headers: dict[str, str] | None = None
+        if result.get("error") == "ipBusy":
+            try:
+                retrySecs = max(1, math.ceil(float(result.get("retryAfter", 1))))
+            except (TypeError, ValueError):
+                retrySecs = 1
+            headers = {"Retry-After": str(retrySecs)}
+        return JSONResponse(status_code=status, content=result, headers=headers)
     return result
 
 

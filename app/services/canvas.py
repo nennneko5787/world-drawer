@@ -260,7 +260,12 @@ async def consumeIpBucket(ip: str, now: float) -> None:
     if not ip or ip == "unknown":
         return
     if not await shared.rateAllow("place", ip, cfg.placePerMinPerIp, IP_BUCKET_WINDOW_SEC):
-        raise PlaceError({"ok": False, "error": "ipBusy"})
+        retryAfter = await shared.rateRetryAfter(
+            "place", ip, cfg.placePerMinPerIp, IP_BUCKET_WINDOW_SEC
+        )
+        raise PlaceError(
+            {"ok": False, "error": "ipBusy", "retryAfter": round(max(0.0, retryAfter), 2)}
+        )
 
 
 async def pruneHistoryCells(db: DbTx) -> None:

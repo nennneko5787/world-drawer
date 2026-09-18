@@ -65,7 +65,18 @@ pub async fn place(
     if client_ip != "unknown"
         && !rate::allow(&mut state.redis, "place", &client_ip, place_limit, 60.0).await
     {
-        return err(StatusCode::TOO_MANY_REQUESTS, "ipBusy");
+        let retry = rate::retry_after(&mut state.redis, "place", &client_ip, 60.0)
+            .await
+            .max(0.0);
+        let retry_after = (retry * 100.0).round() / 100.0;
+        let body = serde_json::json!({"ok": false, "error": "ipBusy", "retryAfter": retry_after});
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(
+            axum::http::header::RETRY_AFTER,
+            axum::http::HeaderValue::from_str(&retry.ceil().max(1.0).to_string())
+                .unwrap_or(axum::http::HeaderValue::from_static("1")),
+        );
+        return (StatusCode::TOO_MANY_REQUESTS, headers, axum::Json(body)).into_response();
     }
 
     // socket必須 + カーソル照合 (REST直叩きの自動配置を封じる)

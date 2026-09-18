@@ -513,6 +513,38 @@ async def rateAllow(
         return True
 
 
+async def rateRetryAfter(name: str, key: str, limit: int, windowSec: float) -> float:
+    """枠切れ時に次に試行可能になるまでの残り秒。枠内・不明時は 0.0。
+
+    - ローカル時はバケツ最古打刻 + window - now
+    - Redis時は window 内最古スコア + window - now (zrangebyscore LIMIT 0 1)
+    - Redis障害時・未接続時は 0.0 (rateAllow が fail-open のため)
+    """
+    now = time.time()
+    oldest: float | None = None
+    if not useRedis():
+        arr = [t for t in _localBucket(name).get(key, []) if now - t < windowSec]
+        if len(arr) >= limit and arr:
+            oldest = min(arr)
+    elif _client is not None:
+        rkey = f"{K_RATE_PREFIX}{name}:{key}"
+        try:
+            rows = await _db().zrangebyscore(
+                rkey, now - windowSec, "+inf", start=0, num=1, withscores=True
+            )
+            if rows:
+                try:
+                    oldest = float(rows[0][1])
+                except (TypeError, ValueError, IndexError):
+                    oldest = None
+        except RedisError:
+            _noteDown("rateRetryAfter")
+            oldest = None
+    if oldest is None:
+        return 0.0
+    return max(0.0, oldest + windowSec - now)
+
+
 async def rateReset(name: str, key: str) -> None:
     if not useRedis():
         _localBucket(name).pop(key, None)

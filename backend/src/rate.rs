@@ -55,6 +55,44 @@ pub async fn allow_record(
     }
 }
 
+/// 枠切れ時に次に試行可能になるまでの残り秒。枠内・不明時は 0.0。
+/// window内最古スコア + window - now (Python rateRetryAfter相当)。
+/// Redis障害時は 0.0 (allow が fail-open のため)。
+pub async fn retry_after(
+    redis: &mut redis::aio::ConnectionManager,
+    name: &str,
+    key: &str,
+    window_sec: f64,
+) -> f64 {
+    if key.is_empty() || key == "unknown" {
+        return 0.0;
+    }
+    let now = chrono::Utc::now().timestamp_millis() as f64 / 1000.0;
+    let rkey = format!("wd:rate:{name}:{key}");
+    let rows: Result<Vec<(String, f64)>, _> = redis::cmd("ZRANGEBYSCORE")
+        .arg(&rkey)
+        .arg(now - window_sec)
+        .arg("+inf")
+        .arg("WITHSCORES")
+        .arg("LIMIT")
+        .arg(0)
+        .arg(1)
+        .query_async(redis)
+        .await;
+    match rows {
+        Ok(v) => {
+            let Some((_, oldest)) = v.into_iter().next() else {
+                return 0.0;
+            };
+            (oldest + window_sec - now).max(0.0)
+        }
+        Err(e) => {
+            tracing::warn!("rateRetryAfter degraded: {e}");
+            0.0
+        }
+    }
+}
+
 /// バケツ消去 (ログイン成功時のロック解除用。Python rateReset相当)
 pub async fn rate_reset(redis: &mut redis::aio::ConnectionManager, name: &str, key: &str) {
     use redis::AsyncCommands;
