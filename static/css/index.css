@@ -59,8 +59,8 @@
 html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--page); font-family: system-ui, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; color: var(--chrome-fg); -webkit-touch-callout: none; }
 #board { position: fixed; inset: 0; width: 100vw; height: 100vh; width: 100dvw; height: 100dvh; display: block; touch-action: none; cursor: crosshair; background: var(--board); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 button, select, input { touch-action: manipulation; }
-#topbar, #toolbar, #profileBar, #settingsPanel, #userPanel, #rankingPanel, #historyPanel, #adminPanel, #noticesPanel, #colorPanel, #toast-wrap, #undoBtn, #statsOverlay { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-#profileBar input, #settingsPanel input, #adminPanel input, #colorPanel input, .accCode { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
+#topbar, #toolbar, #profileBar, #settingsPanel, #userPanel, #rankingPanel, #historyPanel, #noticesPanel, #colorPanel, #toast-wrap, #undoBtn, #statsOverlay { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#profileBar input, #settingsPanel input, #colorPanel input, .accCode { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
 
 /* ---------- topbar (compact・単行) ---------- */
 #topbar {
@@ -142,7 +142,7 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
 
 /* ---------- side panels (card共通) ---------- */
 /* 位置は modal.css (.wd-modal 中央配置) に任せる。ここでは見た目とサイズのみ */
-#userPanel, #rankingPanel, #historyPanel, #adminPanel, #noticesPanel {
+#userPanel, #rankingPanel, #historyPanel, #noticesPanel {
   background: var(--chrome); color: var(--chrome-fg);
   border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: var(--shadow); padding: 12px 14px;
@@ -172,12 +172,43 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
 .flagFallback { font-size: 11px; font-weight: 700; color: var(--hint); border: 1px solid var(--border); border-radius: 3px; padding: 0 3px; flex: none; }
 .hwho .flag { width: 16px; }
 .selfTag { font-size: 11px; color: var(--hint); }
+/* UIDコピー可能表示 (data-uid / data-copy)。画面・自分他人を問わずクリックでコピー */
+[data-uid], [data-copy] { cursor: pointer; }
+.nmeta[data-uid]:hover, .noticeUid:hover, #myUid:hover { text-decoration: underline; color: var(--chrome-fg); }
+#myUid { cursor: pointer; }
+/* 名前クリックでプロフィールを開く ([data-prof]) */
+.uname .nname[data-prof], .chatHead .nname[data-prof], .hwho .nname[data-prof] { cursor: pointer; }
+.uname .nname[data-prof]:hover, .chatHead .nname[data-prof]:hover, .hwho .nname[data-prof]:hover { text-decoration: underline; }
+/* 一覧行のホバー強調 */
+#userList li, #rankingList li, #historyList li { border-radius: 8px; padding: 3px 6px; margin: 0 -6px; }
+#userList li:hover, #rankingList li:hover, #historyList li:hover { background: var(--seg); }
 .blockBtn {
   border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg);
   border-radius: 8px; padding: 2px 8px; font-size: 11px; line-height: 1.25; cursor: pointer; flex: none;
   min-height: 30px;
 }
-#historyClose, #rankingClose, #adminClose, #noticesClose, #colorClose, #settingsClose, #userClose, #chatClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
+#historyClose, #rankingClose, #noticesClose, #colorClose, #settingsClose, #userClose, #chatClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
+
+/* ---------- profile (公開プロフィール。一覧の名前クリックで開く) ---------- */
+#profilePanel {
+  background: var(--chrome); color: var(--chrome-fg);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 12px 14px;
+  backdrop-filter: blur(12px);
+  font-size: 13px; line-height: 1.4;
+}
+#profilePanel.hidden { display: none; }
+#profileCard .muted { color: var(--hint); margin: 4px 0; }
+.pfHead { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 15px; }
+.pfHead .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); flex: none; display: inline-block; }
+.pfHead .nname { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pfGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 14px; margin: 0 0 10px; }
+.pfGrid > div { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.pfGrid dt { color: var(--hint); flex: none; font-size: 12px; }
+.pfGrid dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.pfGrid dd.mono { font-family: ui-monospace, monospace; }
+.pfGrid dd.mono:hover { text-decoration: underline; color: var(--chrome-fg); }
+.pfActs { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ---------- undo ---------- */
 #undoBtn {
@@ -256,11 +287,6 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
 
 /* ---------- admin / notices ---------- */
 #adminBtn.hidden { display: none; }
-#adminPanel {
-  width: min(280px, calc(100vw - 20px));
-}
-#adminPanel.hidden { display: none; }
-#adminResult { overflow-wrap: anywhere; min-height: 1em; }
 #noticesBadge, #chatBadge {
   background: #e33; color: #fff; border-radius: 999px;
   font-size: 11px; font-weight: 700; padding: 1px 7px; margin-left: 4px;
@@ -279,21 +305,20 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
 .noticesBody { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
 .noticesEmpty { color: var(--hint); }
 
-/* ---------- chat dock (モーダル化しない常駐ドック。overlayなし・キャンバス操作を塞がない) ---------- */
+/* ---------- chat (右ドロワー。他パネルと排他。位置・高さは modal.css に任せる) ---------- */
 #chatDock {
-  position: fixed; left: 10px; bottom: calc(var(--toolbar-h) + 10px); z-index: 25;
-  width: min(320px, calc(100vw - 20px)); max-height: 46vh;
-  display: flex; flex-direction: column; gap: 6px;
+  display: flex; flex-direction: column; gap: 8px;
   background: var(--chrome); color: var(--chrome-fg);
   border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--shadow); padding: 10px 12px;
+  box-shadow: var(--shadow); padding: 12px 14px;
   backdrop-filter: blur(12px);
   font-size: 13px; line-height: 1.4;
+  min-height: 0;
 }
 #chatDock.hidden { display: none; }
 #chatList {
   list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px;
-  overflow-y: auto; min-height: 60px; font-size: 13px;
+  overflow-y: auto; flex: 1 1 auto; min-height: 200px; font-size: 13px;
   user-select: text; -webkit-user-select: text; -webkit-touch-callout: default;
 }
 .chatMsg { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -489,10 +514,9 @@ body.chromeHidden #undoBtn { bottom: 10px; }
   #colorBtn { min-height: 40px; }
   #colorChip { width: 40px; height: 30px; }
   .hint { display: none; }
-  #userPanel, #historyPanel, #adminPanel, #noticesPanel, #settingsPanel { max-height: 52vh; }
+  #userPanel, #historyPanel, #noticesPanel, #settingsPanel, #profilePanel { max-height: 52vh; }
   /* 下部帯はツールバー高さに追従 */
   #undoBtn { right: 8px; }
-  #chatDock { left: 6px; right: 6px; width: auto; max-height: 40vh; }
   #colorPanel { left: 6px; right: 6px; width: auto; transform: none; max-height: 52vh; }
   #statsOverlay { left: 6px; width: 220px; }
   #toast-wrap { width: calc(100vw - 20px); }

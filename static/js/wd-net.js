@@ -14,8 +14,7 @@
     localStorage.setItem("wd_token", token);
     applyLevelData(data);
     if (data.uid) {
-      myUid = data.uid;
-      myUidEl.textContent = `#${myUid}`;
+      setMyUidEl(data.uid);
     }
     if (data.profile) {
       myName = data.profile.name || myName;
@@ -277,8 +276,7 @@
       myShowCountry = me.showCountry ?? true;
       countryChk.checked = myShowCountry;
       if (me.uid) {
-        myUid = me.uid;
-        myUidEl.textContent = `#${myUid}`;
+        setMyUidEl(me.uid);
       }
       applyLevelData(me);
       if (me.profile) {
@@ -518,8 +516,7 @@
           socketReady = true;
           toast(t("connectedToast"));
           if (uid) {
-            myUid = uid;
-            myUidEl.textContent = `#${myUid}`;
+            setMyUidEl(uid);
           }
           fetchViewport();
           // 既存オンラインユーザーの名前はjoinでは届かないためRESTで初回取得する

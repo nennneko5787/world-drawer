@@ -82,11 +82,12 @@
       const whoName = document.createElement("span");
       whoName.className = "nname";
       whoName.textContent = item.name;
+      // 名前クリックでプロフィールを開く (ID・Lvはそちらに集約)
+      if (item.uid) {
+        whoName.dataset.prof = item.uid;
+        whoName.title = t("profileOpenHint");
+      }
       who.appendChild(whoName);
-      const whoMeta = document.createElement("span");
-      whoMeta.className = "nmeta";
-      whoMeta.textContent = `#${item.uid || "?"} Lv${item.level ?? "?"}`;
-      who.appendChild(whoMeta);
       main.appendChild(who);
       const time = document.createElement("span");
       time.className = "htime";

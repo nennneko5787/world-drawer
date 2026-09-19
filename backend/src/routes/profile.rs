@@ -1,7 +1,7 @@
 use crate::auth;
 use crate::routes::AppState;
 use crate::users;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
@@ -13,6 +13,65 @@ pub struct Body {
     pub color: String,
     #[serde(default)]
     pub show_country: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct LookupQuery {
+    pub uid: String,
+}
+
+/// 公開プロフィール (認証不要)。一覧系の名前クリックから開く。
+/// `GET /api/profile?uid=` →
+/// `{ok, user:{uid,name,color,level,xp,country,registeredAt,placedTotal,rank}}`。
+/// `registeredAt` は登録epoch秒 (不明はnull。008以前の既存行は履歴推定で補完)。
+/// `placedTotal` は有効履歴件数 (取り消し分を除く。prune既定無効のためほぼ累計)。
+/// `rank` は自分より上位の人数+1 (level DESC, xp DESC)。
+pub async fn lookup(
+    State(state): State<AppState>,
+    Query(q): Query<LookupQuery>,
+) -> Response {
+    let Some(uid) = crate::config::normalize_target_uid(&q.uid) else {
+        return (StatusCode::OK, r#"{"ok":false,"error":"noUser"}"#).into_response();
+    };
+    let row = sqlx::query(
+        "SELECT uid, name, color, level, xp, country, showCountry, createdAt
+         FROM users WHERE uid = $1",
+    )
+    .bind(&uid)
+    .fetch_optional(&state.pool)
+    .await
+    .unwrap_or(None);
+    let Some(r) = row else {
+        return (StatusCode::OK, r#"{"ok":false,"error":"noUser"}"#).into_response();
+    };
+    use sqlx::Row;
+    let level = r.get::<i32, _>(3) as i64;
+    let xp = r.get::<i32, _>(4) as i64;
+    let placed: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM history WHERE uid = $1 AND NOT undone",
+    )
+    .bind(&uid)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap_or(0);
+    let above: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM users WHERE level > $1 OR (level = $1 AND xp > $2)",
+    )
+    .bind(level as i32)
+    .bind(xp as i32)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap_or(0);
+    let show: i32 = r.get(6);
+    let out = serde_json::json!({"ok": true, "user": {
+        "uid": r.get::<String, _>(0), "name": r.get::<String, _>(1),
+        "color": crate::color::int_to_hex(r.get::<i32, _>(2)),
+        "level": level, "xp": xp,
+        "country": if show != 0 { r.get::<Option<String>, _>(5) } else { None },
+        "registeredAt": r.get::<Option<f64>, _>(7),
+        "placedTotal": placed, "rank": above + 1,
+    }});
+    (StatusCode::OK, axum::Json(out)).into_response()
 }
 
 pub async fn update(

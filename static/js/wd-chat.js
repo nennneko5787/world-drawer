@@ -1,4 +1,4 @@
-// wd-chat.js — テキストチャット (左下ドック・モーダル化しない常駐UI)。
+// wd-chat.js — テキストチャット (中央モーダル。他パネルと排他)。
 // classic script (defer順に読む。トップレベルスコープ共有、前方参照は実行時解決)。
 // 送信はRESTのみ (POST /api/chat)。受信はWSバイナリ kind=8 + GET履歴 + ポーリングfallback。
 "use strict";
@@ -93,11 +93,12 @@
     nameEl.className = "nname";
     nameEl.textContent = m.name || t("anon");
     nameEl.style.color = safeUserColor(m.userColor);
+    // 名前クリックでプロフィールを開く (ID・Lvはそちらに集約)
+    if (m.uid) {
+      nameEl.dataset.prof = m.uid;
+      nameEl.title = t("profileOpenHint");
+    }
     head.appendChild(nameEl);
-    const meta = document.createElement("span");
-    meta.className = "nmeta";
-    meta.textContent = `#${m.uid || "?"} Lv${m.level ?? "?"}`;
-    head.appendChild(meta);
     const time = document.createElement("span");
     time.className = "ctime";
     time.textContent = formatChatTime(m.at);
@@ -330,7 +331,8 @@
 
   function openChat() {
     try {
-      if (typeof chatDock !== "undefined" && chatDock) chatDock.classList.remove("hidden");
+      if (typeof openModal === "function" && typeof chatDock !== "undefined" && chatDock) openModal(chatDock);
+      else if (typeof chatDock !== "undefined" && chatDock) chatDock.classList.remove("hidden");
       try { localStorage.setItem("wd_chat_open", "1"); } catch {}
       refreshChatList();
       chatScrollBottom();
@@ -347,7 +349,8 @@
 
   function closeChat() {
     try {
-      if (typeof chatDock !== "undefined" && chatDock) chatDock.classList.add("hidden");
+      if (typeof closeAllModals === "function") closeAllModals();
+      else if (typeof chatDock !== "undefined" && chatDock) chatDock.classList.add("hidden");
       try { localStorage.setItem("wd_chat_open", "0"); } catch {}
     } catch {}
   }
@@ -396,22 +399,12 @@
       if (typeof chatNew !== "undefined" && chatNew) {
         chatNew.onclick = () => chatScrollBottom();
       }
-      // Escでドックを閉じる (モーダルと違いoverlayは出さない)
-      document.addEventListener("keydown", (ev) => {
-        if (ev.key === "Escape" && chatIsOpen()) {
-          try {
-            if (document.activeElement === chatInput) return; // 入力中は閉じない
-          } catch {}
-          closeChat();
-        }
-      });
+      // ドック時代の開閉記憶は使わない (モーダルのため自動で開かない)。
+      // 未読バッジ用に履歴だけ先読みする
+      try { localStorage.removeItem("wd_chat_open"); } catch {}
       updateChatCount();
       refreshChatList();
       fetchChat({ silent: true });
-      // 前回の開閉状態を復元 (既定は閉)
-      try {
-        if (localStorage.getItem("wd_chat_open") === "1") openChat();
-      } catch {}
       // WS不可時はポーリングで追随 (5秒。閲覧だけはできる)
       setInterval(() => {
         try {

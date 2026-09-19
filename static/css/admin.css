@@ -1,35 +1,191 @@
-/* world-drawer 管理ページ専用 (help.css の上に重ねる) */
+/* world-drawer 管理ページ専用 (help.css の変数だけ借り、見た目は独自)。
+ * ヘルプの文書体裁とは切り離し、操作コンソールとして設計する。
+ */
+:root {
+  --danger: #b3261e;
+  --ok: #1a7f37;
+  --adm-card: #f6f6f8;
+  --adm-head: #17171d;
+}
+:root[data-theme="dark"] {
+  --danger: #ff8a80;
+  --ok: #4caf7d;
+  --adm-card: #17171e;
+  --adm-head: #f0f0f2;
+}
+body.admin {
+  background:
+    radial-gradient(1200px 300px at 50% -80px, rgba(179, 38, 30, .08), transparent),
+    var(--page);
+}
+.admWrap { max-width: 980px; margin: 24px auto 64px; padding: 0 16px; }
+.admHead {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.admHead h1 { font-size: 22px; margin: 0; display: flex; align-items: center; gap: 10px; }
+.admShield {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 12px;
+  background: var(--adm-head); color: var(--page); font-size: 20px;
+}
+.admHeadActs { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.langRow { font-size: 13px; color: var(--muted); }
+.langRow select {
+  font-size: 13px; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--page); color: var(--fg);
+}
+.backBtn {
+  display: inline-block;
+  background: var(--accent-bg); color: var(--accent-fg);
+  border-radius: 999px; padding: 8px 16px; font-size: 13px; text-decoration: none;
+}
+/* 認証状態ピル */
+.admAuth {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; border-radius: 999px; padding: 5px 12px; margin: 12px 0;
+  border: 1px solid var(--border); background: var(--adm-card); color: var(--fg);
+}
+.admAuth.ok { border-color: var(--ok); }
+.admAuth.ok::before { content: "●"; color: var(--ok); font-size: 10px; }
+.admAuth.ng { border-color: var(--danger); }
+.admAuth.ng::before { content: "●"; color: var(--danger); font-size: 10px; }
+/* カード */
+.admCard {
+  background: var(--adm-card);
+  border: 1px solid var(--border); border-radius: 16px;
+  padding: 16px 18px; margin: 16px 0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .06);
+}
+.admCard > h2 {
+  font-size: 16px; margin: 0 0 12px; padding-bottom: 8px;
+  border-bottom: 2px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.admCard > h2 .bi { color: var(--muted); }
+.admCard h3 { font-size: 14px; margin: 16px 0 6px; color: var(--muted); }
+.admTables { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 .admRow {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin: 8px 0;
-  font-size: 14px;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin: 8px 0; font-size: 14px;
 }
 .admRow input, .admRow select {
-  font-size: 14px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--page);
-  color: var(--fg);
+  font-size: 14px; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--page); color: var(--fg);
   max-width: 100%;
 }
 .admRow input[type="number"] { width: 90px; }
-#admToken, #admUid { flex: 1; min-width: 140px; }
+.admRow label { display: inline-flex; align-items: center; gap: 6px; }
+#admUid { flex: 1; min-width: 140px; font-family: ui-monospace, monospace; }
 #admNoticeTitle { flex: 1; min-width: 200px; }
 #admNoticeBody {
-  flex: 1; min-width: 200px; min-height: 90px;
-  font-size: 14px; padding: 6px 8px; border-radius: 8px;
+  flex: 1; min-width: 200px; min-height: 110px;
+  font-size: 14px; padding: 8px 10px; border-radius: 10px;
   border: 1px solid var(--border); background: var(--page); color: var(--fg);
-  resize: vertical;
+  resize: vertical; line-height: 1.6;
 }
 #admNoticeCancel.hidden { display: none; }
-.admNotice { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
-.admNotice h4 { margin: 0 0 4px; font-size: 14px; }
+/* ボタン */
+.admBtn {
+  font-size: 14px; padding: 8px 18px; border-radius: 999px;
+  border: 1px solid var(--border); cursor: pointer;
+  background: var(--accent-bg); color: var(--accent-fg);
+}
+.admBtn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+:root[data-theme="dark"] .admBtn.danger { color: #111; }
+.admBtn.ghost { background: transparent; color: var(--fg); }
+.admBtn:active { transform: translateY(1px); }
+.admRow .admBtn { width: auto; }
+.admCheck { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.admCheck input { width: 18px; height: 18px; accent-color: var(--fg); }
+.admMuted { color: var(--muted); font-size: 13px; }
+#admMsg:empty { display: none; }
+#admMsg {
+  border-left: 3px solid var(--border); padding: 4px 10px; margin: 10px 0 0;
+}
+/* 状況カード */
+.admGrid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px; margin: 8px 0;
+}
+.admStat {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 12px; background: var(--page);
+}
+.admStat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+.admStat span { font-size: 12px; color: var(--muted); }
+.admCfg {
+  grid-column: 1 / -1; font-size: 12px; color: var(--muted);
+  font-family: ui-monospace, monospace; overflow-wrap: anywhere;
+}
+/* テーブル */
+.admTableWrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+.admTable { width: 100%; border-collapse: collapse; font-size: 13px; margin: 0; }
+.admTable th, .admTable td {
+  border-bottom: 1px solid var(--border);
+  padding: 7px 10px; text-align: left; overflow-wrap: anywhere;
+}
+.admTable tr:last-child th, .admTable tr:last-child td { border-bottom: none; }
+.admTable thead th {
+  position: sticky; top: 0; background: var(--adm-card);
+  font-size: 12px; color: var(--muted); white-space: nowrap;
+}
+.admTable tbody tr:hover { background: rgba(127, 127, 127, .08); }
+.admTable td.mono { font-family: ui-monospace, monospace; }
+.admTable button {
+  font-size: 12px; padding: 4px 12px; border-radius: 999px;
+  border: 1px solid var(--border); cursor: pointer;
+  background: var(--accent-bg); color: var(--accent-fg);
+  white-space: nowrap;
+}
+.admCopy {
+  font-size: 12px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent; color: var(--muted);
+  cursor: pointer; margin-left: 6px; font-family: inherit; white-space: nowrap;
+}
+.admCopy:hover { color: var(--fg); border-color: var(--fg); }
+/* ユーザー詳細カード */
+#admUserCard:empty { display: none; }
+.admUser {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; margin: 8px 0; background: var(--page);
+}
+.admUserHead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 15px; flex-wrap: wrap; }
+.admUserHead .mono { font-family: ui-monospace, monospace; font-size: 13px; color: var(--muted); }
+.admDot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); flex: none; }
+/* UID・IPはどの表示でもクリックでコピー (admin-page.jsの委任が拾う) */
+.admUser [data-uid], .admUser [data-copy], .admTable [data-copy] { cursor: pointer; }
+.admUser [data-uid]:hover, .admUser [data-copy]:hover, .admTable [data-copy]:hover {
+  text-decoration: underline; color: var(--fg);
+}
+.admKv {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px 16px; margin: 0; font-size: 13px;
+}
+.admKv > div { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.admKv dt { color: var(--muted); flex: none; }
+.admKv dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.admKv dd.mono { font-family: ui-monospace, monospace; }
+.admBadge {
+  font-size: 11px; border-radius: 999px; padding: 1px 8px;
+  border: 1px solid var(--ok); color: var(--ok); flex: none;
+}
+.admBadge.off { border-color: var(--muted); color: var(--muted); }
+/* お知らせ */
+.admNotice {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 12px; margin: 10px 0; background: var(--page);
+}
+.admNotice h4 { margin: 0 0 4px; font-size: 14px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.admNotice h4 .nid { font-family: ui-monospace, monospace; color: var(--muted); font-size: 12px; }
 .admNotice p { margin: 0 0 6px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.admNotice .admMuted { margin: 0 0 6px; }
+.admNotice .admMuted { margin: 6px 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.admLang {
+  font-size: 11px; border: 1px solid var(--border); border-radius: 6px;
+  padding: 0 6px; color: var(--muted);
+}
+.admLang.have { border-color: var(--ok); color: var(--ok); }
 /* お知らせプレビュー (利用者側と同じMarkdown描画) */
 .mdBody { margin: 0 0 6px; font-size: 13px; overflow-wrap: anywhere; }
 .mdBody p { margin: 0 0 6px; white-space: normal; }
@@ -43,52 +199,19 @@
 .mdBody blockquote { margin: 4px 0 6px; padding: 2px 8px; border-left: 3px solid var(--border); }
 .mdBody h1, .mdBody h2, .mdBody h3, .mdBody h4, .mdBody h5, .mdBody h6 { margin: 6px 0 4px; font-size: 14px; }
 .mdBody hr { border: none; border-top: 1px solid var(--border); margin: 6px 0; }
-.admRow button {
-  font-size: 14px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--accent-bg);
-  color: var(--accent-fg);
-  cursor: pointer;
-}
-.admCheck { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; }
-.admMuted { color: var(--muted); font-size: 13px; }
-.admGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
-  margin: 8px 0;
-}
-.admStat {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px 10px;
-}
-.admStat b { display: block; font-size: 20px; }
-.admStat span { font-size: 12px; color: var(--muted); }
-.admTable { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
-.admTable th, .admTable td {
-  border: 1px solid var(--border);
-  padding: 5px 10px;
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-.admTable button {
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--accent-bg);
-  color: var(--accent-fg);
-  cursor: pointer;
-}
 #admBody.hidden { display: none; }
-#admUserCard {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px 10px;
-  margin: 8px 0;
-  font-size: 14px;
+/* コピー完了トースト */
+.admToast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  background: var(--accent-bg); color: var(--accent-fg);
+  border-radius: 12px; padding: 8px 16px; font-size: 13px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .3); z-index: 50;
+  animation: admPop .2s ease-out;
 }
-#admUserCard:empty { display: none; }
+@keyframes admPop { from { transform: translateX(-50%) scale(.92); opacity: 0; } }
+@media (max-width: 700px) {
+  .admWrap { margin: 16px auto 48px; }
+  .admHead h1 { font-size: 19px; }
+  .admTables { grid-template-columns: 1fr; }
+  .admCard { padding: 12px; }
+}

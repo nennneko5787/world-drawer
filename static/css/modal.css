@@ -29,6 +29,62 @@
   max-height: calc(min(80vh, 720px) - 64px);
   overflow-y: auto;
 }
+/* ランキングパネル: 横幅広め・高さ大きめ */
+#rankingPanel.wd-modal {
+  width: min(560px, calc(100vw - 24px)) !important;
+  max-height: min(78vh, 740px) !important;
+}
+/* お知らせパネル: 横幅広め・高さ大きめ */
+#noticesPanel.wd-modal {
+  width: min(600px, calc(100vw - 24px)) !important;
+  max-height: min(76vh, 720px) !important;
+}
+/* チャットパネル: 中央モーダルではなく右ドロワー。縦に長く常時読みやすい */
+#chatDock.wd-modal {
+  left: auto !important; right: 16px !important;
+  top: 50% !important; bottom: auto !important;
+  transform: translateY(-50%) !important;
+  width: min(420px, calc(100vw - 32px)) !important;
+  height: min(86vh, 800px) !important;
+  max-height: min(86vh, 800px) !important;
+}
+#chatDock.wd-modal #chatList {
+  flex: 1; min-height: 0;
+  max-height: none;
+}
+/* プロフィール: コンパクトなカード */
+#profilePanel.wd-modal {
+  width: min(420px, calc(100vw - 24px)) !important;
+  max-height: min(70vh, 600px) !important;
+}
+/* タブレット (700px-1024px): センター配置だが幅広く。チャットは右ドロワーを維持 */
+@media (min-width: 701px) and (max-width: 1024px) {
+  .wd-modal {
+    width: min(520px, calc(100vw - 32px)) !important;
+  }
+  #userPanel.wd-modal { width: min(600px, calc(100vw - 32px)) !important; }
+  #rankingPanel.wd-modal { width: min(560px, calc(100vw - 32px)) !important; }
+  #noticesPanel.wd-modal { width: min(600px, calc(100vw - 32px)) !important; }
+  #chatDock.wd-modal {
+    width: min(400px, calc(100vw - 32px)) !important;
+    right: 12px !important;
+    height: min(84vh, 760px) !important;
+    max-height: min(84vh, 760px) !important;
+  }
+}
+/* モーダル共通の仕上げ: タイトルと閉じるボタン */
+.wd-modal .panelTitle {
+  font-size: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.wd-modal .panelTitle button {
+  border-radius: 999px;
+  min-width: 36px; min-height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.wd-modal .panelTitle button:hover { background: var(--seg); }
 /* 設定2ペイン (左=縦タブ・右=内容)。骨格はindex.htmlに静的記述 */
 .setBody { display: flex; gap: 12px; align-items: flex-start; min-height: 0; }
 .setContent { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; }
@@ -77,6 +133,16 @@
     top: auto !important; bottom: 0 !important;
     transform: translateX(-50%) !important;
     width: 100vw !important; max-height: 78vh !important;
+    border-radius: 16px 16px 0 0 !important;
+  }
+  /* チャットだけボトムシートも一回り縦長に */
+  #chatDock.wd-modal {
+    left: 50% !important; right: auto !important;
+    top: auto !important; bottom: 0 !important;
+    transform: translateX(-50%) !important;
+    width: 100vw !important;
+    height: min(88vh, 700px) !important;
+    max-height: 88vh !important;
     border-radius: 16px 16px 0 0 !important;
   }
   /* スマホは上タブ+下内容 */

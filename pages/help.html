@@ -6,8 +6,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="h_title">ヘルプ - pixDraw</title>
-    <link rel="icon" href="/static/logo.png" type="image/png">
-    <link rel="apple-touch-icon" href="/static/logo.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="application-name" content="pixDraw">
+    <meta name="apple-mobile-web-app-title" content="pixDraw">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" type="image/x-icon">
+    <link rel="icon" href="/static/img/icon-192.png" sizes="192x192" type="image/png">
+    <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.json">
     <!-- OGP-START -->
     <meta name="description" content="pixDraw の遊び方。基本操作・インク・レベルとクールダウン・設計図・履歴・アカウント引っ越し・荒らし対策を解説。">
     <link rel="canonical" href="/help">
@@ -36,6 +43,7 @@
     <link rel="stylesheet" href="/static/css/help.css">
     <script src="/static/js/theme.js"></script>
     <script src="/static/js/i18n.js" defer></script>
+    <script src="/static/js/pwa.js" defer></script>
     <style>
         .langRow { margin: 8px 0 0; font-size: 13px; }
         .langRow select { font-size: 13px; padding: 4px 6px; border-radius: 8px; }
@@ -43,7 +51,7 @@
 </head>
 <body class="help">
     <main class="helpWrap">
-        <h1><img class="logo" src="/static/logo.png" alt=""> <span data-i18n="h_h1">pixDraw ヘルプ</span></h1>
+        <h1><img class="logo" src="/static/img/logo.png" alt=""> <span data-i18n="h_h1">pixDraw ヘルプ</span></h1>
         <p><a class="backBtn" href="/" data-i18n="h_back">キャンバスに戻る</a></p>
         <p class="langRow"><span data-i18n="setLang">言語</span>:
             <select id="langSel" data-langsel>

@@ -57,8 +57,9 @@ pub async fn create(
         let name = "ななし";
         let color = 0x22aa66;
         let inv = serde_json::json!({"glow":0,"rainbow":0,"ghost":0,"chalk":0,"shield":0});
+        let now = chrono::Utc::now().timestamp() as f64;
         let r = sqlx::query(
-            "INSERT INTO users(token, uid, name, color, inventory) VALUES ($1,$2,$3,$4,$5)
+            "INSERT INTO users(token, uid, name, color, inventory, createdAt) VALUES ($1,$2,$3,$4,$5,$6)
              ON CONFLICT DO NOTHING",
         )
         .bind(&token)
@@ -66,6 +67,7 @@ pub async fn create(
         .bind(name)
         .bind(color)
         .bind(inv.to_string())
+        .bind(now)
         .execute(&state.pool)
         .await;
         match r {

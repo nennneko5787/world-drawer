@@ -1,4 +1,4 @@
-// wd-ui.js — トースト・レベル・オンライン表示などのHUD。
+// wd-ui.js — トースト・レベル・オンライン表示などのHUD + 共通UIユーティリティ (UIDコピー)。
 // classic script (defer順に読む。トップレベルスコープ共有、前方参照は実行時解決)。
 "use strict";
   function updateCooldownUI() {
@@ -11,9 +11,14 @@
     cooldownEl.classList.toggle("cool", remain > 0);
   }
 
-  function toast(msg, cls = "", action) {
+  // toast(msg[, cls|ms[, action]]) — 第2引数は従来のクラス名か、表示msのどちらも受ける。
+  function toast(msg, clsOrMs = "", action) {
+    let cls = "";
+    let ms = 2600;
+    if (typeof clsOrMs === "number" && Number.isFinite(clsOrMs)) ms = clsOrMs;
+    else if (typeof clsOrMs === "string") cls = clsOrMs;
     const el = document.createElement("div");
-    el.className = "toast " + cls;
+    el.className = ("toast " + cls).trim();
     el.textContent = msg;
     if (action) {
       const btn = document.createElement("button");
@@ -29,8 +34,8 @@
       el.appendChild(btn);
     }
     toastWrap.appendChild(el);
-    setTimeout(() => { el.style.opacity = "0"; el.style.transition = "opacity .4s"; }, 2600);
-    setTimeout(() => el.remove(), 3200);
+    setTimeout(() => { el.style.opacity = "0"; el.style.transition = "opacity .4s"; }, ms);
+    setTimeout(() => el.remove(), ms + 600);
     while (toastWrap.children.length > 3) toastWrap.firstChild.remove();
   }
 
@@ -42,7 +47,6 @@
     document.getElementById("c-shield").textContent = inventory.shield || 0;
     document.querySelectorAll(".ink").forEach((btn) => {
       const key = btn.dataset.ink;
-      if (key === "normal") return;
       if (key === "normal") {
         btn.disabled = false;
         return;
@@ -85,7 +89,7 @@
   }
 
   function refreshUserList() {
-    // 色と名前とレベルの一覧 (座標は出さない)
+    // 色と名前の一覧 (ID・レベルはプロフィールに集約。名前クリックで開く)
     const items = [{ uid: myUid, name: myName, color: myColor, level: myLevel, country: myShowCountry ? myCountry : null, self: true }];
     for (const cur of remotes.values()) {
       items.push({ uid: cur.uid || "?", name: cur.name || t("anon"), color: cur.color || "#22aa66", level: cur.level ?? 1, country: cur.country });
@@ -106,11 +110,12 @@
       nameEl.className = "nname";
       nameEl.textContent = u.name || t("anon");
       nameEl.style.color = u.color || "#22aa66";
+      // 自分・他人を問わず名前クリックでプロフィールを開く
+      if (u.uid && u.uid !== "?") {
+        nameEl.dataset.prof = u.uid;
+        nameEl.title = t("profileOpenHint");
+      }
       label.appendChild(nameEl);
-      const metaEl = document.createElement("span");
-      metaEl.className = "nmeta";
-      metaEl.textContent = `#${u.uid || "?"} Lv${u.level ?? "?"}`;
-      label.appendChild(metaEl);
       li.appendChild(label);
       if (u.self) {
         const me = document.createElement("span");
@@ -125,32 +130,16 @@
         btn.title = isBlocked ? t("blockTitle") : t("unblockTitle");
         btn.onclick = () => toggleBlock(u.uid);
         li.appendChild(btn);
-        // 管理者向け: 照会・巻き戻し (管理パネルと同等の操作)
+        // 管理者は詳細操作へ (/adminにUIDを引き継いで遷移。モーダルは持たない)
         if (typeof isAdmin !== "undefined" && isAdmin) {
-          const lookupBtn = document.createElement("button");
-          lookupBtn.className = "blockBtn";
-          lookupBtn.textContent = t("adminLookup");
-          lookupBtn.title = t("adminLookup");
-          lookupBtn.onclick = () => {
-            try {
-              if (typeof adminUid !== "undefined" && adminUid) adminUid.value = u.uid;
-              if (typeof adminLookup === "function") adminLookup();
-              if (typeof openModal === "function" && typeof adminPanel !== "undefined" && adminPanel) openModal(adminPanel);
-            } catch {}
+          const admBtn = document.createElement("button");
+          admBtn.className = "blockBtn";
+          admBtn.textContent = t("adminTitle");
+          admBtn.title = t("adminOpenTitle");
+          admBtn.onclick = () => {
+            location.href = "/admin?uid=" + encodeURIComponent(u.uid);
           };
-          li.appendChild(lookupBtn);
-          const rbBtn = document.createElement("button");
-          rbBtn.className = "blockBtn";
-          rbBtn.textContent = t("adminRollback");
-          rbBtn.title = t("adminRollback");
-          rbBtn.onclick = async () => {
-            try {
-              if (typeof adminUid !== "undefined" && adminUid) adminUid.value = u.uid;
-              if (typeof adminLookup === "function") await adminLookup();
-              if (typeof adminRollback === "function") adminRollback();
-            } catch {}
-          };
-          li.appendChild(rbBtn);
+          li.appendChild(admBtn);
         }
       }
       userList.appendChild(li);
@@ -162,7 +151,7 @@
     return `(${cell.x}, ${cell.y})`;
   }
 
-  // 残り秒の表示整形。1秒未満も0でなければ小数2桁で必ず表示する
+  // 残り秒の表示整形。1秒未満でなければ小数1桁、未満は小数2桁で表示する
   function fmtRemain(sec) {
     const v = Math.max(0, Number(sec) || 0);
     if (!(v > 0)) return "";
@@ -170,7 +159,7 @@
   }
 
   // chrome計測: topbar/toolbarの実高さをCSS変数へ反映し、固定px配置を排除する。
-  // toast・profileBar・統計・ドック・undoはすべて変数参照のため重ならない
+  // toast・profileBar・統計ドック・undoはすべて変数参照のため重ならない
   function measureChrome() {
     try {
       const root = document.documentElement;
@@ -198,3 +187,47 @@
     }
     setTimeout(measureChrome, 500);
   } catch {}
+
+  // ---- UIDコピー (全画面共通。data-uid / data-copy を持つ要素のクリックでコピー) ----
+  function copyUid(uid) {
+    if (!uid) return;
+    const done = () => {
+      try {
+        toast(t("uidCopied", { uid }), 1500);
+      } catch {}
+    };
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = uid;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        done();
+      } catch {}
+      ta.remove();
+    };
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        navigator.clipboard.writeText(uid).then(done).catch(fallback);
+      } else {
+        fallback();
+      }
+    } catch {
+      fallback();
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    const target = e.target && e.target.closest ? e.target.closest("[data-uid],[data-copy]") : null;
+    if (!target) return;
+    const val = target.dataset.uid || target.dataset.copy;
+    if (!val) return;
+    e.preventDefault();
+    copyUid(val);
+  });
+
+  // グローバル公開 (classic script 互換)
+  window.wdCopyUid = copyUid;

@@ -3,8 +3,11 @@
 
 - pages/*.html を5言語分プリレンダ (OGP meta + <html lang> + <title>)
 - /static/ URLに ?v=<content-hash> 付与、wd-wsonly=1固定
+- static/sw.js → dist/sw.js (版注入・scope=/用)。static/manifest.json →
+  dist/manifest.json (アイコンURLに?v=版付与)。static/img/favicon.ico +
+  apple-touch-icon.png → dist直下にも配置 (PWA)
 - <meta name=wd-api/wd-ws/wd-turnstile-site> 注入 (env WD_API/WD_WS/TURNSTILE_SITE_KEY)
-- static/ をそのままコピー + _headers 生成 (Pages用キャッシュ規則)
+- static/ をそのままコピー (sw.js・manifest.json除く) + _headers 生成 (Pages用キャッシュ規則)
 
 使い方:
   WD_API=https://api.example.com WD_WS=wss://api.example.com/ws python frontend/build.py
@@ -223,6 +226,37 @@ def load_config() -> dict:
     return merged
 
 
+def emit_pwa_root_files(ver: str) -> None:
+    """PWA用ファイルをdist直下へ (manifest・SW・favicon・apple-touch-icon)。
+
+    SWは __WD_SW_VERSION__ に版を注入 (キャッシュ名の切替用)。
+    manifestの /static/ アイコンURLには ?v=版 を付与
+    (immutable長期キャッシュとの不整合防止)。
+    scopeの都合でdist直下が正本。/static/sw.js・/static/manifest.jsonは置かない。
+    """
+    manifest_src = STATIC / "manifest.json"
+    if manifest_src.is_file():
+        manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
+        targets = list(manifest.get("icons", []))
+        for shortcut in manifest.get("shortcuts", []):
+            targets += shortcut.get("icons", [])
+        for icon in targets:
+            src = icon.get("src", "")
+            if src.startswith("/static/") and "?v=" not in src:
+                icon["src"] = f"{src}?v={ver}"
+        (DIST / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    sw_src = STATIC / "sw.js"
+    if sw_src.is_file():
+        sw_body = sw_src.read_text(encoding="utf-8").replace("__WD_SW_VERSION__", ver)
+        (DIST / "sw.js").write_text(sw_body, encoding="utf-8")
+    for img_name in ("favicon.ico", "apple-touch-icon.png"):
+        img_src = STATIC / "img" / img_name
+        if img_src.is_file():
+            shutil.copyfile(img_src, DIST / img_name)
+
+
 def main() -> int:
     cfg = load_config()
     ts_cfg = cfg.get("turnstile") if isinstance(cfg.get("turnstile"), dict) else {}
@@ -238,13 +272,17 @@ def main() -> int:
     if DIST.exists():
         shutil.rmtree(DIST)
     (DIST / "static").mkdir(parents=True)
-    # static copy
+    # static copy (sw.js・manifest.jsonはscope/版付与の都合でdist直下へ。
+    # /static/sw.js・/static/manifest.jsonは置かない)
     for p in STATIC.rglob("*"):
-        if p.is_file():
+        if p.is_file() and p.name not in ("sw.js", "manifest.json"):
             rel = p.relative_to(STATIC)
             dst = DIST / "static" / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(p, dst)
+
+    # PWA: manifest・SW・favicon・apple-touch-iconをdist直下へ
+    emit_pwa_root_files(ver)
 
     specs = [
         ("index.html", "index", "/"),
@@ -276,6 +314,14 @@ def main() -> int:
     headers = """\
 /static/*
   Cache-Control: public, max-age=31536000, immutable
+/sw.js
+  Cache-Control: no-cache
+/manifest.json
+  Cache-Control: public, max-age=300
+/apple-touch-icon.png
+  Cache-Control: public, max-age=86400
+/favicon.ico
+  Cache-Control: public, max-age=86400
 /*.html
   Cache-Control: public, max-age=300
 /

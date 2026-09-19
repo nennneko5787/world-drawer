@@ -7,8 +7,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>pixDraw - Let's paint canvas!</title>
-    <link rel="icon" href="/static/img/logo.png" type="image/png">
-    <link rel="apple-touch-icon" href="/static/img/logo.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="application-name" content="pixDraw">
+    <meta name="apple-mobile-web-app-title" content="pixDraw">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" type="image/x-icon">
+    <link rel="icon" href="/static/img/icon-192.png" sizes="192x192" type="image/png">
+    <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.json">
     <!-- OGP-START -->
     <meta name="description" content="pixDraw is collaborative, an online real-time pixel canvas where anyone can draw freely. Let's draw many pixel arts on canvas!">
     <link rel="canonical" href="/">
@@ -59,6 +66,8 @@
     <script src="/static/js/wd-chat.js" defer></script>
     <script src="/static/js/wd-stats.js" defer></script>
     <script src="/static/js/wd-ranking.js" defer></script>
+    <script src="/static/js/wd-profile.js" defer></script>
+    <script src="/static/js/pwa.js" defer></script>
     <script src="/static/js/wd-main.js" defer></script>
 </head>
 <body>
@@ -80,7 +89,7 @@
             <button id="noticesBtn" class="pill clickable" data-i18n-title="noticesTitle" title="お知らせ"><i class="bi bi-megaphone"></i> <span id="noticesBadge" class="hidden"></span></button>
         </div>
         <div class="tbGroup">
-            <button id="adminBtn" class="pill clickable hidden" data-i18n-title="adminTitle" title="管理"><i class="bi bi-shield"></i></button>
+            <a id="adminBtn" class="pill clickable hidden" data-i18n-title="adminTitle" title="管理" href="/admin"><i class="bi bi-shield"></i></a>
             <a id="helpBtn" class="pill clickable" data-i18n-title="helpTitle" title="ヘルプ" href="/help"><i class="bi bi-question-circle"></i></a>
             <button id="settingsBtn" class="pill clickable" data-i18n-title="settingsTitle" title="設定"><i class="bi bi-gear"></i></button>
         </div>
@@ -227,22 +236,14 @@
         <ul id="rankingList"></ul>
     </div>
 
+    <div id="profilePanel" class="hidden">
+        <div class="panelTitle"><span data-i18n="profileTitle">プロフィール</span><button id="profileClose" data-i18n-title="close" title="閉じる"><i class="bi bi-x-lg"></i></button></div>
+        <div id="profileCard"></div>
+    </div>
+
     <aside id="historyPanel" class="hidden">
         <div class="panelTitle"><span id="historyTitle">履歴</span><button id="historyClose" data-i18n-title="close" title="閉じる"><i class="bi bi-x-lg"></i></button></div>
         <ul id="historyList"></ul>
-    </aside>
-
-    <aside id="adminPanel" class="hidden">
-        <div class="panelTitle"><span data-i18n="adminTitle">管理</span><button id="adminClose" data-i18n-title="close" title="閉じる"><i class="bi bi-x-lg"></i></button></div>
-        <div class="accSection">
-            <input id="adminUid" data-i18n-ph="adminUidPh" placeholder="対象UID" autocomplete="off" spellcheck="false">
-            <button id="adminLookup" data-i18n="adminLookup">照会</button>
-            <div id="adminResult" class="accLabel"></div>
-        </div>
-        <div class="accSection">
-            <button id="adminRollback" data-i18n="adminRollback">巻き戻し</button>
-            <button id="adminBanIp" data-i18n="adminBanIp">IP禁止(24h)</button>
-        </div>
     </aside>
 
     <aside id="noticesPanel" class="hidden">
@@ -256,7 +257,7 @@
         <button id="chatMore" class="hidden" type="button"></button>
         <button id="chatNew" class="hidden" type="button"></button>
         <form id="chatForm" autocomplete="off">
-            <input id="chatInput" maxlength="200" data-i18n-ph="chatPh" placeholder="メッセージを入力…" autocomplete="off" enterkeyhint="send">
+            <input id="chatInput" maxlength="200" data-i18n-ph="chatPh" placeholder="メッセージを入力… (Enterで送信、Shift+Enterで改行)" autocomplete="off" enterkeyhint="send">
             <span id="chatCount">0/200</span>
             <button id="chatSend" type="submit" data-i18n-title="chatSend" title="送信"><i class="bi bi-send"></i></button>
         </form>

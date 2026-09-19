@@ -1,12 +1,12 @@
 // wd-modal.js — パネル系の共通モーダル基盤。
-// 設定・ユーザー・ランキング・履歴・管理・お知らせを排他モーダル化する。
-// 色パネルとチャットはドック (非モーダル) のため対象外。モーダルを開く際は色ドックを閉じる。
+// 設定・ユーザー・ランキング・プロフィール・履歴・チャット・お知らせを排他モーダル化する。
+// 色パネルはドック (非モーダル) のため対象外。モーダルを開く際は色ドックを閉じる。
 // HTML変更なしで動く: overlayを生成し、Esc/外側クリックで閉じる。
 "use strict";
   const __modalPanels = [];
   function __collectModals() {
     if (__modalPanels.length) return __modalPanels;
-    for (const id of ["settingsPanel", "userPanel", "rankingPanel", "historyPanel", "adminPanel", "noticesPanel"]) {
+    for (const id of ["settingsPanel", "userPanel", "rankingPanel", "profilePanel", "historyPanel", "chatDock", "noticesPanel"]) {
       const el = document.getElementById(id);
       if (el) {
         el.classList.add("wd-modal");
@@ -51,7 +51,15 @@
     }
   }
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeAllModals();
+    if (e.key !== "Escape") return;
+    // チャット入力中はフォーカスを外すだけ (1回目は閉じない)
+    try {
+      if (document.activeElement && document.activeElement.id === "chatInput") {
+        document.activeElement.blur();
+        return;
+      }
+    } catch {}
+    closeAllModals();
   });
   // 設定タブの配線 (骨格はindex.htmlに静的記述。ここでは切替のみ)。
   // ついでにAboutタブのバージョン表示を埋める

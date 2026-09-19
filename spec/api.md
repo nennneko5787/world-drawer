@@ -24,7 +24,8 @@
 | `POST /api/place` | `routes/place.rs:22` | 配置（`{x,y,color,ink}`）。成功時は `ok:true` + `pixel/by/cooldownUntil/cooldown/inventory/reward/level/xp/xpNeeded/leveledUp` |
 | `POST /api/undo` | `routes/undo.rs:36` | 3秒取消（`{x,y,prevEmpty,prevC,prevT,prevCoats}`）。成功時は `pixel/by/level/xp/xpNeeded/inventory` |
 | `GET /api/history?x&y&limit&beforeId` | `routes/history.rs:16` | `{ok,x,y,items,hasMore}`（`limit` 1-100、既定20） |
-| `POST /api/profile` | `routes/profile.rs:18` | `{name,color,showCountry?}` 更新 |
+| `GET /api/profile?uid=` | `routes/profile.rs:29` | 公開プロフィール（下記「公開プロフィール」） |
+| `POST /api/profile` | `routes/profile.rs:77` | `{name,color,showCountry?}` 更新 |
 | `POST /api/account/issue` | `routes/account.rs:126` | 引っ越しコード発行（既存ユーザ必須） |
 | `POST /api/account/login` | `routes/account.rs:171` | コード+パスワードで切替・`from_token`で統合。`{ok,token,uid,merged,profile}` |
 | `POST /api/admin/status` | `routes/admin.rs:36` | `admin.md` 参照 |
@@ -55,6 +56,23 @@ WS経由placeは存在しない。クライアント（`static/js/wd-net.js:608-
 `cooldown` `shielded` `tooFar` `banned` `ipBusy` `badPrev` `tooLate`
 `changed` `noUndo` `badPassword` `badLogin` `locked` `turnstileRequired`
 `badUid` `badIp` `badTitle` `noNotice` `badBody` `rateLimited` `forbidden` `busy`
+
+## 公開プロフィール（仕様）
+
+- `GET /api/profile?uid=<uid>` は公開（認証不要）。`uid` は `#` 付き・大文字を吸収
+  （`normalize_target_uid`）。不存在は `{ok:false,error:noUser}`。
+- 応答: `{ok, user:{uid,name,color,level,xp,country,registeredAt,placedTotal,rank}}`。
+  `country` は本人の公開設定時のみ（`POST /api/profile` の `showCountry`）。
+- `registeredAt` は登録epoch秒。不明は `null`
+  （migration 008以前の既存行で履歴もない場合）。
+  `users.createdAt`（migration 008で追加）に記録する。
+  既存行は `MIN(history.at)` で推定補完する。新規は `/api/session` 発行時に記録し、
+  引っ越し統合時は古い方（両方なければ `null`）を残す。
+- `placedTotal` は有効履歴件数
+ （`COUNT(*) FROM history WHERE uid AND NOT undone`。取り消し分を除く。
+  履歴pruneは既定無効のためほぼ累計）。
+- `rank` は自分より上位の人数+1（`level DESC, xp DESC`）。
+  フロントは増やさず、この形をそのまま表示する（削る変更は禁止・README運用ルール5）。
 
 ## チャット（仕様）
 

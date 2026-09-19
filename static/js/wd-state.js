@@ -59,6 +59,9 @@
   const rankingPanel = document.getElementById("rankingPanel");
   const rankingList = document.getElementById("rankingList");
   const rankingClose = document.getElementById("rankingClose");
+  const profilePanel = document.getElementById("profilePanel");
+  const profileCard = document.getElementById("profileCard");
+  const profileClose = document.getElementById("profileClose");
   const historyPanel = document.getElementById("historyPanel");
   const historyTitle = document.getElementById("historyTitle");
   const historyList = document.getElementById("historyList");
@@ -100,13 +103,7 @@
   const loginBtn = document.getElementById("loginBtn");
   const countryChk = document.getElementById("countryChk");
   const adminBtn = document.getElementById("adminBtn");
-  const adminPanel = document.getElementById("adminPanel");
-  const adminClose = document.getElementById("adminClose");
-  const adminUid = document.getElementById("adminUid");
-  const adminLookupBtn = document.getElementById("adminLookup");
-  const adminResult = document.getElementById("adminResult");
-  const adminRollbackBtn = document.getElementById("adminRollback");
-  const adminBanBtn = document.getElementById("adminBanIp");
+  // 管理操作は /admin ページに統一 (キャンバス内の管理モーダルは持たない)
   const noticesBtn = document.getElementById("noticesBtn");
   const noticesBadge = document.getElementById("noticesBadge");
   const noticesPanel = document.getElementById("noticesPanel");
@@ -239,6 +236,17 @@
     markStatic();
   }
   let myUid = "";
+  // 自分のUID表示。data-uid付きでクリックコピー対応 (wd-ui.jsの委任が拾う)
+  function setMyUidEl(uid) {
+    if (!uid) return;
+    myUid = uid;
+    try {
+      if (typeof myUidEl !== "undefined" && myUidEl) {
+        myUidEl.textContent = `#${uid}`;
+        myUidEl.dataset.uid = uid;
+      }
+    } catch {}
+  }
   let isDark = false;
   let isAdmin = false;
 

@@ -215,7 +215,7 @@ pub async fn login(
         }
     };
     let dst = sqlx::query(
-        "SELECT token, uid, name, color, inventory, cooldownUntil, level, xp, country
+        "SELECT token, uid, name, color, inventory, cooldownUntil, level, xp, country, createdAt
          FROM users WHERE transferCode = $1 FOR UPDATE",
     )
     .bind(&code)
@@ -234,7 +234,7 @@ pub async fn login(
     let from = body.from_token.clone().unwrap_or_default().trim().to_string();
     if !from.is_empty() && from != dst_token {
         let src = sqlx::query(
-            "SELECT token, uid, name, color, inventory, cooldownUntil, level, xp, country
+            "SELECT token, uid, name, color, inventory, cooldownUntil, level, xp, country, createdAt
              FROM users WHERE token = $1 FOR UPDATE",
         )
         .bind(&from)
@@ -275,6 +275,15 @@ pub async fn login(
                 let cd = d.get::<f64, _>(5).max(s.get::<f64, _>(5));
                 let country: Option<String> =
                     d.get::<Option<String>, _>(8).or(s.get::<Option<String>, _>(8));
+                // 登録日は古い方を残す (両方なければNULLのまま)
+                let created: Option<f64> = match (
+                    d.get::<Option<f64>, _>(9),
+                    s.get::<Option<f64>, _>(9),
+                ) {
+                    (Some(a), Some(b)) => Some(a.min(b)),
+                    (a @ Some(_), None) => a,
+                    (None, b) => b,
+                };
                 // 名前・色は引っ越し先維持。先が初期名のまま＋元が改名済みなら元を採用
                 const DEFAULTS: [&str; 5] = ["ななし", "Anon", "익명", "无名", "無名"];
                 let mut new_name = name.clone();
@@ -292,7 +301,7 @@ pub async fn login(
                 }
                 let _ = sqlx::query(
                     "UPDATE users SET inventory = $1, cooldownUntil = $2, level = $3,
-                     xp = $4, country = $5, name = $6, color = $7 WHERE token = $8",
+                     xp = $4, country = $5, name = $6, color = $7, createdAt = $8 WHERE token = $9",
                 )
                 .bind(serde_json::to_string(&dinv).unwrap_or_default())
                 .bind(cd)
@@ -301,6 +310,7 @@ pub async fn login(
                 .bind(country)
                 .bind(&new_name)
                 .bind(crate::color::hex_to_int(&new_color).unwrap_or(0x22aa66))
+                .bind(created)
                 .bind(&dst_token)
                 .execute(&mut *tx)
                 .await;

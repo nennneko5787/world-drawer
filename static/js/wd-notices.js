@@ -86,7 +86,16 @@
       // 本文はMarkdown描画 (リンク等)。描画器が無ければ素の文字列。
       if (typeof window.wdMarkdown === "function") body.innerHTML = window.wdMarkdown(loc.body);
       else body.textContent = loc.body;
-      li.appendChild(body);
+      // 作者UIDがある場合はコピー可能にする (将来API拡張用)
+      if (n.uid) {
+        const uidEl = document.createElement("span");
+        uidEl.className = "noticeUid";
+        uidEl.textContent = `#${n.uid}`;
+        uidEl.dataset.uid = n.uid;
+        uidEl.style.cssText = "font-size:11px;color:var(--hint);cursor:pointer;margin-top:4px;display:inline-block;";
+        uidEl.title = t("copyUidHint");
+        body.appendChild(uidEl);
+      }
       noticesList.appendChild(li);
     }
   }
@@ -103,6 +112,7 @@
           tr: (n.translations && typeof n.translations === "object") ? n.translations : {},
           createdAt: Number(n.createdAt) || 0,
           updatedAt: Number(n.updatedAt) || 0,
+          uid: n.uid || null,
         })).filter((n) => n.id > 0);
         renderNoticesList();
         refreshNoticesBadge();
@@ -113,6 +123,7 @@
   function openNotices() {
     renderNoticesList();
     if (typeof noticesPanel !== "undefined" && noticesPanel) openModal(noticesPanel);
+    // 開いた時点で既読にする (バッジは次回来訪まで消灯のまま)
     if (noticesCache.length > 0) {
       const maxId = Math.max(...noticesCache.map((n) => n.id));
       noticesSaveSeen(maxId);

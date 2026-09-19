@@ -59,7 +59,10 @@ pub fn router(state: AppState) -> Router {
             "/api/chat",
             axum::routing::get(chat::list).post(chat::post),
         )
-        .route("/api/profile", axum::routing::post(profile::update))
+        .route(
+            "/api/profile",
+            axum::routing::get(profile::lookup).post(profile::update),
+        )
         .route("/api/account/issue", axum::routing::post(account::issue))
         .route("/api/account/login", axum::routing::post(account::login))
         .route("/api/admin/status", axum::routing::post(admin::status))

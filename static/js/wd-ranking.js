@@ -37,11 +37,12 @@
         nameEl.className = "nname";
         nameEl.textContent = r.name || t("anon");
         nameEl.style.color = r.color || "#22aa66";
+        // 名前クリックでプロフィールを開く (ID・Lvはそちらに集約)
+        if (r.uid) {
+          nameEl.dataset.prof = r.uid;
+          nameEl.title = t("profileOpenHint");
+        }
         label.appendChild(nameEl);
-        const metaEl = document.createElement("span");
-        metaEl.className = "nmeta";
-        metaEl.textContent = `#${r.uid || "?"} Lv${r.level ?? "?"}`;
-        label.appendChild(metaEl);
         li.appendChild(label);
         rankingList.appendChild(li);
       }

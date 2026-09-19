@@ -75,21 +75,66 @@
     return await res.json();
   }
 
-  function td(text) {
-    const el = document.createElement("td");
-    el.textContent = text;
-    return el;
-  }
-
   function setAuthed(ok, uid) {
     authed = ok;
     $("admBody").classList.toggle("hidden", !ok);
+    const line = $("admAuthLine");
+    line.classList.toggle("ok", ok);
+    line.classList.toggle("ng", !ok);
     if (ok) {
-      $("admAuthLine").textContent = uid ? `#${uid} · ${t("admAuthOk")}` : t("admAuthOk");
+      line.textContent = uid ? `#${uid} · ${t("admAuthOk")}` : t("admAuthOk");
     } else {
-      $("admAuthLine").textContent = t("admAuthNg");
+      line.textContent = t("admAuthNg");
     }
   }
+
+  // ---- UID/IPコピー (管理ページ独自。キャンバス側のwd-ui.jsは読み込まないため) ----
+  function showAdmToast(msg) {
+    try {
+      document.querySelectorAll(".admToast").forEach((el) => el.remove());
+      const el = document.createElement("div");
+      el.className = "admToast";
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1600);
+    } catch {}
+  }
+
+  function copyText(val) {
+    if (!val) return;
+    const done = () => showAdmToast(t("uidCopied", { uid: val }));
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = val;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        done();
+      } catch {}
+      ta.remove();
+    };
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        navigator.clipboard.writeText(val).then(done).catch(fallback);
+      } else {
+        fallback();
+      }
+    } catch {
+      fallback();
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    const target = e.target && e.target.closest ? e.target.closest("[data-uid],[data-copy]") : null;
+    if (!target) return;
+    const val = target.dataset.uid || target.dataset.copy;
+    if (!val) return;
+    e.preventDefault();
+    copyText(val);
+  });
 
   function statCard(num, label) {
     const div = document.createElement("div");
@@ -103,42 +148,54 @@
     return div;
   }
 
-  function renderTable(host, rows, cols, action) {
+  // 禁止IP表 (IPセルはクリックでコピー可。解除ボタン付き)。
+  // topPlace/topSessionは仕様で返さないため表示しない (admin.md参照)。
+  function renderBanned(list) {
+    const host = $("admBannedList");
     host.innerHTML = "";
-    if (rows.length === 0) {
+    if (list.length === 0) {
       const p = document.createElement("p");
       p.className = "admMuted";
       p.textContent = t("admNoData");
       host.appendChild(p);
       return;
     }
+    const wrap = document.createElement("div");
+    wrap.className = "admTableWrap";
     const table = document.createElement("table");
     table.className = "admTable";
-    const head = document.createElement("tr");
-    for (const c of cols) {
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+    for (const c of ["IP", "until", ""]) {
       const th = document.createElement("th");
       th.textContent = c;
-      head.appendChild(th);
+      hr.appendChild(th);
     }
-    if (action) {
-      const th = document.createElement("th");
-      head.appendChild(th);
-    }
-    table.appendChild(head);
-    for (const row of rows) {
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const body = document.createElement("tbody");
+    for (const b of list) {
       const tr = document.createElement("tr");
-      for (const cell of row) tr.appendChild(td(cell));
-      if (action) {
-        const at = document.createElement("td");
-        const btn = document.createElement("button");
-        btn.textContent = action.label;
-        btn.onclick = () => action.fn(row);
-        at.appendChild(btn);
-        tr.appendChild(at);
-      }
+      const ipTd = document.createElement("td");
+      ipTd.className = "mono";
+      ipTd.textContent = b.ip;
+      ipTd.dataset.copy = b.ip;
+      ipTd.title = t("copyUidHint");
+      tr.appendChild(ipTd);
+      const untilTd = document.createElement("td");
+      untilTd.textContent = fmtTime(b.until);
+      tr.appendChild(untilTd);
+      const actTd = document.createElement("td");
+      const btn = document.createElement("button");
+      btn.textContent = t("admUnban");
+      btn.onclick = () => unbanIp(b.ip);
+      actTd.appendChild(btn);
+      tr.appendChild(actTd);
+      body.appendChild(tr);
     }
-    table.appendChild(tr);
-    host.appendChild(table);
+    table.appendChild(body);
+    wrap.appendChild(table);
+    host.appendChild(wrap);
   }
 
   function fmtTime(sec) {
@@ -157,27 +214,12 @@
     grid.appendChild(statCard((d.banned || []).length, t("admBanned")));
     const cfg = d.config || {};
     const cfgLine = document.createElement("p");
-    cfgLine.className = "admMuted";
+    cfgLine.className = "admCfg";
     cfgLine.textContent =
       `place/min/ip=${cfg.placePerMinPerIp ?? "?"} session/h/ip=${cfg.sessionPerHour ?? "?"}` +
       ` socket=${cfg.requireSocketForPlace ?? "?"} maxSocks/ip=${cfg.maxSocketsPerIp ?? "?"}`;
     grid.appendChild(cfgLine);
-    renderTable(
-      $("admBannedList"),
-      (d.banned || []).map((b) => [b.ip, fmtTime(b.until)]),
-      ["IP", "until"],
-      { label: t("admUnban"), fn: (row) => unbanIp(row[0]) }
-    );
-    renderTable(
-      $("admTopPlace"),
-      (d.topPlaceIps || []).map((e) => [e.ip, String(e.n)]),
-      ["IP", "n"]
-    );
-    renderTable(
-      $("admTopSession"),
-      (d.topSessionIps || []).map((e) => [e.ip, String(e.n)]),
-      ["IP", "n"]
-    );
+    renderBanned(d.banned || []);
   }
 
   async function refreshAll() {
@@ -200,14 +242,80 @@
     }
   }
 
+  // ユーザー詳細カード。UID・IPはクリックでコピー可。
+  function kvRow(kv, term, dd) {
+    const cell = document.createElement("div");
+    const dt = document.createElement("dt");
+    dt.textContent = term;
+    cell.appendChild(dt);
+    cell.appendChild(dd);
+    kv.appendChild(cell);
+  }
+
+  function kvText(kv, term, text, opts) {
+    opts = opts || {};
+    const dd = document.createElement("dd");
+    dd.textContent = text;
+    if (opts.mono) dd.className = "mono";
+    if (opts.copy) {
+      dd.dataset.copy = opts.copy;
+      dd.title = t("copyUidHint");
+    }
+    kvRow(kv, term, dd);
+    if (opts.copyBtn) {
+      const btn = document.createElement("button");
+      btn.className = "admCopy";
+      btn.type = "button";
+      btn.textContent = t("admCopy");
+      btn.dataset.copy = opts.copy;
+      dd.appendChild(btn);
+    }
+  }
+
   function renderUserCard(u) {
     const card = $("admUserCard");
     card.innerHTML = "";
-    const main = document.createElement("div");
-    main.textContent =
-      `${u.name} #${u.uid} Lv${u.level} · ${u.touchedCells} ${t("h_cells")}` +
-      ` · ${u.lastIp || "?"}${u.online ? " · online" : ""}`;
-    card.appendChild(main);
+    const wrap = document.createElement("div");
+    wrap.className = "admUser";
+    const head = document.createElement("div");
+    head.className = "admUserHead";
+    const dot = document.createElement("span");
+    dot.className = "admDot";
+    dot.style.background = /^#[0-9a-fA-F]{6}$/.test(u.color || "") ? u.color : "#22aa66";
+    head.appendChild(dot);
+    const nameEl = document.createElement("b");
+    nameEl.textContent = u.name || "?";
+    head.appendChild(nameEl);
+    const uidEl = document.createElement("span");
+    uidEl.className = "mono";
+    uidEl.textContent = `#${u.uid || "?"}`;
+    if (u.uid) {
+      uidEl.dataset.uid = u.uid;
+      uidEl.title = t("copyUidHint");
+    }
+    head.appendChild(uidEl);
+    const badge = document.createElement("span");
+    const online = !!u.online;
+    badge.className = "admBadge" + (online ? "" : " off");
+    badge.textContent = t(online ? "admOnline" : "admOffline");
+    head.appendChild(badge);
+    wrap.appendChild(head);
+    const kv = document.createElement("dl");
+    kv.className = "admKv";
+    kvText(kv, "Lv", `Lv${u.level ?? "?"} · ${u.xp ?? 0}xp`, { mono: true });
+    kvText(kv, t("admCells"), `${u.touchedCells ?? "?"} ${t("h_cells")}`, { mono: true });
+    if (u.lastIp) {
+      kvText(kv, t("admLastIp"), u.lastIp, { mono: true, copy: u.lastIp, copyBtn: true });
+    } else {
+      kvText(kv, t("admLastIp"), "-", { mono: true });
+    }
+    const country = u.country || "-";
+    kvText(kv, t("admCountry"), u.showCountry === false ? `${country} (非表示)` : country, { mono: true });
+    const inv = u.inventory && typeof u.inventory === "object" ? u.inventory : {};
+    const invKeys = Object.keys(inv).filter((k) => (inv[k] || 0) > 0);
+    kvText(kv, t("admInk"), invKeys.length ? invKeys.map((k) => `${k}x${inv[k]}`).join(" ") : "-", { mono: true });
+    wrap.appendChild(kv);
+    card.appendChild(wrap);
   }
 
   async function lookup() {
@@ -306,12 +414,20 @@
       const meta = document.createElement("p");
       meta.className = "admMuted";
       meta.textContent = fmtTime(n.updatedAt || n.createdAt);
-      // 翻訳の有無が一目で分かるよう言語バッジを付ける。
-      try {
-        const langs = NOTICE_LANGS.filter((l) => l !== "ja" && n.translations && n.translations[l]);
-        if (langs.length > 0) meta.textContent += ` · ${langs.join("/")}`;
-      } catch {}
       box.appendChild(meta);
+      // 翻訳の有無が一目で分かるよう言語バッジを付ける。
+      const langRow = document.createElement("div");
+      langRow.className = "admMuted";
+      for (const l of NOTICE_LANGS) {
+        if (l === "ja") continue;
+        const s = document.createElement("span");
+        const tr = n.translations && n.translations[l];
+        const has = !!(tr && (tr.title || tr.body));
+        s.className = "admLang" + (has ? " have" : "");
+        s.textContent = l;
+        langRow.appendChild(s);
+      }
+      box.appendChild(langRow);
       const row = document.createElement("div");
       row.className = "admRow";
       const editBtn = document.createElement("button");
@@ -452,6 +568,16 @@
     localStorage.removeItem("wd_adminToken");
   } catch {}
   resetNoticeForm();
-  if (sessionToken()) refreshAll();
-  else setAuthed(false);
+  if (sessionToken()) {
+    refreshAll().then(() => {
+      // キャンバス側のユーザー一覧から ?uid=付きで遷移した場合は自動照会する
+      try {
+        const q = new URLSearchParams(location.search).get("uid");
+        if (q && authed && $("admUid")) {
+          $("admUid").value = q;
+          lookup();
+        }
+      } catch {}
+    });
+  } else setAuthed(false);
 })();
