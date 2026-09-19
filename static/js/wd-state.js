@@ -137,7 +137,10 @@
   const coordLimit = 1000000;
   const fetchMargin = 256; // 視野外の保持余白セル数 (要求は視野きっかり。保持・WS選別用)
   const maxCache = 150000; // 手元に保持するピクセル数の上限
-  const maxDrafts = 20000; // 設計図の保持上限
+  const maxDrafts = 2000000; // 設計図の保持上限 (メモリ上)
+  // 端末保存 (localStorage約5MB) には全件入らないため先頭まで。
+  // 超過分はメモリ上でのみ保持し、再訪で消える。
+  const DRAFT_SAVE_MAX = 20000;
   // 端末タイムゾーン (国旗の推定用。CF-IPCountryが無い場合の代替)
   const myTz = (() => {
     try {
@@ -228,21 +231,262 @@
   } catch {}
   let showDrafts = localStorage.getItem("wd_showDraft") !== "0";
   const drafts = new Map(); // "x,y" -> "#rrggbb" (自分専用・サーバー送信なし)
-  try {
-    const saved = JSON.parse(localStorage.getItem("wd_draft") || "{}");
-    if (saved && typeof saved === "object") {
-      for (const [key, color] of Object.entries(saved)) {
-        if (drafts.size >= maxDrafts) break;
-        if (/^-?\d+,-?\d+$/.test(key) && /^#[0-9a-fA-F]{6}$/.test(color)) drafts.set(key, color);
-      }
-    }
-  } catch {}
-  function saveDrafts() {
+  const draftDirty = new Map(); // key -> color|null (nullは削除。IDB差分書込用)
+  let draftNeedsFullSave = false; // 移行直後の全件書込フラグ
+  let draftSavePending = false; // IDB準備前の保存要求 (準備後に全件保存)
+  let draftSaveTimer = 0;
+  let draftFlushing = false;
+  let draftStoreReady = false; // initDraftStore完了まで保存要求は全件保存へ回す
+  const DRAFT_FLUSH_MS = 1000; // 保存デバウンス (連打中の書込を抑える)
+  function draftDb() {
     try {
-      localStorage.setItem("wd_draft", JSON.stringify(Object.fromEntries(drafts)));
+      return window.wdDraftDb || null;
+    } catch {
+      return null;
+    }
+  }
+  function validDraftKey(key) {
+    return /^-?\d+,-?\d+$/.test(key || "");
+  }
+  function validDraftColor(color) {
+    return /^#[0-9a-fA-F]{6}$/.test(color || "");
+  }
+  // 変更点の記録付き更新 (wd-drafts.jsの全更新経路はこの3つを使うこと)
+  function draftSetCell(key, color) {
+    drafts.set(key, color);
+    draftDirty.set(key, color);
+  }
+  function draftDelCell(key) {
+    if (drafts.delete(key)) draftDirty.set(key, null);
+  }
+  function draftClearCells() {
+    if (drafts.size === 0) return;
+    for (const key of drafts.keys()) draftDirty.set(key, null);
+    drafts.clear();
+  }
+  // 戻り値: 読込件数。既存キー優先 (起動直後の描画との競合は手元を勝たせる)
+  function legacyDraftLoad() {
+    let n = 0;
+    try {
+      const saved = JSON.parse(localStorage.getItem("wd_draft") || "{}");
+      if (saved && typeof saved === "object") {
+        for (const [key, color] of Object.entries(saved)) {
+          if (drafts.size >= maxDrafts) break;
+          if (drafts.has(key)) continue;
+          if (validDraftKey(key) && validDraftColor(color)) {
+            drafts.set(key, color);
+            n++;
+          }
+        }
+      }
     } catch {}
+    return n;
+  }
+  function legacyDraftSave() {
+    // IDB不可時の代替。容量上限のため先頭まで
+    try {
+      const out = {};
+      let n = 0;
+      for (const [key, color] of drafts) {
+        if (n >= DRAFT_SAVE_MAX) break;
+        out[key] = color;
+        n++;
+      }
+      localStorage.setItem("wd_draft", JSON.stringify(out));
+    } catch {}
+  }
+  function removeLegacyDraft() {
+    try {
+      localStorage.removeItem("wd_draft");
+    } catch {}
+  }
+  function saveDrafts() {
+    // hot pathからはスケジュールのみ。実書込はIDBへ非同期・デバウンス
+    try {
+      if (!draftStoreReady) draftSavePending = true;
+      if (draftDb()) scheduleDraftFlush(false);
+      else legacyDraftSave();
+    } catch {
+      try {
+        legacyDraftSave();
+      } catch {}
+    }
     markStatic();
   }
+  function scheduleDraftFlush(immediate) {
+    try {
+      if (draftSaveTimer) {
+        if (!immediate) return;
+        clearTimeout(draftSaveTimer);
+        draftSaveTimer = 0;
+      }
+      if (immediate) {
+        flushDrafts();
+        return;
+      }
+      draftSaveTimer = setTimeout(() => {
+        draftSaveTimer = 0;
+        flushDrafts();
+      }, DRAFT_FLUSH_MS);
+    } catch {}
+  }
+  async function flushDrafts() {
+    if (draftFlushing) {
+      scheduleDraftFlush(false);
+      return;
+    }
+    const db = draftDb();
+    if (!db) {
+      try {
+        legacyDraftSave();
+      } catch {}
+      return;
+    }
+    draftFlushing = true;
+    try {
+      if (draftNeedsFullSave) {
+        draftNeedsFullSave = false;
+        const entries = [...drafts.entries()];
+        draftDirty.clear();
+        const ok = await db.replaceAll(entries);
+        if (!ok) draftNeedsFullSave = true; // 次回再試行
+        return;
+      }
+      if (draftDirty.size === 0) return;
+      const batch = new Map(draftDirty);
+      draftDirty.clear();
+      const ok = await db.applyDirty(batch);
+      if (!ok) {
+        // 失敗分は戻して次回再試行
+        for (const [k, v] of batch) {
+          if (!draftDirty.has(k)) draftDirty.set(k, v);
+        }
+        scheduleDraftFlush(false);
+      }
+    } catch {
+      try {
+        scheduleDraftFlush(false);
+      } catch {}
+    } finally {
+      draftFlushing = false;
+    }
+  }
+  // 設計図ストア初期化 (非同期)。IDB優先、空ならlocalStorageを引き継いで移行する。
+  // 旧サイトhandoff直後 (wd_mig_done + wd_draftあり) はlocalStorageを正として置換する。
+  // localStorage側はIDB化前の残骸のため、取り込み後は削除する。
+  function initDraftStore() {
+    const finish = () => {
+      draftStoreReady = true;
+      try {
+        if (typeof rebuildDraftList === "function") rebuildDraftList();
+      } catch {}
+      try {
+        if (typeof refreshDraftUI === "function") refreshDraftUI();
+      } catch {}
+      try {
+        markStatic();
+      } catch {}
+    };
+    const boot = async () => {
+      const db = draftDb();
+      if (!db) {
+        legacyDraftLoad();
+        finish();
+        return;
+      }
+      let opened = null;
+      try {
+        opened = await db.open();
+      } catch {
+        opened = null;
+      }
+      if (!opened) {
+        legacyDraftLoad();
+        finish();
+        return;
+      }
+      let stored = null;
+      try {
+        stored = await db.loadAll();
+      } catch {
+        stored = null;
+      }
+      if (stored === null) {
+        legacyDraftLoad();
+        finish();
+        return;
+      }
+      let localData = false;
+      let migDone = false;
+      try {
+        localData = !!localStorage.getItem("wd_draft");
+      } catch {
+        localData = false;
+      }
+      try {
+        migDone = !!sessionStorage.getItem("wd_mig_done");
+      } catch {
+        migDone = false;
+      }
+      if (localData && (stored.size === 0 || migDone)) {
+        // 初回移行 or 引っ越し直後: localStorageを取り込んでIDBへ (置換)
+        drafts.clear();
+        draftDirty.clear();
+        const n = legacyDraftLoad();
+        if (n > 0) {
+          draftNeedsFullSave = true;
+          scheduleDraftFlush(true);
+        }
+        removeLegacyDraft();
+      } else {
+        if (stored.size > 0) {
+          // IDB優先。既存キー優先で足りない分だけ補う
+          for (const [k, c] of stored) {
+            if (drafts.size >= maxDrafts) break;
+            if (drafts.has(k)) continue;
+            if (validDraftKey(k) && validDraftColor(String(c))) {
+              drafts.set(k, String(c));
+            }
+          }
+        } else {
+          // 両方空: 何もしない
+        }
+      }
+      if (draftSavePending) {
+        draftSavePending = false;
+        draftNeedsFullSave = true;
+        scheduleDraftFlush(true);
+      }
+      finish();
+    };
+    try {
+      boot();
+    } catch {
+      try {
+        legacyDraftLoad();
+      } catch {}
+    }
+  }
+  // タブを閉じる前の取りこぼしを減らす (ベストエフォート)
+  try {
+    document.addEventListener("visibilitychange", () => {
+      try {
+        if (document.visibilityState === "hidden") {
+          if (draftSaveTimer) {
+            clearTimeout(draftSaveTimer);
+            draftSaveTimer = 0;
+          }
+          flushDrafts();
+        }
+      } catch {}
+    });
+    window.addEventListener("pagehide", () => {
+      try {
+        flushDrafts();
+      } catch {}
+    });
+  } catch {}
+  initDraftStore();
   let myUid = "";
   // 自分のUID表示。data-uid付きでクリックコピー対応 (wd-ui.jsの委任が拾う)
   function setMyUidEl(uid) {

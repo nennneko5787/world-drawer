@@ -6,6 +6,8 @@
   const DRAFT_SHAPE_CELLS_CAP = 40000; // 1操作の走査上限 (応答性のため)
   const DRAFT_BUCKET_VISIT_CAP = 30000;
   const DRAFT_BUCKET_RADIUS = 500;
+  // バケツの1回あたり塗布上限。全体上限とは別枠で図形系 (40000) に合わせる
+  const DRAFT_BUCKET_PAINT_CAP = 40000;
   const draftUndoStack = []; // [{changes: [[key, prev|null]]}]
   let draftPreview = null; // {tool, x0, y0, x1, y1} (rect/line/circle のドラッグ中)
   let draftStroke = null; // {changes, seen} (dot のドラッグ中)
@@ -65,8 +67,8 @@
     if (want !== null && !drafts.has(key) && drafts.size >= maxDrafts) return false;
     changes.push([key, cur]);
     seen.add(key);
-    if (want === null) drafts.delete(key);
-    else drafts.set(key, want);
+    if (want === null) draftDelCell(key);
+    else draftSetCell(key, want);
     draftListSet(x, y, want);
     return true;
   }
@@ -159,9 +161,15 @@
     const queue = [[sx, sy]];
     let head = 0;
     let truncated = false;
+    let paintCapped = false;
     while (head < queue.length) {
       if (head >= DRAFT_BUCKET_VISIT_CAP) {
         truncated = true;
+        break;
+      }
+      if (changes.length >= DRAFT_BUCKET_PAINT_CAP) {
+        truncated = true;
+        paintCapped = true;
         break;
       }
       const [x, y] = queue[head++];
@@ -175,8 +183,8 @@
         continue;
       }
       changes.push([key, cur]);
-      if (want === null) drafts.delete(key);
-      else drafts.set(key, want);
+      if (want === null) draftDelCell(key);
+      else draftSetCell(key, want);
       const nexts = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
       for (const [nx, ny] of nexts) {
         const nk = `${nx},${ny}`;
@@ -191,7 +199,7 @@
       rebuildDraftList();
       saveDrafts();
     }
-    if (truncated) toast(t("draftLimit", { max: maxDrafts }));
+    if (truncated) toast(t("draftLimit", { max: paintCapped ? DRAFT_BUCKET_PAINT_CAP : maxDrafts }));
     refreshDraftUI();
   }
   function draftEraseOne(x, y) {
@@ -220,8 +228,8 @@
       return;
     }
     for (const [key, prev] of op.changes) {
-      if (prev == null) drafts.delete(key);
-      else drafts.set(key, prev);
+      if (prev == null) draftDelCell(key);
+      else draftSetCell(key, prev);
     }
     rebuildDraftList();
     saveDrafts();
@@ -233,7 +241,7 @@
       return;
     }
     pushDraftUndo([...drafts.entries()].map(([k, v]) => [k, v]));
-    drafts.clear();
+    draftClearCells();
     rebuildDraftList();
     draftPreview = null;
     draftStroke = null;

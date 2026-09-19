@@ -20,6 +20,31 @@
 - 配置送信は in-flight ガード付き（`wd-net.js:placing`）。応答前の連打は
   送信せず残り秒トーストのみ。`cooldown` エラー・成功時は即 `updateCooldownUI()`。
 
+## 履歴表示モード
+
+- 履歴モーダルを閉じただけでは履歴モードを抜けない
+  （`historyClose` はモーダルを閉じるのみ。解除はツール切替だけ）。
+  閉じた直後に別マスをタップすればその履歴が開く。
+  モーダルを閉じると `historyKey` は捨てる（言語切替時の再描画で
+  閉じたモーダルが勝手に開かないようにするため）。
+
+## 設計図（クライアント専用・サーバー送信なし）
+
+- メモリ上の保持上限 `maxDrafts = 2000000`（`wd-state.js`）。
+  描画は静的レイヤ再構築時に全走査＋視野カリングのため、上限いっぱいでも
+  常用域では破綻しない。
+- ただしバケツの1回あたり塗布上限は `DRAFT_BUCKET_PAINT_CAP = 40000` に据え置く
+  （全体上限とは別枠。図形系の1操作走査上限に合わせる）。
+  超過時はその旨のトーストを出して打ち切る。
+- 永続化はIndexedDB（`wd-draftdb.js`、DB `pixdraw` / store `drafts`）。
+  保存は1秒デバウンスの差分書込（`draftDirty`）。全件置換は移行時のみ。
+  タブ非表示・pagehide時にもベストエフォートで流す。
+- IDB不可時はlocalStorage代替（先頭 `DRAFT_SAVE_MAX = 20000` 件まで）。
+- 起動時の優先順位: IDBの内容 ＞ localStorage（初回移行・旧サイトhandoff時は
+  localStorageを正として置換）。取り込み後の `wd_draft` キーは削除する。
+  旧サイト移行（`wd-migrate.js`）は従来どおりlocalStorage経由で届き、
+  起動時移行でIDBへ変換される。
+
 ## 特殊インク（実装済み: 消費側）
 
 - 5種固定: `glow rainbow ghost chalk shield`（`place_logic.rs:6`）。

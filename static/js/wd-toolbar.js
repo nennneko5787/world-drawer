@@ -153,7 +153,9 @@
   });
   if (draftUndoBtn) draftUndoBtn.onclick = undoDraft;
   if (draftClearBtn) draftClearBtn.onclick = clearDrafts;
-  historyClose.onclick = () => setHistoryMode(false);
+  // 閉じるだけでは履歴モードを抜けない (別マスを続けて見られる)。
+  // モード解除はツール切替 (塗る・消す・スポイト・設計図・履歴ボタン) のみ。
+  historyClose.onclick = () => closeAllModals();
   document.querySelectorAll(".ink").forEach((btn) => {
     btn.onclick = () => {
       const key = btn.dataset.ink;
