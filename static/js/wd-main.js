@@ -12,3 +12,4 @@
   refreshDraftUI();
   refreshAdminUI();
   try { if (typeof initChat === "function") initChat(); } catch (e) { console.error(e); }
+  try { if (typeof initStats === "function") initStats(); } catch (e) { console.error(e); }

@@ -31,6 +31,7 @@
   const qualitySel = document.getElementById("qualitySel");
   const glowSel = document.getElementById("glowSel");
   const shieldToggle = document.getElementById("shieldToggle");
+  const statsToggle = document.getElementById("statsToggle");
   const rightClickSel = document.getElementById("rightClickSel");
   const middleClickSel = document.getElementById("middleClickSel");
   const themeSel = document.getElementById("themeSel");
@@ -91,9 +92,6 @@
   const cpRecentEmpty = document.getElementById("cpRecentEmpty");
   const cpPreview = document.getElementById("cpPreview");
   const cpOk = document.getElementById("cpOk");
-  const accountBtn = document.getElementById("accountBtn");
-  const accountPanel = document.getElementById("accountPanel");
-  const accountClose = document.getElementById("accountClose");
   const issuePassword = document.getElementById("issuePassword");
   const issueBtn = document.getElementById("issueBtn");
   const issueResult = document.getElementById("issueResult");
@@ -114,6 +112,14 @@
   const noticesPanel = document.getElementById("noticesPanel");
   const noticesList = document.getElementById("noticesList");
   const noticesClose = document.getElementById("noticesClose");
+  const statsOverlay = document.getElementById("statsOverlay");
+  const stFps = document.getElementById("stFps");
+  const stMs = document.getElementById("stMs");
+  const stCache = document.getElementById("stCache");
+  const stDraw = document.getElementById("stDraw");
+  const stUp = document.getElementById("stUp");
+  const stDown = document.getElementById("stDown");
+  const stGraph = document.getElementById("stGraph");
   const chatBtn = document.getElementById("chatBtn");
   const chatBadge = document.getElementById("chatBadge");
   const chatDock = document.getElementById("chatDock");
@@ -127,9 +133,6 @@
   const chatClose = document.getElementById("chatClose");
   const toolbarEl = document.getElementById("toolbar");
   const chromeToggle = document.getElementById("chromeToggle");
-  const fpsVal = document.getElementById("fpsVal");
-  const cacheVal = document.getElementById("cacheVal");
-  const drawDetailVal = document.getElementById("drawDetailVal");
   const t = (key, params) => window.wdI18n.t(key, params);
   // 重ねがけ ("ghost+glow") は各名を合成表示
   const inkName = (k) => String(k || "").split("+").map((p) => t("inkL_" + p)).join("+");
@@ -177,29 +180,37 @@
   } catch {}
   // 簡易表示 (ズーム連動の描画レベル) と画質 (解像度スケール)。設定パネルから変更
   let simplifyMode = "auto"; // "auto" | "off"
-  let qualityMode = "high"; // "ultra" | "high" | "medium" | "low"
+  let qualityMode = "high"; // "ultra" | "high" | "medium" | "low" | "minimal"
   try {
     if (localStorage.getItem("wd_simplify") === "off") simplifyMode = "off";
     const savedQ = localStorage.getItem("wd_quality");
-    if (savedQ === "ultra" || savedQ === "medium" || savedQ === "low") qualityMode = savedQ;
+    if (["ultra", "medium", "low", "minimal"].includes(savedQ)) qualityMode = savedQ;
   } catch {}
   function dprCap() {
+    if (qualityMode === "minimal") return 0.75;
     return qualityMode === "low" ? 1 : qualityMode === "medium" ? 1.5 : 2;
   }
   // 発光の強さ (全テーマ統一) とシールド表示。設定パネルから変更
-  let glowMode = "medium"; // "off" | "weak" | "medium" | "strong"
+  let glowMode = "medium"; // "off" | "weak" | "medium" | "strong" | "excessive"
   let showShield = true;
+  // 統計オーバーレイ (既定は非表示)。表示中のみ500ms毎に更新する
+  let showStats = false;
+  // 直近フレーム時間の履歴 (統計グラフ用。最大120件のリング)
+  const frameMsHist = [];
+  // 直近フレームの簡易表示レベル (統計の描画表示用)
+  let renderDl = 0;
   try {
     const savedGlow = localStorage.getItem("wd_glow");
-    if (["off", "weak", "medium", "strong"].includes(savedGlow)) glowMode = savedGlow;
+    if (["off", "weak", "medium", "strong", "excessive"].includes(savedGlow)) glowMode = savedGlow;
     if (localStorage.getItem("wd_showShield") === "0") showShield = false;
+    if (localStorage.getItem("wd_showStats") === "1") showStats = true;
   } catch {}
   // 現在の描画DPR (resize時に設定。セル矩形のスナップ基準に使う)
   let viewDpr = 1;
   let trustedLevel = 5;
   let placeRadius = 1000;
   let hover = null;
-  let fpsEma = 0, fpsLastT = 0, fpsShownAt = 0;
+  let fpsEma = 0, fpsLastT = 0;
   let historyMode = false;
   let eyedropMode = false;
   let historyKey = null;

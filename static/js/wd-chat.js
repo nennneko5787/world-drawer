@@ -89,13 +89,10 @@
     li.dataset.id = String(m.id);
     const head = document.createElement("div");
     head.className = "chatHead";
-    const dot = document.createElement("span");
-    dot.className = "dot";
-    dot.style.background = safeUserColor(m.userColor);
-    head.appendChild(dot);
     const nameEl = document.createElement("span");
     nameEl.className = "nname";
     nameEl.textContent = m.name || t("anon");
+    nameEl.style.color = safeUserColor(m.userColor);
     head.appendChild(nameEl);
     const meta = document.createElement("span");
     meta.className = "nmeta";

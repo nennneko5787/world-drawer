@@ -157,6 +157,7 @@ def render_page(
         f'\n    <meta name="wd-ws" content="{html.escape(ws, quote=True)}">'
         f'\n    <meta name="wd-turnstile-site" content="{html.escape(sitekey, quote=True)}">'
         f'\n    <meta name="wd-prev-origins" content="{html.escape(prev_origins, quote=True)}">'
+        f'\n    <meta name="wd-ver" content="{html.escape(ver, quote=True)}">'
     )
     if sitekey:
         inject += (

@@ -26,10 +26,6 @@
         rankEl.className = "rrank";
         rankEl.textContent = String(r.rank ?? "?");
         li.appendChild(rankEl);
-        const dot = document.createElement("span");
-        dot.className = "dot";
-        dot.style.background = r.color || "#22aa66";
-        li.appendChild(dot);
         const label = document.createElement("span");
         label.className = "uname";
         const flagEl = (typeof makeFlagEl === "function") ? makeFlagEl(r.country) : null;
@@ -40,6 +36,7 @@
         const nameEl = document.createElement("span");
         nameEl.className = "nname";
         nameEl.textContent = r.name || t("anon");
+        nameEl.style.color = r.color || "#22aa66";
         label.appendChild(nameEl);
         const metaEl = document.createElement("span");
         metaEl.className = "nmeta";

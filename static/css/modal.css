@@ -1,4 +1,4 @@
-/* wd-modal.css — パネル系の共通モーダル化 + 設定タブ */
+/* wd-modal.css — パネル系の共通モーダル化 + 設定2ペイン */
 #modal-overlay {
   position: fixed; inset: 0; z-index: 40;
   background: rgba(0, 0, 0, .45);
@@ -15,6 +15,11 @@
   overflow-y: auto !important;
 }
 .wd-modal.hidden { display: none !important; }
+/* 設定は2ペインのため広めに */
+#settingsPanel.wd-modal {
+  width: min(600px, calc(100vw - 24px)) !important;
+  max-height: min(78vh, 680px) !important;
+}
 /* プレイヤーリストは他モーダルより一回り大きく (管理ボタンが並ぶため) */
 #userPanel.wd-modal {
   width: min(520px, calc(100vw - 24px)) !important;
@@ -24,15 +29,23 @@
   max-height: calc(min(80vh, 720px) - 64px);
   overflow-y: auto;
 }
-/* 設定タブ */
-.wd-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+/* 設定2ペイン (左=縦タブ・右=内容)。骨格はindex.htmlに静的記述 */
+.setBody { display: flex; gap: 12px; align-items: flex-start; min-height: 0; }
+.setContent { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; }
+/* 縦タブ (5タブ・長いラベル対応で広めに。折り返し可) */
+.wd-tabs { display: flex; flex-direction: column; gap: 4px; flex: none; width: 148px; }
 .wd-tabs button {
-  flex: 1; border: 1px solid var(--border); background: var(--seg);
-  color: var(--chrome-fg); border-radius: 8px; padding: 6px 4px;
-  font-size: 12px; cursor: pointer;
+  border: 1px solid transparent; background: transparent;
+  color: var(--chrome-fg); border-radius: 10px; padding: 8px 10px;
+  font-size: 13px; line-height: 1.35; cursor: pointer; text-align: left;
+  min-height: var(--touch, 44px);
+  border-left: 3px solid transparent;
 }
-.wd-tabs button.active { background: #111; color: #fff; }
-:root[data-theme="dark"] .wd-tabs button.active { background: #f0f0f2; color: #111; }
+.wd-tabs button.active {
+  background: var(--seg); color: var(--chrome-fg);
+  border-left-color: var(--accent, #111);
+}
+:root[data-theme="dark"] .wd-tabs button.active { background: var(--seg); }
 .wd-tabpane.hidden { display: none; }
 /* Turnstile枠: 中身のサイズは触らず、中央+すりガラスだけ */
 /* Turnstile表示中は背景もすりガラス (modal-overlayより上、widgetより下) */
@@ -66,4 +79,12 @@
     width: 100vw !important; max-height: 78vh !important;
     border-radius: 16px 16px 0 0 !important;
   }
+  /* スマホは上タブ+下内容 */
+  .setBody { flex-direction: column; }
+  .wd-tabs { flex-direction: row; width: auto; overflow-x: auto; }
+  .wd-tabs button {
+    flex: 1; white-space: nowrap; text-align: center;
+    border-left-color: transparent; border-bottom: 3px solid transparent;
+  }
+  .wd-tabs button.active { border-bottom-color: var(--accent, #111); }
 }

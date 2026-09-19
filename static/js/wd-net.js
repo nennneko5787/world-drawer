@@ -447,6 +447,21 @@
   let wsFailCount = 0;
   let wsGiveUp = false;
   let wsConnecting = false;
+  // WS送受信量 (統計オーバーレイ用。累積バイト+件数)
+  const wsTraffic = { upBytes: 0, downBytes: 0, upMsgs: 0, downMsgs: 0 };
+  function wsCountUp(d) {
+    try {
+      const n = d && typeof d.byteLength === "number" ? d.byteLength : String(d ?? "").length;
+      wsTraffic.upBytes += n;
+      wsTraffic.upMsgs++;
+    } catch {}
+  }
+  function wsCountDown(n) {
+    try {
+      wsTraffic.downBytes += Number(n) || 0;
+      wsTraffic.downMsgs++;
+    } catch {}
+  }
   // 素WS (Socket.IO廃止): ticket + Turnstile必須。ページ表示の度に検証。
   // 失敗時は指数バックオフで最大3回まで (無限ウィジェット防止)。それ以上は手動リロード。
   async function connectSocket() {
@@ -469,10 +484,15 @@
       ws.binaryType = "arraybuffer";
       let helloDone = false;
       socket = ws;
+      try {
+        const _origSend = ws.send.bind(ws);
+        ws.send = (d) => { wsCountUp(d); return _origSend(d); };
+      } catch {}
       ws.onopen = () => {
         ws.send(helloBin(ticket, ts));
       };
       ws.onmessage = (ev) => {
+        try { wsCountDown(ev.data && ev.data.byteLength ? ev.data.byteLength : 0); } catch {}
         // 完全バイナリ。Textフレームは送受信ともに使わない
         if (!(ev.data instanceof ArrayBuffer)) return;
         const buf = ev.data;
@@ -502,6 +522,8 @@
             myUidEl.textContent = `#${myUid}`;
           }
           fetchViewport();
+          // 既存オンラインユーザーの名前はjoinでは届かないためRESTで初回取得する
+          refreshOnlineUsers();
           return;
         }
         if (kind === 7 && buf.byteLength >= 13) {
@@ -628,7 +650,7 @@
       if (!u || !u.uid || u.uid === myUid) return; // 自分は除外
       seen.add(u.uid);
       const cur = remotes.get(u.uid) || {};
-      // /api/usersはuidのみ返すため、無い項目は既存値を維持 (名前消去防止)
+      // /api/usersは名前入りで返す。無い項目は既存値を維持 (名前消去防止)
       remotes.set(u.uid, { ...cur, uid: u.uid,
         name: u.name ?? cur.name, color: u.color ?? cur.color,
         level: u.level ?? cur.level ?? 1, country: u.country ?? cur.country,
@@ -689,7 +711,10 @@
       return;
     }
     if (cooldownUntil > Date.now()) {
-      toast(t("cooldownToast", { s: ((cooldownUntil - Date.now()) / 1000).toFixed(1) }));
+      const s = (typeof fmtRemain === "function")
+        ? fmtRemain((cooldownUntil - Date.now()) / 1000)
+        : ((cooldownUntil - Date.now()) / 1000).toFixed(1);
+      toast(t("cooldownToast", { s: s || "0.01" }));
       return;
     }
     const key = `${x},${y}`;
@@ -789,7 +814,8 @@
     const deadline = Date.now() + 3000;
     const update = () => {
       const left = Math.max(0, (deadline - Date.now()) / 1000);
-      undoBtn.textContent = t("undoFmt", { s: left.toFixed(1) });
+      const s = (typeof fmtRemain === "function") ? fmtRemain(left) : left.toFixed(1);
+      undoBtn.textContent = t("undoFmt", { s: s || "0.00" });
       if (left <= 0) cancelUndo();
     };
     update();

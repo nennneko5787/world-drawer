@@ -1,5 +1,14 @@
+/* pixDraw chrome (手書き・外部CSS依存なし)。
+ * 読み込み順: index.css → modal.css (後勝ち)。
+ * 密度は二分化: HUD (topbar/toolbar/dock) はcompact (32-36px級)、
+ * モーダル内は44px行の快適設計。
+ * 固定px配置は使わない: 高さはJS計測の --topbar-h / --toolbar-h 変数で追従する。
+ * キャンバス (#board) には触れない。
+ */
 :root {
   color-scheme: light;
+  --topbar-h: 52px;
+  --toolbar-h: 160px;
   --page: #888;
   --board: #fff;
   --chrome: rgba(255,255,255,.92);
@@ -15,6 +24,15 @@
   --toast-fg: #fff;
   --border: rgba(0,0,0,.12);
   --chip: #ffe082;
+  --accent: #111;
+  --on-accent: #fff;
+  --focus: #1a73e8;
+  --radius: 14px;
+  --radius-s: 10px;
+  --touch: 44px;
+  --hud-h: 34px;
+  --shadow: 0 8px 30px rgba(0,0,0,.25);
+  --shadow-s: 0 2px 10px rgba(0,0,0,.15);
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -33,126 +51,155 @@
   --toast-fg: #111;
   --border: rgba(255,255,255,.16);
   --chip: #8a6d00;
+  --accent: #f0f0f2;
+  --on-accent: #111;
+  --focus: #8ab4f8;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--page); font-family: system-ui, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; color: var(--chrome-fg); -webkit-touch-callout: none; }
 #board { position: fixed; inset: 0; width: 100vw; height: 100vh; width: 100dvw; height: 100dvh; display: block; touch-action: none; cursor: crosshair; background: var(--board); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 button, select, input { touch-action: manipulation; }
-#topbar, #toolbar, #profileBar, #settingsPanel, #userPanel, #rankingPanel, #historyPanel, #accountPanel, #adminPanel, #noticesPanel, #colorPanel, #toast-wrap, #undoBtn { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-#profileBar input, #accountPanel input, #adminPanel input, #colorPanel input, .accCode { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
+#topbar, #toolbar, #profileBar, #settingsPanel, #userPanel, #rankingPanel, #historyPanel, #adminPanel, #noticesPanel, #colorPanel, #toast-wrap, #undoBtn, #statsOverlay { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#profileBar input, #settingsPanel input, #adminPanel input, #colorPanel input, .accCode { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
 
+/* ---------- topbar (compact・単行) ---------- */
 #topbar {
-  position: fixed; top: 10px; left: 10px; right: 10px;
-  display: flex; gap: 8px; align-items: center; pointer-events: none; flex-wrap: wrap;
+  position: fixed; top: 8px; left: 8px; right: 8px;
+  display: flex; gap: 6px 12px; align-items: center; pointer-events: none; flex-wrap: wrap;
+  line-height: 1.25;
 }
 #topbar > * { pointer-events: auto; }
+/* 目的別グループ (ステータス/人/連絡/システム)。グループ間の隙間で区切る */
+.tbGroup { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; pointer-events: none; }
+.tbGroup > * { pointer-events: auto; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+  outline: 2px solid var(--focus); outline-offset: 2px;
+}
 .brand {
   background: var(--brand-bg); color: var(--brand-fg); font-weight: 700;
-  padding: 8px 12px; border-radius: 999px; font-size: 14px;
-  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px; font-size: 13px; line-height: 1.25;
+  display: flex; align-items: center; gap: 6px; min-height: var(--hud-h);
 }
-.brand .bi { font-size: 15px; }
-.brand img.logo { width: 20px; height: 20px; object-fit: contain; }
+.brand .bi { font-size: 14px; }
+.brand img.logo { width: 18px; height: 18px; object-fit: contain; }
 .pill {
   background: var(--chrome); color: var(--chrome-fg); border: 1px solid var(--border);
-  padding: 7px 12px; border-radius: 999px; font-size: 13px;
-  box-shadow: 0 2px 10px rgba(0,0,0,.15);
+  padding: 4px 10px; border-radius: 999px; font-size: 12px; line-height: 1.25;
+  min-height: var(--hud-h);
+  box-shadow: var(--shadow-s); backdrop-filter: blur(8px);
+  display: inline-flex; align-items: center; gap: 6px;
 }
-a.pill { text-decoration: none; display: inline-flex; align-items: center; }
-button.pill.clickable { cursor: pointer; font: inherit; }
+a.pill { text-decoration: none; }
+button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
 .pill.cool { background: #222; color: #ffd54a; border-color: #000; }
 :root[data-theme="dark"] .pill.cool { background: #000; }
+.pill .bi { font-size: 14px; }
 
+/* ---------- settings ---------- */
+/* 位置は modal.css (.wd-modal 中央配置) に任せる。ここでは見た目のみ */
 #settingsPanel {
-  position: fixed; top: 56px; right: 10px; z-index: 25;
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; gap: 10px;
   background: var(--chrome); color: var(--chrome-fg);
-  border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25); padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 14px 16px;
+  backdrop-filter: blur(12px);
+  font-size: 14px; line-height: 1.4;
 }
 #settingsPanel.hidden { display: none; }
-.setRow { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; user-select: none; }
+.setRow { display: flex; gap: 10px; align-items: center; font-size: inherit; cursor: pointer; user-select: none; min-height: var(--touch); padding: 6px 2px; }
+/* チェックボックスは大きめ＋アクセント色。行全体が当たり判定 */
+.setRow input[type="checkbox"] { width: 22px; height: 22px; flex: none; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .setRow select {
+  flex: 1; min-width: 0; font-size: inherit; padding: 6px 8px; min-height: 36px;
   background: var(--btn); color: var(--btn-fg);
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 4px 6px; font-size: 13px;
 }
 
+/* ---------- profile bar ---------- */
 #profileBar {
-  position: fixed; top: 56px; left: 10px;
+  position: fixed; top: calc(var(--topbar-h) + 8px); left: 10px;
   display: flex; gap: 6px; align-items: center;
   background: var(--chrome); color: var(--chrome-fg); border: 1px solid var(--border);
-  border-radius: 999px; padding: 5px 8px 5px 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,.15);
+  border-radius: 999px; padding: 3px 6px 3px 10px;
+  box-shadow: var(--shadow-s); backdrop-filter: blur(8px);
+  line-height: 1.25;
 }
 #profileName {
   border: none; outline: none; background: transparent; color: inherit;
-  font-size: 13px; width: 110px;
+  font-size: 12px; width: 100px; padding: 2px 0;
 }
 #profileColorBtn {
   border: 1px solid var(--border); background: var(--btn); border-radius: 999px;
-  padding: 3px; cursor: pointer; display: inline-flex;
+  padding: 2px; cursor: pointer; display: inline-flex; min-width: 36px; min-height: 28px;
+  align-items: center; justify-content: center;
 }
-#profileColorChip { width: 26px; height: 20px; border-radius: 999px; display: block; }
+#profileColorChip { width: 24px; height: 18px; border-radius: 999px; display: block; }
 #profileSave {
-  border: none; background: #111; color: #fff; border-radius: 999px;
-  padding: 5px 12px; font-size: 12px; cursor: pointer;
+  border: none; background: var(--accent); color: var(--on-accent); border-radius: 999px;
+  padding: 4px 10px; font-size: 12px; line-height: 1.25; cursor: pointer; min-height: 28px;
 }
-:root[data-theme="dark"] #profileSave { background: #f0f0f2; color: #111; }
-#myUid { font-size: 12px; color: var(--hint); }
+#myUid { font-size: 11px; color: var(--hint); }
 
-#userPanel {
-  position: fixed; top: 56px; right: 10px; z-index: 25;
-  min-width: 190px; max-width: 250px; max-height: 44vh; overflow: auto;
+/* ---------- side panels (card共通) ---------- */
+/* 位置は modal.css (.wd-modal 中央配置) に任せる。ここでは見た目とサイズのみ */
+#userPanel, #rankingPanel, #historyPanel, #adminPanel, #noticesPanel {
   background: var(--chrome); color: var(--chrome-fg);
-  border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25); padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 12px 14px;
+  backdrop-filter: blur(12px);
+  font-size: 13px; line-height: 1.4;
+}
+#userPanel {
+  min-width: 190px; max-width: 250px; max-height: 44vh; overflow: auto;
 }
 #rankingPanel {
-  position: fixed; top: 56px; right: 10px; z-index: 25;
   min-width: 220px; max-width: 280px; max-height: 60vh; overflow: auto;
-  background: var(--chrome); color: var(--chrome-fg);
-  border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25); padding: 8px 10px;
 }
 #userPanel.hidden, #rankingPanel.hidden, #historyPanel.hidden { display: none; }
 .panelTitle {
-  font-size: 12px; color: var(--hint); margin: 2px 2px 6px;
+  font-size: 13px; font-weight: 700; margin: 0 0 8px;
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
 }
+.panelTitle button { min-width: 34px; min-height: 30px; padding: 2px 6px; }
 #userList, #rankingList, #historyList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 #userList li, #rankingList li, #historyList li { display: flex; align-items: center; gap: 8px; }
-#userList .dot, #rankingList .dot, .hwho .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); flex: none; display: inline-block; }
+.hwho .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); flex: none; display: inline-block; }
 #rankingList .rrank { min-width: 2em; text-align: right; font-variant-numeric: tabular-nums; color: var(--hint); flex: none; }
 #userList .uname, #rankingList .uname { flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; gap: 4px; }
 #userList .uname .nname, #rankingList .uname .nname, #historyList .hwho .nname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#userList .uname .nmeta, #rankingList .uname .nmeta, #historyList .hwho .nmeta { flex: none; color: var(--hint); font-size: 12px; }
+#userList .uname .nmeta, #rankingList .uname .nmeta, #historyList .hwho .nmeta { flex: none; color: var(--hint); font-size: 11px; }
 .flag { width: 18px; height: auto; border-radius: 3px; flex: none; vertical-align: middle; }
 .flagFallback { font-size: 11px; font-weight: 700; color: var(--hint); border: 1px solid var(--border); border-radius: 3px; padding: 0 3px; flex: none; }
 .hwho .flag { width: 16px; }
 .selfTag { font-size: 11px; color: var(--hint); }
 .blockBtn {
   border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg);
-  border-radius: 8px; padding: 3px 8px; font-size: 11px; cursor: pointer; flex: none;
+  border-radius: 8px; padding: 2px 8px; font-size: 11px; line-height: 1.25; cursor: pointer; flex: none;
+  min-height: 30px;
 }
-#historyClose, #rankingClose, #accountClose, #adminClose, #noticesClose, #colorClose, #settingsClose, #userClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
+#historyClose, #rankingClose, #adminClose, #noticesClose, #colorClose, #settingsClose, #userClose, #chatClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
 
+/* ---------- undo ---------- */
 #undoBtn {
-  position: fixed; right: 10px; bottom: 178px; z-index: 25;
+  position: fixed; right: 10px; bottom: calc(var(--toolbar-h) + 10px); z-index: 25;
   background: var(--chrome); color: var(--chrome-fg);
   border: 1px solid var(--border); border-radius: 999px;
-  padding: 8px 14px; font-size: 13px; cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25);
+  padding: 6px 12px; font-size: 12px; line-height: 1.25; cursor: pointer;
+  min-height: 34px;
+  box-shadow: var(--shadow); backdrop-filter: blur(8px);
 }
 #undoBtn.hidden { display: none; }
 
+/* ---------- color dock (非モーダル) ---------- */
 #colorPanel {
-  position: fixed; left: 50%; bottom: 178px; transform: translateX(-50%); z-index: 25;
+  position: fixed; left: 50%; bottom: calc(var(--toolbar-h) + 10px); transform: translateX(-50%); z-index: 25;
   width: min(340px, calc(100vw - 20px)); max-height: calc(100vh - 220px); overflow-y: auto;
   background: var(--chrome); color: var(--chrome-fg);
-  border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25); padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 10px 12px;
+  backdrop-filter: blur(12px);
   display: flex; flex-direction: column; gap: 8px;
+  font-size: 12px; line-height: 1.4;
 }
 #colorPanel.hidden { display: none; }
 .cpTop { display: flex; gap: 8px; }
@@ -166,7 +213,7 @@ button.pill.clickable { cursor: pointer; font: inherit; }
 .cpRow input[type="number"] {
   background: var(--btn); color: var(--btn-fg);
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 5px 6px; font-size: 12px; width: 100%; min-width: 0;
+  padding: 4px 6px; font-size: 12px; width: 100%; min-width: 0;
 }
 .cpRow input[type="range"] {
   -webkit-appearance: none; appearance: none;
@@ -190,87 +237,58 @@ button.pill.clickable { cursor: pointer; font: inherit; }
 #cpHex {
   background: var(--btn); color: var(--btn-fg);
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 5px 8px; font-size: 12px; width: 90px;
+  padding: 4px 8px; font-size: 12px; width: 90px;
 }
 .cpPalTitle { font-size: 12px; color: var(--hint); margin: 0 2px; }
 #cpBasicGrid, #cpRecentGrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
 #cpBasicGrid button, #cpRecentGrid button {
   aspect-ratio: 1; border-radius: 5px; border: 1px solid rgba(0,0,0,.25);
-  padding: 0; cursor: pointer;
+  padding: 0; cursor: pointer; min-height: 0;
 }
 .cpRecentEmpty { font-size: 12px; color: var(--hint); margin: 0 2px 4px; }
 .cpRecentEmpty.hidden { display: none; }
 .cpFoot { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
 #cpPreview { width: 34px; height: 26px; border-radius: 7px; border: 1px solid var(--border); }
 #cpOk {
-  border: none; background: #111; color: #fff; border-radius: 9px;
-  padding: 7px 16px; font-size: 13px; cursor: pointer;
+  border: none; background: var(--accent); color: var(--on-accent); border-radius: 9px;
+  padding: 6px 14px; font-size: 12px; line-height: 1.25; cursor: pointer; min-height: 34px;
 }
-:root[data-theme="dark"] #cpOk { background: #f0f0f2; color: #111; }
 
-#accountPanel {
-  position: fixed; top: 110px; left: 10px; z-index: 25;
-  width: min(280px, calc(100vw - 20px));
-  background: var(--chrome); color: var(--chrome-fg);
-  border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25); padding: 8px 10px;
-}
-#accountPanel.hidden { display: none; }
+/* ---------- admin / notices ---------- */
 #adminBtn.hidden { display: none; }
 #adminPanel {
-  position: fixed; top: 110px; left: 10px; z-index: 25;
   width: min(280px, calc(100vw - 20px));
-  background: var(--chrome); color: var(--chrome-fg);
-  border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25); padding: 8px 10px;
 }
 #adminPanel.hidden { display: none; }
 #adminResult { overflow-wrap: anywhere; min-height: 1em; }
-#noticesBadge {
+#noticesBadge, #chatBadge {
   background: #e33; color: #fff; border-radius: 999px;
   font-size: 11px; font-weight: 700; padding: 1px 7px; margin-left: 4px;
+  line-height: 1.25;
 }
-#noticesBadge.hidden { display: none; }
+#noticesBadge.hidden, #chatBadge.hidden { display: none; }
 #noticesPanel {
-  position: fixed; top: 110px; right: 10px; z-index: 25;
   width: min(320px, calc(100vw - 20px)); max-height: 50vh; overflow: auto;
-  background: var(--chrome); color: var(--chrome-fg);
-  border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25); padding: 8px 10px;
 }
 #noticesPanel.hidden { display: none; }
-#noticesClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
 #noticesList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
 .noticesItem { border-top: 1px solid var(--border); padding-top: 8px; }
 .noticesItem:first-child { border-top: none; padding-top: 0; }
 .noticesHead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .noticesTime { font-size: 11px; color: var(--hint); flex: none; }
 .noticesBody { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
-.noticesBody p { margin: 0 0 6px; }
-.noticesBody p:last-child { margin-bottom: 0; }
-.noticesBody a { color: #1a73e8; overflow-wrap: anywhere; }
-:root[data-theme="dark"] .noticesBody a { color: #8ab4f8; }
-.noticesBody code { background: var(--seg); border-radius: 4px; padding: 0 4px; font-size: 12px; }
-.noticesBody pre { background: var(--seg); border-radius: 8px; padding: 6px 8px; overflow: auto; white-space: pre; }
-.noticesBody pre code { background: none; padding: 0; }
-.noticesBody ul, .noticesBody ol { margin: 4px 0 6px; padding-left: 20px; }
-.noticesBody blockquote { margin: 4px 0 6px; padding: 2px 8px; border-left: 3px solid var(--border); color: var(--hint); }
-.noticesBody h1, .noticesBody h2, .noticesBody h3, .noticesBody h4, .noticesBody h5, .noticesBody h6 { margin: 6px 0 4px; font-size: 14px; }
-.noticesBody hr { border: none; border-top: 1px solid var(--border); margin: 6px 0; }
 .noticesEmpty { color: var(--hint); }
-/* ---- chat dock (モーダル化しない常駐ドック。overlayなし・キャンバス操作を塞がない) ---- */
-#chatBadge {
-  background: #e33; color: #fff; border-radius: 999px;
-  font-size: 11px; font-weight: 700; padding: 1px 7px; margin-left: 4px;
-}
-#chatBadge.hidden { display: none; }
+
+/* ---------- chat dock (モーダル化しない常駐ドック。overlayなし・キャンバス操作を塞がない) ---------- */
 #chatDock {
-  position: fixed; left: 10px; bottom: 190px; z-index: 25;
+  position: fixed; left: 10px; bottom: calc(var(--toolbar-h) + 10px); z-index: 25;
   width: min(320px, calc(100vw - 20px)); max-height: 46vh;
   display: flex; flex-direction: column; gap: 6px;
   background: var(--chrome); color: var(--chrome-fg);
-  border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25); padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 10px 12px;
+  backdrop-filter: blur(12px);
+  font-size: 13px; line-height: 1.4;
 }
 #chatDock.hidden { display: none; }
 #chatList {
@@ -281,16 +299,16 @@ button.pill.clickable { cursor: pointer; font: inherit; }
 .chatMsg { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .chatMsg.chatMine .chatBody { background: var(--seg); border-radius: 8px; padding: 4px 8px; }
 .chatHead { display: flex; align-items: center; gap: 5px; font-size: 12px; min-width: 0; }
-.chatHead .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); flex: none; display: inline-block; }
 .chatHead .nname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chatHead .nmeta { flex: none; color: var(--hint); font-size: 11px; }
 .chatHead .ctime { flex: none; color: var(--hint); font-size: 11px; }
-.chatHead .blockBtn { padding: 1px 6px; font-size: 10px; }
+.chatHead .blockBtn { padding: 1px 6px; font-size: 10px; min-height: 0; }
 .chatBody { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
 .chatEmpty { color: var(--hint); }
 #chatMore, #chatNew {
   border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg);
-  border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer; align-self: center;
+  border-radius: 999px; padding: 3px 12px; font-size: 12px; line-height: 1.25; cursor: pointer; align-self: center;
+  min-height: 32px;
 }
 #chatMore.hidden, #chatNew.hidden { display: none; }
 #chatForm { display: flex; gap: 6px; align-items: center; }
@@ -298,46 +316,52 @@ button.pill.clickable { cursor: pointer; font: inherit; }
   flex: 1; min-width: 0;
   background: var(--btn); color: var(--btn-fg);
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 7px 8px; font-size: 13px;
+  padding: 6px 8px; font-size: 13px;
   user-select: text; -webkit-user-select: text; -webkit-touch-callout: default;
 }
 #chatCount { font-size: 11px; color: var(--hint); flex: none; font-variant-numeric: tabular-nums; }
 #chatSend {
-  border: 1px solid var(--border); background: #111; color: #fff;
-  border-radius: 8px; padding: 7px 10px; font-size: 13px; cursor: pointer; flex: none;
+  border: none; background: var(--accent); color: var(--on-accent);
+  border-radius: var(--radius-s); padding: 6px 10px; font-size: 13px; line-height: 1.25; cursor: pointer; flex: none;
+  min-height: 36px; min-width: 40px;
 }
-:root[data-theme="dark"] #chatSend { background: #f0f0f2; color: #111; }
 #chatSend:disabled { opacity: .45; cursor: not-allowed; }
-#chatClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
+
+/* ---------- account (設定タブ内) ---------- */
 .accSection { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-top: 1px solid var(--border); }
 .accSection:first-of-type { border-top: none; }
-.accLabel { font-size: 12px; color: var(--hint); }
-#accountPanel .setRow { white-space: nowrap; }
-#accountPanel .setRow span { white-space: nowrap; flex: none; }
-.accSection input {
+.accSection button {
+  border: none; background: var(--accent); color: var(--on-accent);
+  border-radius: 10px; padding: 8px 12px; font-size: 13px; line-height: 1.4;
+  cursor: pointer; min-height: 40px; width: 100%;
+}
+.accSection input:not([type="checkbox"]) {
   background: var(--btn); color: var(--btn-fg);
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 6px 8px; font-size: 13px; width: 100%;
+  padding: 8px 10px; font-size: 14px; width: 100%;
 }
-.accSection input[type="checkbox"] {
-  width: auto; flex: none; padding: 0; margin: 0;
-}
-.accSection button {
-  border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg);
-  border-radius: 8px; padding: 6px 8px; font-size: 13px; cursor: pointer;
-}
+.accLabel { font-size: 12px; color: var(--hint); }
+#accountPane .setRow { white-space: nowrap; }
+#accountPane .setRow span { white-space: nowrap; flex: none; }
 .accCode {
   font-size: 18px; font-weight: 700; letter-spacing: 2px; text-align: center;
   background: var(--seg); border-radius: 8px; padding: 8px; user-select: all;
 }
 .accCode.hidden { display: none; }
+/* ---------- about (設定タブ内) ---------- */
+.aboutDesc { font-size: 13px; margin: 0 0 8px; }
+.aboutLinks { display: flex; gap: 8px; }
+.aboutLinks a {
+  flex: 1; display: inline-flex; gap: 6px; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--btn);
+  color: var(--btn-fg); text-decoration: none; font-size: 13px; line-height: 1.25;
+  padding: 6px 4px; min-height: var(--touch);
+}
+.aboutVer { font-size: 11px; color: var(--hint); margin: 8px 0 0; text-align: right; font-variant-numeric: tabular-nums; }
 
+/* ---------- history ---------- */
 #historyPanel {
-  position: fixed; top: 110px; right: 10px; z-index: 25;
   width: min(300px, calc(100vw - 20px)); max-height: 50vh; overflow: auto;
-  background: var(--chrome); color: var(--chrome-fg);
-  border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25); padding: 8px 10px;
 }
 #historyList .chip {
   width: 22px; height: 22px; border-radius: 6px; flex: none;
@@ -349,104 +373,128 @@ button.pill.clickable { cursor: pointer; font: inherit; }
 #historyList .htime { font-size: 11px; color: var(--hint); }
 #historyList .muted { color: var(--hint); }
 
+/* ---------- stats overlay (表示専用・操作を塞がない) ---------- */
+#statsOverlay {
+  position: fixed; left: 10px; top: calc(var(--topbar-h) + 48px); z-index: 24;
+  width: 248px;
+  background: var(--chrome); color: var(--chrome-fg);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 10px 12px;
+  backdrop-filter: blur(12px);
+  pointer-events: none; font-size: 12px; line-height: 1.4;
+}
+#statsOverlay.hidden { display: none; }
+#statsOverlay .statsTitle { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+#statsOverlay dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; }
+#statsOverlay dl > div { display: contents; }
+#statsOverlay dt { color: var(--hint); }
+#statsOverlay dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+#stGraph { width: 100%; height: 64px; display: block; margin-top: 6px; }
+
+/* ---------- toast (トップバー下に固定) ---------- */
 #toast-wrap {
-  position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+  position: fixed; left: 50%; transform: translateX(-50%);
+  top: calc(var(--topbar-h) + 8px);
   display: flex; flex-direction: column; gap: 8px; align-items: center;
   /* モーダル(50)・Turnstile枠(60)より上で常時可視。操作は妨げない */
   pointer-events: none; z-index: 70;
+  width: max-content; max-width: calc(100vw - 20px);
 }
 .toast {
-  background: var(--toast); color: var(--toast-fg); padding: 10px 16px;
-  border-radius: 12px; font-size: 14px; box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  background: var(--toast); color: var(--toast-fg); padding: 8px 14px;
+  border-radius: 12px; font-size: 13px; line-height: 1.4; box-shadow: 0 4px 20px rgba(0,0,0,.3);
   animation: pop .25s ease-out;
   border: 1px solid var(--border);
-  pointer-events: auto;
+  pointer-events: auto; text-align: center;
 }
 .toast.reward { border-color: gold; box-shadow: 0 0 18px rgba(255,215,0,.6); }
 .toastBtn {
   margin-left: 8px; flex: none;
   border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg);
-  border-radius: 8px; padding: 4px 10px; font-size: 13px; cursor: pointer;
+  border-radius: 8px; padding: 3px 10px; font-size: 12px; line-height: 1.25; cursor: pointer;
+  min-height: 32px;
 }
 @keyframes pop { from { transform: scale(.9) translateY(-6px); opacity: 0; } }
 
+/* ---------- toolbar ---------- */
 #toolbar {
-  position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+  position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%);
   width: min(860px, calc(100vw - 20px));
-  background: var(--bar); backdrop-filter: blur(8px);
-  border: 1px solid var(--border); border-radius: 16px;
-  box-shadow: 0 8px 30px rgba(0,0,0,.25);
-  padding: 2px 12px 10px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--bar); backdrop-filter: blur(12px);
+  border: 1px solid var(--border); border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 2px 10px 8px; display: flex; flex-direction: column; gap: 6px;
+  line-height: 1.25;
 }
 #chromeToggle {
   align-self: stretch; background: transparent; border: none; cursor: pointer;
-  color: var(--hint); font-size: 14px; line-height: 1; padding: 4px 0 0; min-height: 20px;
+  color: var(--hint); font-size: 12px; line-height: 1; padding: 2px 0 0; min-height: 18px; margin-bottom: 0;
 }
 #toolbar.collapsed { padding-bottom: 2px; }
 #toolbar.collapsed .row, #toolbar.collapsed .hint { display: none; }
 #draftBar.hidden { display: none; }
 #draftBar { justify-content: center; }
 #draftUndo:disabled { opacity: .45; cursor: not-allowed; }
-body.chromeHidden #undoBtn { bottom: 12px; }
-.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
+body.chromeHidden #undoBtn { bottom: 10px; }
+.row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; }
 #colorBtn {
   border: 2px solid var(--border); border-radius: 10px; padding: 2px;
-  background: var(--btn); cursor: pointer; min-height: 40px;
+  background: var(--btn); cursor: pointer; min-height: 36px;
 }
 #colorBtn:disabled { opacity: .35; cursor: not-allowed; }
-#colorChip { width: 40px; height: 30px; border-radius: 7px; display: block; }
+#colorChip { width: 38px; height: 28px; border-radius: 7px; display: block; }
 #swatches { display: flex; gap: 6px; flex-wrap: wrap; }
 #swatches.disabled { opacity: .35; pointer-events: none; }
 .sw { width: 26px; height: 26px; border-radius: 8px; border: 2px solid rgba(0,0,0,.2); cursor: pointer; padding: 0; }
 :root[data-theme="dark"] .sw { border-color: rgba(255,255,255,.3); }
 .sw.sel { border-color: #111; transform: scale(1.12); }
 :root[data-theme="dark"] .sw.sel { border-color: #fff; }
-.seg { display: flex; gap: 6px; background: var(--seg); padding: 4px; border-radius: 12px; }
+.seg { display: flex; gap: 4px; background: var(--seg); padding: 3px; border-radius: 12px; }
 .seg button {
   border: 1px solid transparent; background: var(--btn); color: var(--btn-fg); border-radius: 9px;
-  padding: 7px 10px; font-size: 13px; cursor: pointer; min-height: 36px;
-  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 9px; font-size: 12px; line-height: 1.25; cursor: pointer; min-height: 34px;
+  display: inline-flex; align-items: center; gap: 5px; margin-bottom: 0;
 }
-.seg button .bi { font-size: 15px; }
-.seg button.active { background: #111; color: #fff; }
-:root[data-theme="dark"] .seg button.active { background: #f0f0f2; color: #111; }
+.seg button .bi { font-size: 14px; }
+.seg button.active { background: var(--accent); color: var(--on-accent); }
 .seg button:disabled { opacity: .45; cursor: not-allowed; }
-.seg button b { background: var(--chip); border-radius: 6px; padding: 0 5px; margin-left: 2px; color: #111; }
+.seg button b { background: var(--chip); border-radius: 6px; padding: 0 5px; margin-left: 2px; color: #111; font-size: 11px; }
 .hint { font-size: 11px; color: var(--hint); text-align: center; }
 
 /* スマホ・タブレット */
 @media (max-width: 700px) {
-  #topbar { gap: 6px; top: 8px; left: 8px; right: 8px; }
-  .pill { padding: 6px 10px; font-size: 12px; }
+  :root { --topbar-h: 96px; --toolbar-h: 220px; }
+  #topbar { gap: 6px 10px; top: 6px; left: 6px; right: 6px; }
+  .pill { padding: 5px 10px; font-size: 12px; min-height: 36px; display: inline-flex; align-items: center; }
+  button.pill.clickable { min-height: 36px; }
   .brand span { display: none; }
-  .brand { padding: 7px 10px; }
-  #profileBar { top: auto; bottom: 178px; left: 8px; padding: 4px 6px 4px 10px; }
-  #profileName { width: 76px; font-size: 12px; }
+  .brand { padding: 5px 9px; min-height: 36px; }
+  /* プロフィールバーは上部へ (下部はツールバー・ドック帯) */
+  #profileBar { top: calc(var(--topbar-h) + 6px); bottom: auto; left: 6px; padding: 3px 5px 3px 8px; }
+  #profileName { width: 72px; font-size: 12px; }
   #myUid { display: none; }
-  #toolbar { bottom: 8px; padding: 2px 8px calc(8px + env(safe-area-inset-bottom)); gap: 6px; }
-  /* 折り返しで縦に膨らませず横スクロールに (描画領域を確保) */
-  #toolbar .row { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; }
-  #toolbar .row::-webkit-scrollbar { display: none; }
+  #toolbar { bottom: 6px; padding: 2px 6px calc(6px + env(safe-area-inset-bottom)); gap: 6px; }
+  /* 2段レイアウト (横スクロールで隠さない。行内・seg内で折り返す) */
+  #toolbar .row { flex-wrap: wrap; overflow-x: visible; justify-content: center; }
   #toolbar .row > * { flex: none; }
-  #swatches { flex-wrap: nowrap; overflow: visible; }
-  body.chromeHidden #profileBar { bottom: calc(52px + env(safe-area-inset-bottom)); }
-  body.chromeHidden #undoBtn { bottom: calc(52px + env(safe-area-inset-bottom)); }
-  .seg { gap: 4px; }
-  .seg button { padding: 8px 9px; font-size: 12px; min-height: 42px; min-width: 42px; justify-content: center; }
-  .seg button span { display: none; }
+  /* swatchesだけは縮小・内側折り返しを許可 (max-contentで画面外にはみ出すのを防止) */
+  #toolbar .row > #swatches { flex: 1 1 220px; min-width: 0; }
+  #swatches { flex-wrap: wrap; overflow: visible; justify-content: center; }
+  body.chromeHidden #profileBar { top: calc(var(--topbar-h) + 6px); }
+  .seg { gap: 4px; flex-wrap: wrap; justify-content: center; max-width: 100%; }
+  .seg button { padding: 6px 7px; font-size: 11px; min-height: 36px; min-width: 36px; justify-content: center; }
+  .seg button span { display: inline; font-size: 10px; }
   .seg button b { margin-left: 0; }
   .sw { width: 30px; height: 30px; }
-  #colorBtn { min-height: 44px; }
-  #colorChip { width: 42px; height: 32px; }
+  #colorBtn { min-height: 40px; }
+  #colorChip { width: 40px; height: 30px; }
   .hint { display: none; }
-  #userPanel, #historyPanel, #accountPanel, #adminPanel, #noticesPanel, #settingsPanel { max-height: 52vh; }
-  /* チャットドックはプロフィールバー・ツールバーと重ねず上に積む (overlayなし) */
-  #chatDock {
-    left: 8px; right: 8px;
-    width: auto; max-height: 44vh;
-    bottom: calc(228px + env(safe-area-inset-bottom));
-  }
-  body.chromeHidden #chatDock { bottom: calc(104px + env(safe-area-inset-bottom)); }
-  #toast-wrap { top: 54px; width: calc(100vw - 20px); }
+  #userPanel, #historyPanel, #adminPanel, #noticesPanel, #settingsPanel { max-height: 52vh; }
+  /* 下部帯はツールバー高さに追従 */
+  #undoBtn { right: 8px; }
+  #chatDock { left: 6px; right: 6px; width: auto; max-height: 40vh; }
+  #colorPanel { left: 6px; right: 6px; width: auto; transform: none; max-height: 52vh; }
+  #statsOverlay { left: 6px; width: 220px; }
+  #toast-wrap { width: calc(100vw - 20px); }
   .toast { font-size: 13px; text-align: center; }
 }

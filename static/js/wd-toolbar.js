@@ -176,8 +176,11 @@
       refreshColorUI();
     };
   });
-  // 一覧と設定はモーダル排他 (wd-modal.js)
-  onlineEl.onclick = () => openModal(userPanel);
+  // 一覧と設定はモーダル排他 (wd-modal.js)。開くたび名前を最新化する
+  onlineEl.onclick = () => {
+    try { if (typeof refreshOnlineUsers === "function") refreshOnlineUsers(); } catch {}
+    openModal(userPanel);
+  };
   function flagCode(cc) {
     if (typeof cc !== "string" || !/^[A-Za-z]{2}$/.test(cc)) return "";
     const up = cc.toUpperCase();
@@ -240,6 +243,7 @@
     document.body.classList.toggle("chromeHidden", chromeHidden);
     const icon = chromeToggle.querySelector("i");
     if (icon) icon.className = chromeHidden ? "bi bi-chevron-up" : "bi bi-chevron-down";
+    try { if (typeof measureChrome === "function") measureChrome(); } catch {}
   }
   chromeToggle.onclick = () => {
     chromeHidden = !chromeHidden;
@@ -250,8 +254,7 @@
     resize();
   };
   applyChrome();
-  accountBtn.onclick = () => openModal(accountPanel);
-  accountClose.onclick = () => closeAllModals();
+  // アカウント引っ越しは設定の「アカウント」タブに統合 (accountPane)。入口は設定ボタンのみ
   countryChk.checked = myShowCountry;
   countryChk.onchange = saveShowCountry;
   issueBtn.onclick = async () => {
@@ -359,7 +362,7 @@
     qualitySel.value = qualityMode;
     qualitySel.onchange = () => {
       const v = qualitySel.value;
-      qualityMode = v === "ultra" || v === "medium" || v === "low" ? v : "high";
+      qualityMode = ["ultra", "high", "medium", "low", "minimal"].includes(v) ? v : "high";
       try {
         localStorage.setItem("wd_quality", qualityMode);
       } catch {}
@@ -371,7 +374,7 @@
     glowSel.value = glowMode;
     glowSel.onchange = () => {
       const v = glowSel.value;
-      glowMode = ["off", "weak", "medium", "strong"].includes(v) ? v : "medium";
+      glowMode = ["off", "weak", "medium", "strong", "excessive"].includes(v) ? v : "medium";
       try {
         localStorage.setItem("wd_glow", glowMode);
       } catch {}
@@ -386,6 +389,18 @@
         localStorage.setItem("wd_showShield", showShield ? "1" : "0");
       } catch {}
       markDirty();
+    };
+  }
+  if (statsToggle) {
+    statsToggle.checked = showStats;
+    statsToggle.onchange = () => {
+      showStats = statsToggle.checked;
+      try {
+        localStorage.setItem("wd_showStats", showStats ? "1" : "0");
+      } catch {}
+      try {
+        if (typeof applyStatsOverlay === "function") applyStatsOverlay();
+      } catch {}
     };
   }
   // 右・中クリックのタップ動作カスタマイズ (ドラッグは常に移動のまま)

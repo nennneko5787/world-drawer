@@ -47,6 +47,7 @@
   function glowBlur(s) {
     if (glowMode === "off") return 0;
     if (glowMode === "weak") return Math.max(4, s * 0.4);
+    if (glowMode === "excessive") return s * 2 + 24;
     if (glowMode === "strong") return s * 1.2 + 12;
     return Math.max(6, s * 0.8);
   }
@@ -150,26 +151,22 @@
   // ---------- render (infinite: visible only) ----------
   function render(now) {
     const time = now / 1000;
-    // FPS計測 (EMA。設定パネルに500ms毎表示)
+    // FPS計測 (EMA)。統計オーバーレイの表示・グラフ用に履歴も残す
     if (fpsLastT > 0) {
       const dt = now - fpsLastT;
       if (dt > 0 && dt < 1000) {
         const fps = 1000 / dt;
         fpsEma = fpsEma === 0 ? fps : fpsEma * 0.9 + fps * 0.1;
+        frameMsHist.push(dt);
+        if (frameMsHist.length > 120) frameMsHist.shift();
       }
     }
     fpsLastT = now;
-    // 最高画質は常にフル詳細 (従来描画)。それ以外は簡易表示設定に従う
-    const dl = qualityMode === "ultra" ? 0 : detailLevel();
+    // 最高画質は常にフル詳細 (従来描画)。最低はズームに関わらず簡易Lv2以上に固定。
+    // それ以外は簡易表示設定に従う
+    const dl = qualityMode === "ultra" ? 0 : qualityMode === "minimal" ? Math.max(2, detailLevel()) : detailLevel();
+    renderDl = dl;
     const ultra = qualityMode === "ultra";
-    if (now - fpsShownAt > 500) {
-      fpsShownAt = now;
-      if (fpsVal) fpsVal.textContent = String(Math.round(fpsEma));
-      if (cacheVal) cacheVal.textContent = String(pixels.size);
-      if (drawDetailVal) {
-        drawDetailVal.textContent = dl >= 3 ? t("qdL3") : dl === 2 ? t("qdL2") : dl === 1 ? t("qdL1") : t("qdFull");
-      }
-    }
     isDark = document.documentElement.dataset.theme === "dark";
     const vw = viewW(), vh = viewH();
     // 変化なし・虹色アニメなしなら描画スキップ (DOM表示の更新だけ継続)
