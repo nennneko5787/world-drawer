@@ -12,11 +12,17 @@
   Python `canvas.py:checkCooldown`）。バランス変更になるため猶予を足さない。
 - クライアントの表示と送信ゲートは同一式に統一する
   （`wd-ui.js:cooldownRemainSec`）:
-  `remain = max(0, (cooldownUntil + 700ms - now)/1000)`。
-  700msはRTT分の早読み（「準備OKなのに弾かれる」）防止用。サーバの厳密性は不変。
+  `remain = max(0, (cooldownUntil + margin - now)/1000)`。
+  マージンは `max(700ms, rttEma + 300ms)`（上限3秒）の適応式。
+  固定700msでは実RTT超過時に早読み誤爆が残るため。
+  サーバの厳密性は不変。
 - 応答（配置成功・`cooldown` エラー・`userPayload`）は判定時のサーバ時刻 `now`
-  （epoch秒）を同梱する。クライアントは `applyLevelData` で
-  `serverOffsetMs` を学習（±60s超は無視・指数平滑）し、端末時計ズレを吸収する。
+  （epoch秒）を同梱する。クライアントは `applyLevelData(data, t0)` で
+  `serverOffsetMs` を学習する。`t0`（送信時刻）あり時は往復半分を差し引く
+  （`inst = now - (arrival - rtt/2)`）ことで応答到着バイアスを除く。
+  ±60s超は無視・指数平滑。RTT自体も指数平均で学習しマージンに反映する。
+- 残り秒表示は常に小数第1位（`fmtRemain`。undo含む全体統一）。
+  `cooldown` エラー時のサーバ `remaining`（第2位まで）も表示時に丸める。
 - 配置送信は in-flight ガード付き（`wd-net.js:placing`）。応答前の連打は
   送信せず残り秒トーストのみ。`cooldown` エラー・成功時は即 `updateCooldownUI()`。
 

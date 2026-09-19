@@ -158,8 +158,15 @@
   const remotes = new Map(); // uid -> {uid, name, color, x, y, updatedAt} (tokenは扱わない)
   let inventory = { glow: 0, rainbow: 0, ghost: 0 };
   let cooldownUntil = 0;
-  // クールダウンの表示・ゲート用マージン (RTT分の早読み防止。表示と送信可否は同じ式で統一)
-  const COOLDOWN_MARGIN_MS = 700;
+  // クールダウンの表示・ゲート用マージン (早読み防止。表示と送信可否は同じ式で統一)。
+  // 実RTTに応じて伸ばす (往復のばらつきを吸収。上限3秒)
+  const COOLDOWN_MARGIN_BASE_MS = 700;
+  const COOLDOWN_MARGIN_MAX_MS = 3000;
+  let rttEmaMs = 0; // place・me の往復時間の指数平均 (applyLevelDataで学習)
+  function cooldownMarginMs() {
+    const m = COOLDOWN_MARGIN_BASE_MS + (rttEmaMs > 0 ? rttEmaMs : 0);
+    return Math.min(COOLDOWN_MARGIN_MAX_MS, Math.max(COOLDOWN_MARGIN_BASE_MS, m));
+  }
   // サーバ時計との差 (serverNow*1000 - Date.now())。applyLevelDataで学習する
   let serverOffsetMs = 0;
   let serverOffsetInit = true;

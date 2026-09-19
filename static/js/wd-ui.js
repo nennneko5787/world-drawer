@@ -3,7 +3,7 @@
 "use strict";
   // クールダウン残り秒 (表示も送信ゲートもこの式に統一する)
   function cooldownRemainSec() {
-    const margin = (typeof COOLDOWN_MARGIN_MS === "number" ? COOLDOWN_MARGIN_MS : 0);
+    const margin = (typeof cooldownMarginMs === "function") ? cooldownMarginMs() : 700;
     const nowMs = (typeof adjustedNowMs === "function") ? adjustedNowMs() : Date.now();
     return Math.max(0, (cooldownUntil + margin - nowMs) / 1000);
   }
@@ -78,13 +78,23 @@
     });
   }
 
-  function applyLevelData(data) {
+  // t0: リクエスト送信時刻ms。ありの時は往復半分を差し引いて時刻補正する
+  function applyLevelData(data, t0) {
     if (!data) return;
-    // サーバ時刻を学習 (端末時計ズレの吸収。往復遅延の残差はマージン側で吸収する)
+    // サーバ時刻・RTTを学習 (端末時計ズレと回線遅延の吸収)
     try {
       const n = Number(data.now);
       if (Number.isFinite(n) && n > 0) {
-        const inst = n * 1000 - Date.now();
+        const nowMs = Date.now();
+        let rtt = 0;
+        const t0n = Number(t0);
+        if (Number.isFinite(t0n) && t0n > 0) {
+          rtt = Math.max(0, nowMs - t0n);
+          try {
+            rttEmaMs = rttEmaMs > 0 ? rttEmaMs * 0.8 + rtt * 0.2 : rtt;
+          } catch {}
+        }
+        const inst = n * 1000 - (nowMs - rtt / 2);
         if (Math.abs(inst) < 60000) {
           if (serverOffsetInit) {
             serverOffsetMs = inst;
@@ -181,11 +191,11 @@
     return `(${cell.x}, ${cell.y})`;
   }
 
-  // 残り秒の表示整形。1秒未満でなければ小数1桁、未満は小数2桁で表示する
+  // 残り秒の表示整形。常に小数第1位まで (0は空文字→「準備OK」)
   function fmtRemain(sec) {
     const v = Math.max(0, Number(sec) || 0);
     if (!(v > 0)) return "";
-    return v < 1 ? v.toFixed(2) : v.toFixed(1);
+    return v.toFixed(1);
   }
 
   // chrome計測: topbar/toolbarの実高さをCSS変数へ反映し、固定px配置を排除する。

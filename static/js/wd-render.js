@@ -550,9 +550,8 @@
       ctx.shadowBlur = 0;
     }
 
-    // 他ユーザーのカーソル (枠だけ + 名前、非表示IDは除外)
+    // 他ユーザーのカーソル (枠だけ + 名前、非表示IDは除外。無操作で消さない)
     if (showCursors) {
-      const nowMs = Date.now();
       const x0 = Math.floor(-cam.x / cam.zoom) - 1;
       const x1 = Math.ceil((vw - cam.x) / cam.zoom) + 1;
       const y0 = Math.floor(-cam.y / cam.zoom) - 1;
@@ -560,7 +559,6 @@
       for (const cur of remotes.values()) {
         if (cur.uid === myUid) continue;
         if (cur.uid && blocked.has(cur.uid)) continue;
-        if (nowMs - cur.updatedAt > 10000) continue;
         if (cur.x == null || cur.y == null) continue;
         if (cur.x < x0 || cur.x > x1 || cur.y < y0 || cur.y > y1) continue;
         const sx = cam.x + cur.x * cam.zoom, sy = cam.y + cur.y * cam.zoom;

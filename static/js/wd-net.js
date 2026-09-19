@@ -4,6 +4,7 @@
   async function ensureToken() {
     if (token) return;
     // サーバが要求した時だけ検証する (不要時は空トークンで通る)
+    const sessionT0 = Date.now();
     const data = await postWithTurnstile(
       "/api/session",
       { "Content-Type": "application/json" },
@@ -12,7 +13,7 @@
     if (!data.ok || !data.token) throw new Error("session failed");
     token = data.token;
     localStorage.setItem("wd_token", token);
-    applyLevelData(data);
+    applyLevelData(data, sessionT0);
     if (data.uid) {
       setMyUidEl(data.uid);
     }
@@ -269,6 +270,7 @@
       await ensureToken();
       await fetchMeta();
       await fetchViewport(); // 視野タイルだけ取得
+      const meT0 = Date.now();
       const me = await (await fetch(`${apiBase()}/api/me`, { headers: authHeaders() })).json();
       inventory = { ...inventory, ...me.inventory };
       cooldownUntil = me.cooldownUntil ? me.cooldownUntil * 1000 : 0;
@@ -278,7 +280,7 @@
       if (me.uid) {
         setMyUidEl(me.uid);
       }
-      applyLevelData(me);
+      applyLevelData(me, meT0);
       if (me.profile) {
         // サーバー正 (保存・統合結果) に合わせる。端末別の古い名での上書きを防ぐ
         if (me.profile.name) {
@@ -616,16 +618,6 @@
       markStatic();
   }
 
-  // カーソルは10秒で画面から消える。その分の再描画を予約 (連打防止の単発)
-  let cursorExpireTimer = 0;
-  function scheduleCursorExpire() {
-    if (cursorExpireTimer) return;
-    cursorExpireTimer = setTimeout(() => {
-      cursorExpireTimer = 0;
-      markDirty();
-    }, 10500);
-  }
-
   function applyRemote(u) {
     // 相関IDは公開前提の uid (token は線に流さない)。自分は myUid で除外する
     if (!u || !u.uid || u.uid === myUid) return;
@@ -642,7 +634,6 @@
     });
     refreshOnlineUI();
     markDirty();
-    scheduleCursorExpire();
   }
 
   // サーバの count は自分込みの総数。表示側は足さずにそのまま使う
@@ -667,7 +658,6 @@
     onlineTotal = typeof total === "number" && Number.isFinite(total) ? total : null;
     refreshUserList();
     markDirty();
-    scheduleCursorExpire();
   }
 
   let lastCursorSent = 0;
@@ -739,6 +729,7 @@
     }
     try {
       placing = true;
+      const placeT0 = Date.now();
       const res = await fetch(`${apiBase()}/api/place`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
@@ -748,9 +739,9 @@
       if (!data.ok) {
         if (data.error === "cooldown") {
           cooldownUntil = data.cooldownUntil * 1000;
-          applyLevelData(data);
+          applyLevelData(data, placeT0);
           try { updateCooldownUI(); } catch {}
-          toast(t("cooldownToast", { s: data.remaining }));
+          toast(t("cooldownToast", { s: fmtRemain(data.remaining) || "0.0" }));
         } else if (data.error === "noInk") {
           toast(t("noInkToast"));
           inventory = data.inventory;
@@ -795,7 +786,7 @@
       }
       cooldownUntil = data.cooldownUntil * 1000;
       inventory = data.inventory;
-      applyLevelData(data);
+      applyLevelData(data, placeT0);
       try { updateCooldownUI(); } catch {}
       refreshInkUI();
       zoneDirty = true;
