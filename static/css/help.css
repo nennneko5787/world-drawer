@@ -18,6 +18,18 @@
   --accent-fg: #111111;
 }
 * { box-sizing: border-box; }
+/* モダンスクロールバー (細・丸・半透明。index.cssと同仕様) */
+* { scrollbar-width: thin; scrollbar-color: rgba(130, 130, 140, .55) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(130, 130, 140, .45);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(130, 130, 140, .75); border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-corner { background: transparent; }
 html, body {
   margin: 0;
   padding: 0;

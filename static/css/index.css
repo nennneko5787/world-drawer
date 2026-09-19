@@ -56,6 +56,18 @@
   --focus: #8ab4f8;
 }
 * { box-sizing: border-box; }
+/* モダンスクロールバー (細・丸・半透明。ライト/ダーク共通の中間色) */
+* { scrollbar-width: thin; scrollbar-color: rgba(130, 130, 140, .55) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(130, 130, 140, .45);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(130, 130, 140, .75); border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-corner { background: transparent; }
 html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--page); font-family: system-ui, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; color: var(--chrome-fg); -webkit-touch-callout: none; }
 #board { position: fixed; inset: 0; width: 100vw; height: 100vh; width: 100dvw; height: 100dvh; display: block; touch-action: none; cursor: crosshair; background: var(--board); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 button, select, input { touch-action: manipulation; }
