@@ -16,7 +16,7 @@ fn shade(c: (u8, u8, u8), f: f64) -> (u8, u8, u8) {
     (m(c.0), m(c.1), m(c.2))
 }
 
-fn blend(over: (u8, u8, u8), under: (u8, u8, u8), alpha: f64) -> (u8, u8, u8) {
+pub(crate) fn blend(over: (u8, u8, u8), under: (u8, u8, u8), alpha: f64) -> (u8, u8, u8) {
     let m = |o: u8, u: u8| (o as f64 * alpha + u as f64 * (1.0 - alpha)).round() as u8;
     (m(over.0, under.0), m(over.1, under.1), m(over.2, under.2))
 }
@@ -80,7 +80,7 @@ fn chunk(tag: &[u8; 4], data: &[u8]) -> Vec<u8> {
     v
 }
 
-fn encode_png(rgb: &[u8], w: u32, h: u32) -> Vec<u8> {
+pub(crate) fn encode_png(rgb: &[u8], w: u32, h: u32) -> Vec<u8> {
     let mut raw = Vec::with_capacity((h * (1 + w * 3)) as usize);
     for y in 0..h {
         raw.push(0); // filter: None

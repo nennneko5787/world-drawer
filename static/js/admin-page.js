@@ -533,6 +533,56 @@
     }
   }
 
+  // マップ全体のPNGスナップショットを保存 (管理者のみ)。
+  // 範囲はサーバが描画範囲＋余白から決める。寸法は応答ヘッダで表示する。
+  async function downloadMap() {
+    const btn = $("admMapBtn");
+    const msg = $("admMapMsg");
+    const raw = Number($("admMapMargin") ? $("admMapMargin").value : 16);
+    const margin = Math.max(0, Math.min(512, Number.isFinite(raw) ? raw : 16));
+    // 上限px (0=上限なし)。0以下は上限なし扱い
+    const rawMax = Number($("admMapMax") ? $("admMapMax").value : 4096);
+    const max = Number.isFinite(rawMax) && rawMax > 0 ? Math.floor(rawMax) : 0;
+    try {
+      if (btn) btn.disabled = true;
+      if (msg) msg.textContent = t("admMapWorking");
+      const res = await fetch(
+        `${apiBase()}/api/admin/map.png?margin=${margin}&max=${max}`,
+        { headers: { "Authorization": `Bearer ${sessionToken()}` } },
+      );
+      if (!res.ok) {
+        let code = "commError";
+        try {
+          const data = await res.clone().json();
+          if (data && data.error === "forbidden") code = "adminForbidden";
+        } catch {}
+        if (msg) msg.textContent = t(code);
+        return;
+      }
+      const blob = await res.blob();
+      const w = res.headers.get("x-map-width") || "?";
+      const h = res.headers.get("x-map-height") || "?";
+      let name = `pixdraw-map-${w}x${h}.png`;
+      try {
+        const m = (res.headers.get("content-disposition") || "").match(/filename="([^"]+)"/);
+        if (m) name = m[1];
+      } catch {}
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      if (msg) msg.textContent = t("admMapDone", { w, h });
+    } catch {
+      if (msg) msg.textContent = t("commError");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   $("admRefresh").onclick = refreshAll;
   $("admAuto").onchange = () => {
     clearInterval(autoTimer);
@@ -540,6 +590,7 @@
     if ($("admAuto").checked) autoTimer = setInterval(refreshAll, 15000);
   };
   $("admLookupBtn").onclick = lookup;
+  if ($("admMapBtn")) $("admMapBtn").onclick = downloadMap;
   $("admUid").addEventListener("keydown", (e) => {
     if (e.key === "Enter") lookup();
   });

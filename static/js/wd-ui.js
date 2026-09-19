@@ -1,8 +1,15 @@
 // wd-ui.js — トースト・レベル・オンライン表示などのHUD + 共通UIユーティリティ (UIDコピー)。
 // classic script (defer順に読む。トップレベルスコープ共有、前方参照は実行時解決)。
 "use strict";
+  // クールダウン残り秒 (表示も送信ゲートもこの式に統一する)
+  function cooldownRemainSec() {
+    const margin = (typeof COOLDOWN_MARGIN_MS === "number" ? COOLDOWN_MARGIN_MS : 0);
+    const nowMs = (typeof adjustedNowMs === "function") ? adjustedNowMs() : Date.now();
+    return Math.max(0, (cooldownUntil + margin - nowMs) / 1000);
+  }
+
   function updateCooldownUI() {
-    const remain = Math.max(0, (cooldownUntil - Date.now()) / 1000);
+    const remain = cooldownRemainSec();
     const s = fmtRemain(remain);
     const text = s ? t("cooldownToast", { s }) : t("ready");
     if (text === cooldownShown) return; // 毎フレームのDOM更新を抑制
@@ -73,6 +80,21 @@
 
   function applyLevelData(data) {
     if (!data) return;
+    // サーバ時刻を学習 (端末時計ズレの吸収。往復遅延の残差はマージン側で吸収する)
+    try {
+      const n = Number(data.now);
+      if (Number.isFinite(n) && n > 0) {
+        const inst = n * 1000 - Date.now();
+        if (Math.abs(inst) < 60000) {
+          if (serverOffsetInit) {
+            serverOffsetMs = inst;
+            serverOffsetInit = false;
+          } else {
+            serverOffsetMs = serverOffsetMs * 0.7 + inst * 0.3;
+          }
+        }
+      }
+    } catch {}
     if (data.level) myLevel = data.level;
     if (data.xp != null) myXp = data.xp;
     if (data.xpNeeded) xpNeeded = data.xpNeeded;
@@ -85,7 +107,15 @@
   }
 
   function refreshOnlineUI() {
-    onlineCount.textContent = String((onlineTotal ?? remotes.size) + 1);
+    // onlineTotal (サーバの count) は自分込みの総数のため足さない。
+    // 未取得時だけ手元 (他人 remotes + 自分) で組み立てる
+    if (typeof onlineCount === "undefined" || !onlineCount) return;
+    if (typeof onlineTotal === "number" && Number.isFinite(onlineTotal)) {
+      onlineCount.textContent = String(Math.max(0, Math.round(onlineTotal)));
+    } else {
+      const me = (typeof myUid === "string" && myUid) ? 1 : 0;
+      onlineCount.textContent = String(remotes.size + me);
+    }
   }
 
   function refreshUserList() {

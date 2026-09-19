@@ -55,6 +55,8 @@ async def checkCooldown(user: dict, level: int, now: float) -> None:
                 "level": level,
                 "xp": int(user.get("xp", 0)),
                 "xpNeeded": users.xpNeededForLevel(level),
+                # クライアントの時計ズレ吸収用 (判定時点のサーバ時刻)
+                "now": now,
             }
         )
 
@@ -391,6 +393,8 @@ async def executePlace(  # noqa: PLR0913 — 配置処理の引数は削れな�
         "xp": xp,
         "xpNeeded": users.xpNeededForLevel(level),
         "leveledUp": leveledUp,
+        # クライアントの時計ズレ吸収用 (配置確定時のサーバ時刻)
+        "now": now,
     }
 
 
@@ -835,6 +839,8 @@ def userPayload(user: dict, token: str, now: float | None = None) -> dict:
         "xp": int(user.get("xp", 0)),
         "xpNeeded": users.xpNeededForLevel(level),
         "hasAccount": bool(user.get("transferCode")),
+        # クライアントの時計ズレ吸収用 (この応答生成時のサーバ時刻)
+        "now": now,
     }
 
 

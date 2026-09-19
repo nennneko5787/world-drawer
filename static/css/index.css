@@ -304,6 +304,23 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
 .noticesTime { font-size: 11px; color: var(--hint); flex: none; }
 .noticesBody { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
 .noticesEmpty { color: var(--hint); }
+/* お知らせ本文のMarkdown内側 (pre/code/リンクの折り返し。スマホで右欠け防止) */
+.noticesItem, #noticesList { min-width: 0; }
+.noticesBody p, .noticesBody ul, .noticesBody ol, .noticesBody blockquote,
+.noticesBody h1, .noticesBody h2, .noticesBody h3, .noticesBody h4 {
+  max-width: 100%; overflow-wrap: anywhere;
+}
+.noticesBody p { margin: 0 0 6px; }
+.noticesBody p:last-child { margin-bottom: 0; }
+.noticesBody ul, .noticesBody ol { padding-left: 20px; margin: 4px 0; }
+.noticesBody blockquote { margin: 4px 0; padding-left: 8px; border-left: 3px solid var(--border); }
+.noticesBody pre {
+  white-space: pre-wrap; word-break: break-word;
+  max-width: 100%; overflow-x: auto;
+  font-size: 12px; background: var(--seg); border-radius: 8px; padding: 8px;
+}
+.noticesBody code { overflow-wrap: anywhere; word-break: break-word; }
+.noticesBody a { overflow-wrap: anywhere; word-break: break-all; }
 
 /* ---------- chat (右ドロワー。他パネルと排他。位置・高さは modal.css に任せる) ---------- */
 #chatDock {
@@ -321,8 +338,15 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
   overflow-y: auto; flex: 1 1 auto; min-height: 200px; font-size: 13px;
   user-select: text; -webkit-user-select: text; -webkit-touch-callout: default;
 }
-.chatMsg { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.chatMsg.chatMine .chatBody { background: var(--seg); border-radius: 8px; padding: 4px 8px; }
+.chatMsg { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 92%; align-self: flex-start; }
+.chatMsg.chatMine { align-self: flex-end; align-items: flex-end; }
+.chatMsg .chatBody {
+  background: var(--btn); color: var(--btn-fg);
+  border: 1px solid var(--border); border-radius: 4px 12px 12px 12px;
+  padding: 6px 10px;
+}
+.chatMsg.chatMine .chatBody { background: var(--seg); color: var(--chrome-fg); border-color: transparent; border-radius: 12px 4px 12px 12px; }
+.chatMsg.chatMine .chatHead { justify-content: flex-end; }
 .chatHead { display: flex; align-items: center; gap: 5px; font-size: 12px; min-width: 0; }
 .chatHead .nname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chatHead .nmeta { flex: none; color: var(--hint); font-size: 11px; }
@@ -366,8 +390,8 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
   padding: 8px 10px; font-size: 14px; width: 100%;
 }
 .accLabel { font-size: 12px; color: var(--hint); }
-#accountPane .setRow { white-space: nowrap; }
-#accountPane .setRow span { white-space: nowrap; flex: none; }
+#accountPane .setRow { white-space: normal; flex-wrap: wrap; }
+#accountPane .setRow span { white-space: normal; flex: none; }
 .accCode {
   font-size: 18px; font-weight: 700; letter-spacing: 2px; text-align: center;
   background: var(--seg); border-radius: 8px; padding: 8px; user-select: all;
@@ -515,6 +539,10 @@ body.chromeHidden #undoBtn { bottom: 10px; }
   #colorChip { width: 40px; height: 30px; }
   .hint { display: none; }
   #userPanel, #historyPanel, #noticesPanel, #settingsPanel, #profilePanel { max-height: 52vh; }
+  /* 設定の選択行は狭幅で折り返す (潰れ・横溢れ防止) */
+  #settingsPanel .setRow { flex-wrap: wrap; }
+  #settingsPanel .setRow > span { flex: none; max-width: 100%; }
+  #settingsPanel .setRow select { flex: 1 1 140px; }
   /* 下部帯はツールバー高さに追従 */
   #undoBtn { right: 8px; }
   #colorPanel { left: 6px; right: 6px; width: auto; transform: none; max-height: 52vh; }

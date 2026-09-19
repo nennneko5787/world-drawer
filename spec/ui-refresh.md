@@ -51,6 +51,33 @@
   キャッシュは持たず、言語切替時は手元の表示値だけ描き直す。
 - 自分の `#myUid` ピルは従来どおりクリックでコピー（プロフィールとは別経路）。
 
+## チャット吹き出し（リスト維持の微改善）
+
+- 構造は `ul#chatList > li.chatMsg > .chatHead + p.chatBody` のまま（`wd-chat.js`）。
+- 他人は左寄せ・白バブル（左上だけ角小）、自分は右寄せ・`--seg` バブル
+  （右上だけ角小、`max-width:92%`）。自分のヘッダは右寄せ。
+- 時刻は吹き出し内に収まる短形（当日 `HH:MM`、それ以外 `M/D HH:MM`）。
+  受信・未読バッジ・WS kind=8 の仕様は不変（`ws-protocol.md`）。
+
+## お知らせモーダル（全文表示）
+
+- `#noticesPanel.wd-modal` は `flex-direction:column`＋
+  `#noticesList{flex:1; overflow-y:auto}` の内側スクロール（チャットと同型）。
+  タイトルは固定。スマホは `max-height:88vh`。
+- 本文Markdownの内側は折り返す（`index.css` の `.noticesBody` 配下）:
+  `pre` は `pre-wrap`＋箱内横スクロール可、`code`・`a`・見出し・リストは
+  `overflow-wrap:anywhere`。360px幅で縦スクロールのみで全文到達できること。
+- 描画タグ・XSS方針（`wd-markdown.js` の安全タグのみ）は不変。
+
+## 設定モバイル（360-390px）
+
+- 6タブは潰さず横スクロール（`.wd-tabs button{flex:none}`＋`scroll-snap`）。
+  `flex:1` による潰れ・`nowrap` の横溢れを起こさない。
+- `.setContent` は `max-height:calc(78vh - 160px)` の単一スクロール
+  （親との二重スクロールにしない）。
+- 選択行は折り返し可（`#settingsPanel .setRow{flex-wrap:wrap}`、
+  `select{flex:1 1 140px}`）。`#accountPane .setRow` の `nowrap` は廃止。
+
 ## UIDコピー（全部入り）
 
 - キャンバス側: `wd-ui.js` が `[data-uid] / [data-copy]` のクリックを委任で拾い、

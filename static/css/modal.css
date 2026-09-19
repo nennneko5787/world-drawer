@@ -34,10 +34,17 @@
   width: min(560px, calc(100vw - 24px)) !important;
   max-height: min(78vh, 740px) !important;
 }
-/* お知らせパネル: 横幅広め・高さ大きめ */
+/* お知らせパネル: 横幅広め・高さ大きめ。見出し固定＋一覧の内側スクロール */
 #noticesPanel.wd-modal {
   width: min(600px, calc(100vw - 24px)) !important;
   max-height: min(76vh, 720px) !important;
+  display: flex; flex-direction: column;
+}
+#noticesPanel.wd-modal.hidden { display: none !important; }
+#noticesPanel.wd-modal .panelTitle { flex: none; }
+#noticesPanel.wd-modal #noticesList {
+  flex: 1; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
 }
 /* チャットパネル: 中央モーダルではなく右ドロワー。縦に長く常時読みやすい */
 #chatDock.wd-modal {
@@ -145,11 +152,24 @@
     max-height: 88vh !important;
     border-radius: 16px 16px 0 0 !important;
   }
-  /* スマホは上タブ+下内容 */
-  .setBody { flex-direction: column; }
-  .wd-tabs { flex-direction: row; width: auto; overflow-x: auto; }
+  /* お知らせも長文が読めるよう縦長に */
+  #noticesPanel.wd-modal {
+    max-height: 88vh !important;
+  }
+  /* スマホは上タブ+下内容 (6タブは潰さず横スクロールで逃がす) */
+  .setBody { flex-direction: column; align-items: stretch; }
+  .setContent {
+    max-height: calc(78vh - 160px);
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+  .wd-tabs {
+    flex-direction: row; width: auto; max-width: 100%;
+    overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity; padding-bottom: 2px;
+  }
   .wd-tabs button {
-    flex: 1; white-space: nowrap; text-align: center;
+    flex: none; scroll-snap-align: start;
+    white-space: nowrap; text-align: center;
     border-left-color: transparent; border-bottom: 3px solid transparent;
   }
   .wd-tabs button.active { border-bottom-color: var(--accent, #111); }

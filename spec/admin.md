@@ -52,6 +52,29 @@
   フロントがそのまま描ける形にする）。
 - 巻き戻し後は該当タイル版をbumpし、購読者へバイナリ配信する（実装済み手順を維持）。
 
+## `GET /api/admin/map.png`（マップスナップショット）
+
+管理者UID（Bearer）のみ。現在のマップ全体を原点中心の正方形PNGで返す。
+管理ページの「マップ画像」カードから保存する（`admin-page.js:downloadMap`）。
+
+- 範囲: `MIN/MAX`（期限切れチョーク除外）から
+  `R = max(|minX|,|maxX|,|minY|,|maxY|)` を求め、
+  片側 `R + margin` セル・一辺 `2*(R+margin)+1` セルを切り出す。
+  `margin` はquery（既定16・0〜512でクランプ）。
+- 解像度: 1セル=1px。ただし一辺が上限 `max`（query、既定4096px。
+  `0` 以下で上限なし）を超える場合は `scale = ceil(side/max)` の整数縮小で
+  ダウンスケールする（出力ピクセルに対応するセルが1つでもあれば塗る）。
+  上限なし指定で巨大マップを出力するとサーバのメモリを大量消費するため、
+  管理者自身の判断で使うこと。
+- 内容: 背景色＋実ピクセルのみ（グリッド・原点軸・バッジなし）。
+  ghostは背景と50%混色（`ogp.rs` と同見た目）。空マップは余白分だけの背景単色。
+- 行はストリーム取得（全件collectしない）。出力バッファは上限付きのため定数メモリ。
+- 応答: `200 image/png`、`cache-control: no-store`、
+  `content-disposition: attachment; filename="pixdraw-map-YYYYMMDD-HHMMSS.png"`、
+  寸法ヘッダ `x-map-width/height/scale`。DB失敗時は `503 {ok:false,error:busy}`、
+  非管理者は他と同様 `403 {ok:false,error:forbidden}`。
+- PNG符号化は `ogp.rs::encode_png`（stored-deflate・依存ゼロ）を再利用する。
+
 ## `POST /api/admin/ban {ip, seconds?}`（実装済み）
 
 - 変更なし。執行側（`anti-grief.md`）の修正で実効化される。

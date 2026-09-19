@@ -52,9 +52,18 @@
     } catch {}
   }
 
+  // 吹き出し内に収まる短い時刻 (当日は HH:MM、それ以外は M/D HH:MM)
   function formatChatTime(at) {
     try {
-      return new Date(at * 1000).toLocaleString(window.wdI18n.locale);
+      const d = new Date(Number(at) * 1000);
+      if (!Number.isFinite(d.getTime())) return "";
+      const now = new Date();
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      const sameDay = d.getFullYear() === now.getFullYear()
+        && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      if (sameDay) return `${hh}:${mm}`;
+      return `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}`;
     } catch {
       return "";
     }

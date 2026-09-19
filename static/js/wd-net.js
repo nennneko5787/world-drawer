@@ -422,7 +422,10 @@
     }
     if (kind === 3) {
       const uid = binUid(v, 1);
-      if (uid) remotes.delete(uid);
+      // onlineTotal は自分込み総数。一覧にいた本人のleaveだけ1減らす
+      if (uid && remotes.delete(uid) && typeof onlineTotal === "number") {
+        onlineTotal = Math.max(0, onlineTotal - 1);
+      }
       refreshUserList();
       markDirty();
       return;
@@ -534,7 +537,10 @@
           const o = 8 + nl;
           const color = rgbHex(v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2));
           const level = v.getUint16(o + 3, true);
+          // onlineTotal は自分込み総数。新規到着だけ1増やす (再送の二重計上防止)
+          const isNew = !!uid && uid !== myUid && !remotes.has(uid);
           applyRemote({ uid, name, color, level });
+          if (isNew && typeof onlineTotal === "number") onlineTotal++;
           refreshUserList();
           return;
         }
@@ -639,7 +645,8 @@
     scheduleCursorExpire();
   }
 
-  // RESTフォールバック時は打ち切り分の総数を別途受け取る (socket時は完全一覧)
+  // サーバの count は自分込みの総数。表示側は足さずにそのまま使う
+  // (refreshOnlineUI)。WSのjoin/leaveで増減追従する
   let onlineTotal = null;
   function applyPresenceList(list, total) {
     const seen = new Set();
@@ -702,18 +709,22 @@
     return t("durDay", { n: Math.floor(s / 86400) });
   }
 
+  let placing = false; // 配置の送信中ガード (応答前の連打で二重送信しない)
   async function place(x, y, forceTool) {
     if (Math.abs(x) > coordLimit || Math.abs(y) > coordLimit) {
       toast(t("outOfBounds"));
       return;
     }
-    if (cooldownUntil > Date.now()) {
+    // 表示と同じ残り秒でゲートする (「準備OKなのに弾かれる」をなくす)
+    const gateRemain = (typeof cooldownRemainSec === "function") ? cooldownRemainSec() : 0;
+    if (gateRemain > 0) {
       const s = (typeof fmtRemain === "function")
-        ? fmtRemain((cooldownUntil - Date.now()) / 1000)
-        : ((cooldownUntil - Date.now()) / 1000).toFixed(1);
+        ? fmtRemain(gateRemain)
+        : gateRemain.toFixed(1);
       toast(t("cooldownToast", { s: s || "0.01" }));
       return;
     }
+    if (placing) return;
     const key = `${x},${y}`;
     const prevPix = pixels.get(key) || null;
     const effTool = forceTool || tool;
@@ -727,6 +738,7 @@
       }
     }
     try {
+      placing = true;
       const res = await fetch(`${apiBase()}/api/place`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
@@ -737,6 +749,7 @@
         if (data.error === "cooldown") {
           cooldownUntil = data.cooldownUntil * 1000;
           applyLevelData(data);
+          try { updateCooldownUI(); } catch {}
           toast(t("cooldownToast", { s: data.remaining }));
         } else if (data.error === "noInk") {
           toast(t("noInkToast"));
@@ -783,6 +796,7 @@
       cooldownUntil = data.cooldownUntil * 1000;
       inventory = data.inventory;
       applyLevelData(data);
+      try { updateCooldownUI(); } catch {}
       refreshInkUI();
       zoneDirty = true;
       markStatic();
@@ -791,6 +805,8 @@
       if (data.reward) toast(t("rewardToast", { ink: inkName(data.reward.ink), amount: data.reward.amount }), "reward");
     } catch {
       toast(t("commError"));
+    } finally {
+      placing = false;
     }
   }
 

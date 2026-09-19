@@ -4,9 +4,21 @@
 
 - 配置ごとにクールダウン `users::cooldown_for_level`（`backend/src/users.rs:47-51`）:
   `min + (base - min) × decay^(lv-1)`。既定 `5.0s / 1.0s / 0.87`。
+  Python正準は `users.cooldownForLevel`（`app/services/users.py:171-175`）。
 - 配置ごとに `xpPerPlace`（既定1）付与。`xpNeeded = max(1, base × lv^pow)`
   （既定 `3 / 1.5`、`users.rs:53-56`）。複数段上がり対応。
 - 配置Tx内でユーザ行ロック→判定→書込を直列化（`routes/place.rs:72-86`）。
+- サーバ判定は厳密（`remain > 0` で拒否、猶予なし。
+  Python `canvas.py:checkCooldown`）。バランス変更になるため猶予を足さない。
+- クライアントの表示と送信ゲートは同一式に統一する
+  （`wd-ui.js:cooldownRemainSec`）:
+  `remain = max(0, (cooldownUntil + 700ms - now)/1000)`。
+  700msはRTT分の早読み（「準備OKなのに弾かれる」）防止用。サーバの厳密性は不変。
+- 応答（配置成功・`cooldown` エラー・`userPayload`）は判定時のサーバ時刻 `now`
+  （epoch秒）を同梱する。クライアントは `applyLevelData` で
+  `serverOffsetMs` を学習（±60s超は無視・指数平滑）し、端末時計ズレを吸収する。
+- 配置送信は in-flight ガード付き（`wd-net.js:placing`）。応答前の連打は
+  送信せず残り秒トーストのみ。`cooldown` エラー・成功時は即 `updateCooldownUI()`。
 
 ## 特殊インク（実装済み: 消費側）
 

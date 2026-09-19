@@ -21,7 +21,7 @@
 | `GET /api/me` | `routes/me.rs:10` | Bearerの自情報。不存在は `404 noUser`（自動作成しない） |
 | `POST /api/session` | `routes/session.rs:19` | Turnstile必須で新規発行。`{ok,token,uid,profile,inventory,cooldownUntil,cooldown,level,xp,xpNeeded,hasAccount,country,showCountry}` |
 | `POST /api/ws-ticket` | `routes/ticket.rs:8` | WS用使い切りチケット（30秒）。`{ok,ticket,turnstileRequired}`（helloの検証要否。クライアントはtrueの時だけTurnstile実行） |
-| `POST /api/place` | `routes/place.rs:22` | 配置（`{x,y,color,ink}`）。成功時は `ok:true` + `pixel/by/cooldownUntil/cooldown/inventory/reward/level/xp/xpNeeded/leveledUp` |
+| `POST /api/place` | `routes/place.rs:22` | 配置（`{x,y,color,ink}`）。成功時は `ok:true` + `pixel/by/cooldownUntil/cooldown/inventory/reward/level/xp/xpNeeded/leveledUp/now`（`now` は判定時のサーバepoch秒。時計ズレ吸収用。`cooldown` エラー応答にも同梱） |
 | `POST /api/undo` | `routes/undo.rs:36` | 3秒取消（`{x,y,prevEmpty,prevC,prevT,prevCoats}`）。成功時は `pixel/by/level/xp/xpNeeded/inventory` |
 | `GET /api/history?x&y&limit&beforeId` | `routes/history.rs:16` | `{ok,x,y,items,hasMore}`（`limit` 1-100、既定20） |
 | `GET /api/profile?uid=` | `routes/profile.rs:29` | 公開プロフィール（下記「公開プロフィール」） |
@@ -32,11 +32,12 @@
 | `POST /api/admin/lookup` | `routes/admin.rs:47` | `admin.md` 参照 |
 | `POST /api/admin/rollback` | `routes/admin.rs:76` | `admin.md` 参照 |
 | `POST /api/admin/ban` | `routes/admin.rs:218` | `{ip,seconds?}`。`seconds<=0` で解除 |
+| `GET /api/admin/map.png` | `routes/map.rs` | 管理者のみ。マップ全体のPNG（`admin.md`「マップスナップショット」参照） |
 | `GET /api/notices` | `routes/notices.rs:list` | 公開一覧（新しい順）。`{ok,notices:[{id,title,body,translations,createdAt,updatedAt}]}`（`limit` 1-500、既定100）。`title/body` は日本語ベース、`translations` は `{"en":{"title","body"}}` 形（未翻訳は空） |
 | `POST /api/admin/notices` | `routes/notices.rs:create` | 管理者投稿。`{title,body,translations?}` → `{ok,notice}` |
 | `PUT /api/admin/notices/{id}` | `routes/notices.rs:update` | 管理者編集。`{title,body,translations?}` → `{ok,notice}` |
 | `DELETE /api/admin/notices/{id}` | `routes/notices.rs:remove` | 管理者削除。`{ok,id}` |
-| `GET /api/users` | `routes/users.rs:13` | WS不可時のフォールバック。`{online:[{uid,name,color,level}],count,truncated}`（仕様としてlean） |
+| `GET /api/users` | `routes/users.rs:13` | WS不可時のフォールバック。`{online:[{uid,name,color,level}],count,truncated}`（仕様としてlean）。**`count` と `online` は自分込み**。クライアントは表示時に+1しない（`wd-ui.js:refreshOnlineUI`）。WSのjoin/leaveで増減追従する |
 | `GET /api/chat?limit&beforeId` | `routes/chat.rs:list` | 公開。`{ok,messages:[{id,uid,name,userColor,level,body,at}],hasMore}`（古い順ASC。`limit` 1-100、既定50。`beforeId`で遡及） |
 | `POST /api/chat` | `routes/chat.rs:post` | 投稿（`{body}` 1〜200文字）。成功時は `{ok,message}` + WS kind=8を全体配信 |
 | `GET /api/ranking` | `routes/ranking.rs:list` | 公開。レベル順。`{ok,ranking:[{rank,uid,name,color,level,xp,country}],total}`（`limit` 1-100、既定100）。`level DESC,xp DESC,uid ASC`、同率は同順位。`country` は公開設定時のみ |

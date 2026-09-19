@@ -86,6 +86,17 @@
             </section>
 
             <section class="admCard">
+                <h2><i class="bi bi-image"></i> <span data-i18n="admSecMap">マップ画像</span></h2>
+                <p class="admMuted" data-i18n="admMapHint">一番外側のピクセル＋余白で切り出したPNGを保存します</p>
+                <div class="admRow">
+                    <label><span data-i18n="admMapMargin">余白</span> <input id="admMapMargin" type="number" min="0" max="512" value="16"></label>
+                    <label><span data-i18n="admMapMax">上限px (0=無し)</span> <input id="admMapMax" type="number" min="0" value="4096"></label>
+                    <button id="admMapBtn" class="admBtn" data-i18n="admMapDownload">PNGを保存</button>
+                </div>
+                <p id="admMapMsg" class="admMuted"></p>
+            </section>
+
+            <section class="admCard">
                 <h2><i class="bi bi-person"></i> <span data-i18n="admSecUser">ユーザー操作</span></h2>
                 <div class="admRow">
                     <input id="admUid" data-i18n-ph="adminUidPh" placeholder="対象UID" autocomplete="off" spellcheck="false">

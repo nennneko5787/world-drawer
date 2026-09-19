@@ -155,6 +155,14 @@
   const remotes = new Map(); // uid -> {uid, name, color, x, y, updatedAt} (tokenは扱わない)
   let inventory = { glow: 0, rainbow: 0, ghost: 0 };
   let cooldownUntil = 0;
+  // クールダウンの表示・ゲート用マージン (RTT分の早読み防止。表示と送信可否は同じ式で統一)
+  const COOLDOWN_MARGIN_MS = 700;
+  // サーバ時計との差 (serverNow*1000 - Date.now())。applyLevelDataで学習する
+  let serverOffsetMs = 0;
+  let serverOffsetInit = true;
+  function adjustedNowMs() {
+    return Date.now() + serverOffsetMs;
+  }
   let tool = "pen";
   // 特殊インクの複数押し選択。空=通常。正準形はソート結合 ("ghost+glow")
   const inkSet = new Set();
