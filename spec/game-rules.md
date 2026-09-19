@@ -82,7 +82,11 @@ Python（`app/services/canvas.py:22-28,340-364`）と同値を正準とする。
   （Python `canvas.py:668-674` と同等、index-only）。
 - キャンバス空（0ピクセル）の初手は許可。
 - 他者presence近傍（Python `nearOtherPresence`）は**廃止**（仕様）:
-  Rust Hubはcursor位置を保持せず、中継のみのため。フロントのゾーン目安表示は残す。
+  Rust Hubはcursor位置を保持せず、中継のみのため。
+  フロントのゾーン枠線・ホバー可否も既存ピクセルのみで判定し、
+  他者カーソルは含めない（`wd-zone.js`）。
+- ゾーン枠線は行サンプリング近似を使わず、各発生源正方形の上下端
+  （critical rows）だけ評価する厳密描画。サーバの内外判定（含む端）と一致する。
 - フロントは `tooFar` 時に `tooFarToast` + 「go to art」ボタンを出す（`wd-net.js:645-650`）。
 
 ## undo（3秒取消）

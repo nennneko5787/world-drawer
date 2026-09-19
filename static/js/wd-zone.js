@@ -46,10 +46,7 @@
         }
       }
     }
-    for (const cur of remotes.values()) {
-      if (cur.x == null || cur.y == null) continue;
-      if (Math.max(Math.abs(cur.x - x), Math.abs(cur.y - y)) <= R) return true;
-    }
+    // 他者カーソルは含めない (サーバの半径判定は既存ピクセルのみ。presence近傍は廃止)
     return false;
   }
   function mergeSortedPairs(pairs) {
@@ -108,12 +105,8 @@
         }
       }
     }
-    for (const cur of remotes.values()) {
-      if (cur.x == null || cur.y == null) continue;
-      cand.push(cur.x, cur.y);
-    }
-    const rows = vy1 - vy0;
-    const step = rows > 300 ? Math.ceil(rows / 300) : 1;
+    // 発生源は既存ピクセルのみ。他者カーソルは含めない
+    // (サーバの半径判定と一致させる。presence近傍は廃止)
     // 指定行の許可区間 (統合済み)。範囲が画面より大きいと可視端での開閉が
     // 画面端に張り付く偽線になるため、上下1段外側も評価して真の開閉だけを描く
     const intervalsAt = (y) => {
@@ -126,33 +119,39 @@
       }
       return mergeSortedPairs(pairs);
     };
-    // サンプリング行ごとの統合区間 (空行も保持して横線の開閉を検出する)
-    const rowList = [];
-    for (let y = vy0; y <= vy1; y += step) {
-      rowList.push({ y, iv: intervalsAt(y) });
+    // サンプリングはしない。各発生源の正方形の上下端だけが区間の変わり目のため、
+    // その変わり目 (critical rows) だけ評価すれば境界は厳密になる。
+    // 従来の等間隔サンプリング (step) は角で最大stepマスのズレを出していた
+    const ySet = new Set([vy0, vy1 + 1]);
+    for (let i = 0; i < cand.length; i += 2) {
+      const cy = cand[i + 1];
+      ySet.add(cy - R);
+      ySet.add(cy + R + 1);
     }
-    let prev = intervalsAt(vy0 - step);
-    for (const row of rowList) {
-      const cur = row.iv;
-      // 縦線: 各区間の左右 (step分つなげて途切れさせない)
+    const ys = [...ySet].filter((y) => y >= vy0 && y <= vy1 + 1).sort((a, b) => a - b);
+    let prev = intervalsAt(vy0 - 1);
+    for (let k = 0; k + 1 < ys.length; k++) {
+      const yTop = ys[k], yBot = ys[k + 1];
+      const cur = intervalsAt(yTop);
+      // 縦線: 各区間の左右 (変わり目まで一気につなげて途切れさせない)
       for (let i = 0; i < cur.length; i += 2) {
-        segs.push({ x1: cur[i], y1: row.y, x2: cur[i], y2: row.y + step });
-        segs.push({ x1: cur[i + 1] + 1, y1: row.y, x2: cur[i + 1] + 1, y2: row.y + step });
+        segs.push({ x1: cur[i], y1: yTop, x2: cur[i], y2: yBot });
+        segs.push({ x1: cur[i + 1] + 1, y1: yTop, x2: cur[i + 1] + 1, y2: yBot });
       }
-      // 横線: 前行との差分 (現れた所・消えた所) を行境界 Y に引く
+      // 横線: 前区間との差分 (現れた所・消えた所) を変わり目 Y に引く
       const added = subtractIntervals(cur, prev);
       const removed = subtractIntervals(prev, cur);
       for (let i = 0; i < added.length; i += 2) {
-        segs.push({ x1: added[i], y1: row.y, x2: added[i + 1] + 1, y2: row.y });
+        segs.push({ x1: added[i], y1: yTop, x2: added[i + 1] + 1, y2: yTop });
       }
       for (let i = 0; i < removed.length; i += 2) {
-        segs.push({ x1: removed[i], y1: row.y, x2: removed[i + 1] + 1, y2: row.y });
+        segs.push({ x1: removed[i], y1: yTop, x2: removed[i + 1] + 1, y2: yTop });
       }
       prev = cur;
     }
     // 一番下の閉じ線 (画面下に続く部分は引かない)
-    if (prev.length > 0 && rowList.length > 0) {
-      const bottomY = rowList[rowList.length - 1].y + step;
+    if (prev.length > 0 && ys.length > 0) {
+      const bottomY = vy1 + 1;
       const tail = subtractIntervals(prev, intervalsAt(bottomY));
       for (let i = 0; i < tail.length; i += 2) {
         segs.push({ x1: tail[i], y1: bottomY, x2: tail[i + 1] + 1, y2: bottomY });

@@ -346,7 +346,7 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
 }
 #chatDock.hidden { display: none; }
 #chatList {
-  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px;
+  list-style: none; margin: 0; padding: 4px 8px 4px 2px; display: flex; flex-direction: column; gap: 8px;
   overflow-y: auto; flex: 1 1 auto; min-height: 200px; font-size: 13px;
   user-select: text; -webkit-user-select: text; -webkit-touch-callout: default;
 }

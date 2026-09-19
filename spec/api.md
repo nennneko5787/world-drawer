@@ -37,7 +37,7 @@
 | `POST /api/admin/notices` | `routes/notices.rs:create` | 管理者投稿。`{title,body,translations?}` → `{ok,notice}` |
 | `PUT /api/admin/notices/{id}` | `routes/notices.rs:update` | 管理者編集。`{title,body,translations?}` → `{ok,notice}` |
 | `DELETE /api/admin/notices/{id}` | `routes/notices.rs:remove` | 管理者削除。`{ok,id}` |
-| `GET /api/users` | `routes/users.rs:13` | WS不可時のフォールバック。`{online:[{uid,name,color,level}],count,truncated}`（仕様としてlean）。**`count` と `online` は自分込み**。クライアントは表示時に+1しない（`wd-ui.js:refreshOnlineUI`）。WSのjoin/leaveで増減追従する |
+| `GET /api/users` | `routes/users.rs:13` | WS不可時のフォールバック。`{online:[{uid,name,color,level}],count,truncated}`（仕様としてlean）。hubは接続単位だが **`online`・`count` ともuid重複排除後の distinct 人数（自分含む）**。同一uidの複数タブは1人分。クライアントは表示時に+1しない（`wd-ui.js:refreshOnlineUI`）。WSのjoin/leaveも同一uidの初回・最終接続だけ配信し、増減追従する |
 | `GET /api/chat?limit&beforeId` | `routes/chat.rs:list` | 公開。`{ok,messages:[{id,uid,name,userColor,level,body,at}],hasMore}`（古い順ASC。`limit` 1-100、既定50。`beforeId`で遡及） |
 | `POST /api/chat` | `routes/chat.rs:post` | 投稿（`{body}` 1〜200文字）。成功時は `{ok,message}` + WS kind=8を全体配信 |
 | `GET /api/ranking` | `routes/ranking.rs:list` | 公開。レベル順。`{ok,ranking:[{rank,uid,name,color,level,xp,country}],total}`（`limit` 1-100、既定100）。`level DESC,xp DESC,uid ASC`、同率は同順位。`country` は公開設定時のみ |

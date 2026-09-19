@@ -207,13 +207,15 @@ pub mod ws_route {
 
         let sid = uuid::Uuid::new_v4().simple().to_string();
         let (tx, mut rx) = tokio::sync::mpsc::channel::<WsOut>(64);
+        // 同一uidの初回接続だけjoinを全体へ (2タブ目は一覧・人数に影響させない)
+        let already_here = state.hub.infos.iter().any(|e| e.value().uid == info.uid);
         state.hub.sinks.insert(sid.clone(), (info.uid.clone(), tx));
         state.hub.infos.insert(sid.clone(), info.clone());
         // 荒らし対策の紐付け (noSocket・maxSockets・cursor判定用)
         state.hub.bind(&sid, &token, &client_ip);
         tracing::info!("ws hello ok uid={} ip={client_ip}", info.uid);
         // presence joinを全体へ (稀なのでbroadcast可)
-        {
+        if !already_here {
             let (jr, jg, jb) = crate::color::hex_to_rgb(&info.color);
             state.hub.broadcast_all(
                 &ws_proto::join_bin(&info.uid, &info.name, jr, jg, jb, info.level),
@@ -313,9 +315,13 @@ pub mod ws_route {
         }
         if let Some(info) = state.hub.remove(&sid) {
             tracing::info!("ws bye uid={} ip={client_ip}", info.uid);
-            state
-                .hub
-                .broadcast_all(&ws_proto::leave_bin(&info.uid), Some(&sid));
+            // 同一uidの最終切断だけleaveを全体へ (残タブがある間は一覧に残す)
+            let still = state.hub.infos.iter().any(|e| e.value().uid == info.uid);
+            if !still {
+                state
+                    .hub
+                    .broadcast_all(&ws_proto::leave_bin(&info.uid), Some(&sid));
+            }
         }
     }
 }
