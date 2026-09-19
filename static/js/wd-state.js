@@ -173,6 +173,42 @@
   function adjustedNowMs() {
     return Date.now() + serverOffsetMs;
   }
+  // 仮想サーバ時計。WS kind=9 (接続直後＋1分毎) で補正し、
+  // 間は単調時計でローカルと同じ増え方をする。未同期時はREST学習値に落とす
+  let serverTimeBase = 0; // 最終同期時のサーバ時刻ms
+  let serverTimePerf = 0; // 同期時のperformance.now()
+  let serverTimeSynced = false;
+  function serverClockSync(serverSec) {
+    const n = Number(serverSec);
+    if (!Number.isFinite(n) || n <= 0) return;
+    serverTimeBase = n * 1000;
+    try {
+      serverTimePerf = performance.now();
+    } catch {
+      try {
+        serverTimePerf = Date.now();
+      } catch {
+        serverTimePerf = 0;
+      }
+    }
+    serverTimeSynced = true;
+  }
+  function serverPerfNow() {
+    try {
+      if (typeof performance !== "undefined" && typeof performance.now === "function") {
+        return performance.now();
+      }
+    } catch {}
+    try {
+      return Date.now();
+    } catch {
+      return 0;
+    }
+  }
+  function serverNowMs() {
+    if (serverTimeSynced) return serverTimeBase + (serverPerfNow() - serverTimePerf);
+    return adjustedNowMs();
+  }
   let tool = "pen";
   // 特殊インクの複数押し選択。空=通常。正準形はソート結合 ("ghost+glow")
   const inkSet = new Set();

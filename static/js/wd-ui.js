@@ -1,10 +1,11 @@
 // wd-ui.js — トースト・レベル・オンライン表示などのHUD + 共通UIユーティリティ (UIDコピー)。
 // classic script (defer順に読む。トップレベルスコープ共有、前方参照は実行時解決)。
 "use strict";
-  // クールダウン残り秒 (表示も送信ゲートもこの式に統一する)
+  // クールダウン残り秒 (表示も送信ゲートもこの式に統一する)。
+  // 時刻源は仮想サーバ時計 (WS同期済み)・未同期時はREST学習値
   function cooldownRemainSec() {
     const margin = (typeof cooldownMarginMs === "function") ? cooldownMarginMs() : 700;
-    const nowMs = (typeof adjustedNowMs === "function") ? adjustedNowMs() : Date.now();
+    const nowMs = (typeof serverNowMs === "function") ? serverNowMs() : Date.now();
     return Math.max(0, (cooldownUntil + margin - nowMs) / 1000);
   }
 

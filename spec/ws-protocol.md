@@ -16,6 +16,7 @@ JSON比で pixel約110B→20B、cursor約90B→15Bのためこの形式を維持
 | 6 | helloOk | S→C 9B | `[6, ok, err, uid6]`（err: 0 none / 1 badTicket / 2 turnstile / 3 noUser / 4 sockLimit） |
 | 7 | join | S→C 可変 | `[7, uid6, namelen u8, name, r,g,b, level u16]` |
 | 8 | chat | S→C 可変 | `[8, id8, at8, uid6, namelen u8, name, r,g,b, level u16, bodylen u16, body]` |
+| 9 | time | S→C 9B | `[9, now8 f64]`（epoch秒。1分毎の時刻同期用） |
 
 uidは先頭6B（`push_uid`）。nameはUTF-8・最大200Bで文字境界丸め。
 chatのbodyはUTF-8（200文字制限済みのため最大でも1KB未満）。
@@ -26,6 +27,15 @@ chatのbodyはUTF-8（200文字制限済みのため最大でも1KB未満）。
   （`wd-render.js`）。消えるのは `leave`・ブロック・設定OFF・視野外のみ。
 - 送信側の間引き（同一セル800ms・全体cursorMinMs）と中継間引き
   （同一セルまたは200ms未満は中継せず記録のみ）は維持する。
+
+## 時刻同期（仕様）
+
+- サーバはhello成功直後＋60秒毎にkind=9（`ws_proto.rs:time_bin`）を送る。
+  精度はミリ秒。送れなければ次回で復旧する（接続維持を優先）。
+- クライアントは仮想サーバ時計を持つ（`wd-state.js:serverNowMs`）。
+  同期間は単調時計（`performance.now`）でローカルと同じ増え方をし、
+  受信のたび補正する。WS未接続時はREST学習値（`applyLevelData`）に落とす。
+- クールダウンの表示・ゲートとundoカウントダウンはこの時計で計算する。
 
 ## チャット受信（仕様）
 

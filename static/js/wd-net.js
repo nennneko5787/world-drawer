@@ -443,6 +443,15 @@
       }
       return;
     }
+    if (kind === 9 && buf.byteLength >= 9) {
+      // server time (接続直後＋1分毎)。仮想サーバ時計を補正する
+      try {
+        if (typeof serverClockSync === "function") serverClockSync(v.getFloat64(1, true));
+      } catch (e) {
+        console.error(e);
+      }
+      return;
+    }
   }
 
   let socket = null;
@@ -815,11 +824,12 @@
     cancelUndo();
     pendingUndo = { x, y, prev };
     undoBtn.classList.remove("hidden");
-    const deadline = Date.now() + 3000;
+    const deadline = (typeof serverNowMs === "function" ? serverNowMs() : Date.now()) + 3000;
     const update = () => {
-      const left = Math.max(0, (deadline - Date.now()) / 1000);
+      const nowMs = (typeof serverNowMs === "function" ? serverNowMs() : Date.now());
+      const left = Math.max(0, (deadline - nowMs) / 1000);
       const s = (typeof fmtRemain === "function") ? fmtRemain(left) : left.toFixed(1);
-      undoBtn.textContent = t("undoFmt", { s: s || "0.00" });
+      undoBtn.textContent = t("undoFmt", { s: s || "0.0" });
       if (left <= 0) cancelUndo();
     };
     update();

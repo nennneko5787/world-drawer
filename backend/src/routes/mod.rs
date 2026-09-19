@@ -122,6 +122,11 @@ pub mod ws_route {
         Message::Binary(ws_proto::hello_ok_bin(ok, err, uid).into())
     }
 
+    /// 時刻同期用の現在epoch秒 (ミリ秒精度)
+    fn now_secs() -> f64 {
+        chrono::Utc::now().timestamp_millis() as f64 / 1000.0
+    }
+
     async fn serve(
         socket: WebSocket,
         mut state: AppState,
@@ -230,14 +235,24 @@ pub mod ws_route {
             state.hub.remove(&sid);
             return;
         }
+        // 接続直後の時刻同期 (以降は60秒毎。クライアントの仮想サーバ時計用)
+        let _ = sink
+            .send(Message::Binary(ws_proto::time_bin(now_secs()).into()))
+            .await;
         let ping_interval = Duration::from_secs(20);
         let mut ping = tokio::time::interval(ping_interval);
+        let time_interval = Duration::from_secs(60);
+        let mut time_tick = tokio::time::interval(time_interval);
         // 送信タスク
         let send_fut = async move {
             loop {
                 tokio::select! {
                     _ = ping.tick() => {
                         if sink.send(Message::Ping(vec![].into())).await.is_err() { break; }
+                    }
+                    _ = time_tick.tick() => {
+                        // 時刻同期 (送れなければ次回で復旧する)
+                        if sink.send(Message::Binary(ws_proto::time_bin(now_secs()).into())).await.is_err() { break; }
                     }
                     msg = rx.recv() => {
                         let Some(m) = msg else { break };

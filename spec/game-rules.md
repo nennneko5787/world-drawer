@@ -17,10 +17,11 @@
   固定700msでは実RTT超過時に早読み誤爆が残るため。
   サーバの厳密性は不変。
 - 応答（配置成功・`cooldown` エラー・`userPayload`）は判定時のサーバ時刻 `now`
-  （epoch秒）を同梱する。クライアントは `applyLevelData(data, t0)` で
-  `serverOffsetMs` を学習する。`t0`（送信時刻）あり時は往復半分を差し引く
-  （`inst = now - (arrival - rtt/2)`）ことで応答到着バイアスを除く。
-  ±60s超は無視・指数平滑。RTT自体も指数平均で学習しマージンに反映する。
+  （epoch秒）を同梱する（WS未接続時の代替）。
+  通常時はWS kind=9（接続直後＋1分毎）の仮想サーバ時計（`serverNowMs`）を使い、
+  `cooldownUntil` と直接比較する。RTT学習・マージンは到達遅延分のみ見る。
+  WS未同期時は `applyLevelData(data, t0)` のREST学習（往復半分補正・指数平滑・
+  RTT指数平均）に落とす。
 - 残り秒表示は常に小数第1位（`fmtRemain`。undo含む全体統一）。
   `cooldown` エラー時のサーバ `remaining`（第2位まで）も表示時に丸める。
 - 配置送信は in-flight ガード付き（`wd-net.js:placing`）。応答前の連打は

@@ -22,6 +22,7 @@
 //! - 8 chat (S→C 可変): [8, id8 LE, at8 LE, uid6, namelen u8, name, r,g,b,
 //!     level u16 LE, bodylen u16 LE, body]
 //!     送信はRESTのみ (POST /api/chat)。WSは受信専用 (placeと同方式)。
+//! - 9 time (S→C 9B): [9, now8 f64 LE] (epoch秒)。1分毎の時刻同期用。
 
 /// kindバイト
 pub const K_PIXEL: u8 = 1;
@@ -32,6 +33,7 @@ pub const K_WATCH: u8 = 5;
 pub const K_HELLO_OK: u8 = 6;
 pub const K_JOIN: u8 = 7;
 pub const K_CHAT: u8 = 8;
+pub const K_TIME: u8 = 9;
 
 /// hello失敗理由 (HELLO_OK errcode)
 pub const HELLO_ERR_NONE: u8 = 0;
@@ -351,6 +353,23 @@ pub fn parse_chat(
     Some((id, at, uid, name, (b[o], b[o + 1], b[o + 2]), level, body))
 }
 
+/// TIME固定長: [9, now8 f64 LE] (epoch秒)。1分毎の時刻同期用。
+pub fn time_bin(now: f64) -> Vec<u8> {
+    let mut v = Vec::with_capacity(9);
+    v.push(K_TIME);
+    v.extend_from_slice(&now.to_le_bytes());
+    v
+}
+
+/// TIME解釈 → epoch秒
+#[allow(dead_code)] // フロント側コーデック。対称性の文書化+テスト用に温存
+pub fn parse_time(b: &[u8]) -> Option<f64> {
+    if b.len() != 9 || b[0] != K_TIME {
+        return None;
+    }
+    Some(f64::from_le_bytes(b[1..9].try_into().ok()?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -436,6 +455,14 @@ mod tests {
             Some(("abcdef".into(), "ななし".into(), (0x22, 0xaa, 0x66), 12))
         );
         assert_eq!(parse_join(&[]), None);
+    }
+
+    #[test]
+    fn time_roundtrip() {
+        let b = time_bin(1700000000.123);
+        assert_eq!(parse_time(&b), Some(1700000000.123));
+        assert_eq!(parse_time(&[]), None);
+        assert_eq!(parse_time(&[K_TIME, 0, 0]), None);
     }
 
     #[test]
