@@ -443,6 +443,16 @@
       }
       return;
     }
+    if (kind === 10) {
+      // chat返信 (引用付き。旧クライアントは未知kindとして無視する)
+      try {
+        if (typeof window.wdChatOnReplyMsg === "function") window.wdChatOnReplyMsg(buf);
+        else if (typeof onChatReplyBinMsg === "function") onChatReplyBinMsg(buf);
+      } catch (e) {
+        console.error(e);
+      }
+      return;
+    }
     if (kind === 9 && buf.byteLength >= 9) {
       // server time (接続直後＋1分毎)。仮想サーバ時計を補正する
       try {

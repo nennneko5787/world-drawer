@@ -12,6 +12,8 @@
 | `listen` | `127.0.0.1:5787` | 待ち受け |
 | `corsOrigins` | `[]` | Pages URL列挙 |
 | `adminUIDs` | `[]` | 管理UID一覧（プロフィール欄の #xxxxxx。先頭#・前後空白を許容） |
+| `reservedNames` | `[]` | 予約名（管理者専用）の完全一致リスト。trim・大小無視で比較。管理者は使用可 |
+| `reservedNamePatterns` | `[]` | 予約名の正規表現リスト（検索一致。`^...$` で全体一致化）。不正は警告＋無視 |
 | `previousOrigins` | `[]` | 移行元オリジン (Pages側のみ使用。新サイトで旧URL列挙) |
 | `trustedProxies` | `[]` | ヘッダ信用する相手（既定 `config.jsonc` で `127.0.0.1,::1`） |
 | `turnstile` | enforce:true | `siteKey/secretKey/timeoutSec` |

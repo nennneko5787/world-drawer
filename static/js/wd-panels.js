@@ -2,17 +2,35 @@
 // classic script (defer順に読む。トップレベルスコープ共有、前方参照は実行時解決)。
 "use strict";
   async function saveProfile() {
+    const prevName = myName;
     myName = (profileName.value || "").trim().slice(0, 20) || t("anon");
     if (!/^#[0-9a-fA-F]{6}$/.test(myColor)) myColor = "#22aa66";
     localStorage.setItem("wd_name", myName);
     localStorage.setItem("wd_userColor", myColor);
     profileName.value = myName;
     try {
-      await fetch(`${apiBase()}/api/profile`, {
+      const res = await fetch(`${apiBase()}/api/profile`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ name: myName, color: myColor, showCountry: myShowCountry, tz: myTz }),
       });
+      const data = await res.json().catch(() => null);
+      if (data && !data.ok && data.error === "reservedName") {
+        // 予約名 (管理者専用) は保存されないため表示を戻す
+        myName = prevName;
+        try {
+          localStorage.setItem("wd_name", prevName);
+          profileName.value = prevName;
+        } catch {}
+        toast(t("profileReserved"));
+        refreshUserList();
+        return;
+      }
+      if (!data || !data.ok) {
+        toast(t("profileFailed"));
+        refreshUserList();
+        return;
+      }
       toast(t("profileSaved", { name: myName }));
       refreshUserList();
     } catch {

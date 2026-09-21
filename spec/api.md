@@ -25,7 +25,7 @@
 | `POST /api/undo` | `routes/undo.rs:36` | 3秒取消（`{x,y,prevEmpty,prevC,prevT,prevCoats}`）。成功時は `pixel/by/level/xp/xpNeeded/inventory` |
 | `GET /api/history?x&y&limit&beforeId` | `routes/history.rs:16` | `{ok,x,y,items,hasMore}`（`limit` 1-100、既定20） |
 | `GET /api/profile?uid=` | `routes/profile.rs:29` | 公開プロフィール（下記「公開プロフィール」） |
-| `POST /api/profile` | `routes/profile.rs:77` | `{name,color,showCountry?}` 更新 |
+| `POST /api/profile` | `routes/profile.rs:77` | `{name,color,showCountry?}` 更新。予約名（管理者専用）を非管理者が送ると `403 reservedName` |
 | `POST /api/account/issue` | `routes/account.rs:126` | 引っ越しコード発行（既存ユーザ必須） |
 | `POST /api/account/login` | `routes/account.rs:171` | コード+パスワードで切替・`from_token`で統合。`{ok,token,uid,merged,profile}` |
 | `POST /api/admin/status` | `routes/admin.rs:36` | `admin.md` 参照 |
@@ -38,8 +38,8 @@
 | `PUT /api/admin/notices/{id}` | `routes/notices.rs:update` | 管理者編集。`{title,body,translations?}` → `{ok,notice}` |
 | `DELETE /api/admin/notices/{id}` | `routes/notices.rs:remove` | 管理者削除。`{ok,id}` |
 | `GET /api/users` | `routes/users.rs:13` | WS不可時のフォールバック。`{online:[{uid,name,color,level}],count,truncated}`（仕様としてlean）。hubは接続単位だが **`online`・`count` ともuid重複排除後の distinct 人数（自分含む）**。同一uidの複数タブは1人分。クライアントは表示時に+1しない（`wd-ui.js:refreshOnlineUI`）。WSのjoin/leaveも同一uidの初回・最終接続だけ配信し、増減追従する |
-| `GET /api/chat?limit&beforeId` | `routes/chat.rs:list` | 公開。`{ok,messages:[{id,uid,name,userColor,level,body,at}],hasMore}`（古い順ASC。`limit` 1-100、既定50。`beforeId`で遡及） |
-| `POST /api/chat` | `routes/chat.rs:post` | 投稿（`{body}` 1〜200文字）。成功時は `{ok,message}` + WS kind=8を全体配信 |
+| `GET /api/chat?limit&beforeId` | `routes/chat.rs:list` | 公開。`{ok,messages:[{id,uid,name,userColor,level,body,at,replyTo,reply}],hasMore}`（古い順ASC。`limit` 1-100、既定50。`beforeId`で遡及）。`reply` は返信先スナップショット `{id,uid,name,body}`（参照先欠落時はnull） |
+| `POST /api/chat` | `routes/chat.rs:post` | 投稿（`{body, replyTo?}` 1〜200文字）。存在しないIDへの返信は `400 badReply`。成功時は `{ok,message}` + WS kind=8（通常）/ kind=10（返信）を全体配信 |
 | `GET /api/ranking` | `routes/ranking.rs:list` | 公開。レベル順。`{ok,ranking:[{rank,uid,name,color,level,xp,country}],total}`（`limit` 1-100、既定100）。`level DESC,xp DESC,uid ASC`、同率は同順位。`country` は公開設定時のみ |
 | `GET /ws` | `routes/mod.rs:69` | WS（`ws-protocol.md`） |
 | `GET /og-image.png` | `routes/canvas.rs:142` | `ogp.rs` 原点中心レンダ。60s cache |
@@ -56,7 +56,7 @@ WS経由placeは存在しない。クライアント（`static/js/wd-net.js:608-
 `missingToken` `noUser` `outOfBounds` `badColor` `unknownInk` `noInk`
 `cooldown` `shielded` `tooFar` `banned` `ipBusy` `badPrev` `tooLate`
 `changed` `noUndo` `badPassword` `badLogin` `locked` `turnstileRequired`
-`badUid` `badIp` `badTitle` `noNotice` `badBody` `rateLimited` `forbidden` `busy`
+`badUid` `badIp` `badTitle` `noNotice` `badBody` `badReply` `reservedName` `rateLimited` `forbidden` `busy`
 
 ## 公開プロフィール（仕様）
 
@@ -78,7 +78,10 @@ WS経由placeは存在しない。クライアント（`static/js/wd-net.js:608-
 ## チャット（仕様）
 
 - 送信はRESTのみ（`POST /api/chat`）。WSにchat送信は足さない（配置と同方式）。
-- 受信はWSバイナリ kind=8（`ws-protocol.md`）+ `GET /api/chat`（履歴・ポーリングfallback）。
+- 受信はWSバイナリ kind=8（通常）/ kind=10（返信、`ws-protocol.md`）+ `GET /api/chat`（履歴・ポーリングfallback）。
+- 返信は `{body, replyTo}` で投稿する。存在しないIDは `badReply` で拒否。
+  message形は `replyTo: id|null`＋引用スナップショット `reply: {id,uid,name,body}|null`
+  を持つ。参照先が整理削除済みの場合は `reply: null`（削除済み表示用）。
 - 表示名・色・レベルはusersから都度解決（改名対応。historyと同方式）。
 - 本文はプレーンテキスト（Markdown・HTML描画なし。XSS対策でtextContentのみ）。
 - 最新200件のみ保持。超過分は投稿時に古い方から削除。

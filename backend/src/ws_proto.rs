@@ -23,6 +23,11 @@
 //!     level u16 LE, bodylen u16 LE, body]
 //!     送信はRESTのみ (POST /api/chat)。WSは受信専用 (placeと同方式)。
 //! - 9 time (S→C 9B): [9, now8 f64 LE] (epoch秒)。1分毎の時刻同期用。
+//! - 10 chatReply (S→C 可変): kind=8 と同レイアウト＋末尾に
+//!     [replyId8 LE, ruid6, rnamelen u8, rname, rbodylen u16 LE, rbody]。
+//!     引用は表示用スナップショット (rname最大64B・rbody最大512Bで文字境界丸め)。
+//!     ruidは自分宛判定用。引用欠落時はruid・rname・rbody空。
+//!     kind=8 は凍結 (旧クライアントの厳密長チェックを壊さないため拡張しない)。
 
 /// kindバイト
 pub const K_PIXEL: u8 = 1;
@@ -34,6 +39,8 @@ pub const K_HELLO_OK: u8 = 6;
 pub const K_JOIN: u8 = 7;
 pub const K_CHAT: u8 = 8;
 pub const K_TIME: u8 = 9;
+/// チャット返信 (kind=8 の拡張。旧クライアントは未知kindとして無視する)
+pub const K_CHAT_REPLY: u8 = 10;
 
 /// hello失敗理由 (HELLO_OK errcode)
 pub const HELLO_ERR_NONE: u8 = 0;
@@ -353,9 +360,122 @@ pub fn parse_chat(
     Some((id, at, uid, name, (b[o], b[o + 1], b[o + 2]), level, body))
 }
 
+/// CHAT返信 (S→Cのみ)。kind=8 と同レイアウト＋末尾に引用スナップショット:
+/// [10, id8 LE, at8 LE, uid6, namelen u8, name, r,g,b, level u16 LE,
+///  bodylen u16 LE, body, replyId8 LE, ruid6, rnamelen u8, rname, rbodylen u16 LE, rbody]
+/// rnameは64B・rbodyは512Bで文字境界丸め。ruidは自分宛判定用。
+pub fn chat_reply_bin(
+    id: i64,
+    at: f64,
+    uid: &str,
+    name: &str,
+    r: u8,
+    g: u8,
+    bcol: u8,
+    level: i64,
+    body: &str,
+    reply_id: i64,
+    ruid: &str,
+    rname: &str,
+    rbody: &str,
+) -> Vec<u8> {
+    // kind=8 部分を流用し先頭バイトだけ差し替える
+    let mut v = chat_bin(id, at, uid, name, r, g, bcol, level, body);
+    v[0] = K_CHAT_REPLY;
+    v.extend_from_slice(&reply_id.to_le_bytes());
+    // ruidは6B固定 (短い分は0埋め)。push_uidのtargetで絶対長を指定する
+    {
+        let start = v.len();
+        push_uid(&mut v, ruid, start + 6);
+    }
+    let nb = rname.as_bytes();
+    let mut n = nb.len().min(64);
+    while n > 0 && !rname.is_char_boundary(n) {
+        n -= 1;
+    }
+    v.push(n as u8);
+    v.extend_from_slice(&nb[..n]);
+    let bb = rbody.as_bytes();
+    let mut m = bb.len().min(512);
+    while m > 0 && !rbody.is_char_boundary(m) {
+        m -= 1;
+    }
+    v.extend_from_slice(&(m as u16).to_le_bytes());
+    v.extend_from_slice(&bb[..m]);
+    v
+}
+
+/// CHAT返信の解釈 → (id, at, uid, name, (r,g,b), level, body, replyId, ruid, rname, rbody)
+#[allow(dead_code)] // フロント側コーデック。対称性の文書化+テスト用に温存
+pub fn parse_chat_reply(
+    b: &[u8],
+) -> Option<(
+    i64,
+    f64,
+    String,
+    String,
+    (u8, u8, u8),
+    i64,
+    String,
+    i64,
+    String,
+    String,
+    String,
+)> {
+    if b.len() < 31 + 8 + 6 + 1 + 2 || b[0] != K_CHAT_REPLY {
+        return None;
+    }
+    let id = i64::from_le_bytes(b[1..9].try_into().ok()?);
+    let at = f64::from_le_bytes(b[9..17].try_into().ok()?);
+    let uid = std::str::from_utf8(&b[17..23])
+        .ok()
+        .unwrap_or("")
+        .trim_matches('\0')
+        .to_string();
+    let nl = b[23] as usize;
+    if b.len() < 24 + nl + 3 + 2 + 2 {
+        return None;
+    }
+    let name = std::str::from_utf8(&b[24..24 + nl]).ok()?.to_string();
+    let o = 24 + nl;
+    let level = u16::from_le_bytes([b[o + 3], b[o + 4]]) as i64;
+    let blen = u16::from_le_bytes([b[o + 5], b[o + 6]]) as usize;
+    let body = std::str::from_utf8(b.get(o + 7..o + 7 + blen)?)
+        .ok()?
+        .to_string();
+    let p = o + 7 + blen;
+    if b.len() < p + 8 + 6 + 1 + 2 {
+        return None;
+    }
+    let reply_id = i64::from_le_bytes(b[p..p + 8].try_into().ok()?);
+    let ruid = std::str::from_utf8(b.get(p + 8..p + 14)?)
+        .ok()?
+        .trim_matches('\0')
+        .to_string();
+    let rnl = b[p + 14] as usize;
+    if b.len() < p + 15 + rnl + 2 {
+        return None;
+    }
+    let rname = std::str::from_utf8(b.get(p + 15..p + 15 + rnl)?)
+        .ok()?
+        .to_string();
+    let q = p + 15 + rnl;
+    let rblen = u16::from_le_bytes([b[q], b[q + 1]]) as usize;
+    if b.len() != q + 2 + rblen {
+        return None;
+    }
+    let rbody = std::str::from_utf8(b.get(q + 2..q + 2 + rblen)?)
+        .ok()?
+        .to_string();
+    Some((
+        id, at, uid, name,
+        (b[o], b[o + 1], b[o + 2]),
+        level, body, reply_id, ruid, rname, rbody,
+    ))
+}
+
 /// TIME固定長: [9, now8 f64 LE] (epoch秒)。1分毎の時刻同期用。
-pub fn time_bin(now: f64) -> Vec<u8> {
-    let mut v = Vec::with_capacity(9);
+pub fn time_bin(now: f64) -> Vec<u8> {    let mut v = Vec::with_capacity(9);
     v.push(K_TIME);
     v.extend_from_slice(&now.to_le_bytes());
     v
@@ -482,5 +602,43 @@ mod tests {
         );
         assert_eq!(parse_chat(&[]), None);
         assert_eq!(parse_chat(&[K_CHAT, 0, 0]), None);
+    }
+
+    #[test]
+    fn chat_reply_roundtrip() {
+        let b = chat_reply_bin(
+            124, 1700000001.5, "abcdef", "ななし", 0x22, 0xaa, 0x66, 12,
+            "それな", 123, "zzzzzz", "相手", "こんにちは",
+        );
+        assert_eq!(
+            parse_chat_reply(&b),
+            Some((
+                124,
+                1700000001.5,
+                "abcdef".into(),
+                "ななし".into(),
+                (0x22, 0xaa, 0x66),
+                12,
+                "それな".into(),
+                123,
+                "zzzzzz".into(),
+                "相手".into(),
+                "こんにちは".into()
+            ))
+        );
+        assert_eq!(parse_chat_reply(&[]), None);
+        assert_eq!(parse_chat_reply(&[K_CHAT_REPLY, 0, 0]), None);
+        // kind=8 のフレームは返信として解釈しない
+        let b8 = chat_bin(123, 1700000000.5, "abcdef", "ななし", 0x22, 0xaa, 0x66, 12, "こんにちは");
+        assert_eq!(parse_chat_reply(&b8), None);
+        // 末尾欠けは拒否
+        assert_eq!(parse_chat_reply(&b[..b.len() - 1]), None);
+        // 引用欠落 (削除済み相当) は空文字で往復する
+        let be = chat_reply_bin(
+            125, 1700000002.5, "abcdef", "な", 0x22, 0xaa, 0x66, 1,
+            "へんじ", 100, "", "", "",
+        );
+        let pe = parse_chat_reply(&be).expect("empty quote parses");
+        assert_eq!((pe.7, pe.8.as_str(), pe.9.as_str(), pe.10.as_str()), (100, "", "", ""));
     }
 }

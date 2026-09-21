@@ -221,7 +221,7 @@
       });
       const data = await res.json();
       if (!data.ok) {
-        toast(t("profileFailed"));
+        toast(t(data.error === "reservedName" ? "profileReserved" : "profileFailed"));
         countryChk.checked = myShowCountry;
         return;
       }

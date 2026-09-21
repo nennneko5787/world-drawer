@@ -125,6 +125,9 @@
   const chatCount = document.getElementById("chatCount");
   const chatSend = document.getElementById("chatSend");
   const chatClose = document.getElementById("chatClose");
+  const chatReplyBar = document.getElementById("chatReplyBar");
+  const chatReplyLabel = document.getElementById("chatReplyLabel");
+  const chatReplyCancel = document.getElementById("chatReplyCancel");
   const toolbarEl = document.getElementById("toolbar");
   const chromeToggle = document.getElementById("chromeToggle");
   const t = (key, params) => window.wdI18n.t(key, params);

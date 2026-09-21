@@ -337,6 +337,37 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
 .chatHead .ctime { flex: none; color: var(--hint); font-size: 11px; }
 .chatHead .blockBtn { padding: 1px 6px; font-size: 10px; min-height: 0; }
 .chatBody { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+/* 返信の引用 (名前＋抜粋。参照先欠落時は削除済み表示) */
+.chatQuote {
+  border-left: 3px solid var(--border);
+  padding: 1px 0 1px 8px;
+  margin: 0 0 3px;
+  font-size: 12px;
+  color: var(--hint);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.chatQuote .qname { font-weight: 700; }
+.chatQuote .qbody { overflow-wrap: anywhere; word-break: break-word; }
+.chatQuote .qdeleted { font-style: italic; }
+/* 自分宛の返信は金枠で強調 (トースト通知と併用) */
+.chatMsg.chatReplyToMe .chatBody { border-color: gold; }
+/* 返信先バー (入力欄上。引用中のみ表示) */
+#chatReplyBar {
+  display: flex; gap: 6px; align-items: center;
+  background: var(--seg); border-radius: 8px;
+  padding: 3px 4px 3px 10px; font-size: 12px;
+}
+#chatReplyBar.hidden { display: none; }
+#chatReplyLabel {
+  flex: 1; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; color: var(--hint);
+}
+#chatReplyCancel {
+  border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg);
+  border-radius: 8px; padding: 2px 8px; font-size: 11px; line-height: 1.25; cursor: pointer;
+  flex: none; min-height: 30px;
+}
 .chatEmpty { color: var(--hint); }
 #chatMore, #chatNew {
   border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg);

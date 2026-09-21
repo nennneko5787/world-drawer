@@ -57,10 +57,17 @@
 ## チャット吹き出し（リスト維持の微改善）
 
 - 構造は `ul#chatList > li.chatMsg > .chatHead + p.chatBody` のまま（`wd-chat.js`）。
+  返信の場合は `.chatHead` と `.chatBody` の間に引用 `.chatQuote`
+  （名前＋60字抜粋。参照先欠落時は削除済み表示）を挟む。
+- 各メッセージのヘッダに返信ボタン（`.blockBtn` 流用・`chatReply`）を出す。
+  押下で入力欄上に返信先バー（`#chatReplyBar`＋取消）を出し、送信時に
+  `replyTo` を付与する。本文の200文字制限に返信先は含めない。
+- 自分宛の返信（他人発）は金枠強調（`.chatReplyToMe`）＋トースト通知
+  （`chatReplyToast`。開いて読んでいる最中は出さない）。
 - 他人は左寄せ・白バブル（左上だけ角小）、自分は右寄せ・`--seg` バブル
   （右上だけ角小、`max-width:92%`）。自分のヘッダは右寄せ。
 - 時刻は吹き出し内に収まる短形（当日 `HH:MM`、それ以外 `M/D HH:MM`）。
-  受信・未読バッジ・WS kind=8 の仕様は不変（`ws-protocol.md`）。
+  受信・未読バッジ・WS kind=8/10 の仕様は不変（`ws-protocol.md`）。
 
 ## お知らせ別ページ（`/notices`・全文表示）
 

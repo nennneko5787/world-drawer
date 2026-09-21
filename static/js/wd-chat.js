@@ -4,12 +4,15 @@
 "use strict";
   const CHAT_LIMIT = 50;
   const CHAT_MAX = 200;
-  let chatMsgs = []; // ASC (古い→新しい)。{id,uid,name,userColor,level,body,at}
+  const QUOTE_SNIPPET_LEN = 60;
+  let chatMsgs = []; // ASC (古い→新しい)。{id,uid,name,userColor,level,body,at,replyTo,reply}
   const chatIds = new Set();
   let chatHasMore = false;
   let chatLoading = false;
   let chatPosting = false;
   let chatAtBottom = true;
+  // 返信先 (入力欄上の引用バー)。{id, name} または null
+  let chatReplyTo = null;
 
   function chatSeenId() {
     try {
@@ -92,9 +95,73 @@
     return /^#[0-9a-fA-F]{6}$/.test(raw || "") ? raw : "#22aa66";
   }
 
+  // 返信情報の正規化。{replyTo: id|null, reply: {id,uid,name,body}|null}。
+  // 引用が空 (削除済み相当) は reply=null に倒す (replyToだけ残る)。
+  function normReply(m) {
+    const rid = (m && typeof m.replyTo === "number" && Number.isFinite(m.replyTo)) ? m.replyTo : null;
+    let reply = null;
+    if (rid != null && m.reply && typeof m.reply === "object") {
+      const cand = {
+        id: (typeof m.reply.id === "number") ? m.reply.id : rid,
+        uid: String(m.reply.uid || ""),
+        name: String(m.reply.name || ""),
+        body: String(m.reply.body || ""),
+      };
+      if (cand.uid || cand.name || cand.body) reply = cand;
+    }
+    return { replyTo: rid, reply };
+  }
+
+  // 引用抜粋 (空白畳み・60字丸め)
+  function quoteSnippet(s) {
+    const str = String(s || "").replace(/\s+/g, " ").trim();
+    return str.length > QUOTE_SNIPPET_LEN ? str.slice(0, QUOTE_SNIPPET_LEN) + "…" : str;
+  }
+
+  // 自分宛の返信か (通知・強調用。自分自身の投稿は除く)
+  function isReplyToMe(uid, replyTo, reply) {
+    try {
+      if (typeof myUid === "undefined" || !myUid) return false;
+      return replyTo != null && !!reply && reply.uid === myUid
+        && String(uid || "") !== myUid;
+    } catch {
+      return false;
+    }
+  }
+
+  // 返信先バー (入力欄上) の描画
+  function renderReplyBar() {
+    try {
+      if (typeof chatReplyBar === "undefined" || !chatReplyBar) return;
+      if (!chatReplyTo) {
+        chatReplyBar.classList.add("hidden");
+        return;
+      }
+      chatReplyBar.classList.remove("hidden");
+      if (typeof chatReplyLabel !== "undefined" && chatReplyLabel) {
+        chatReplyLabel.textContent = t("chatReplyBar", { name: chatReplyTo.name || t("anon") });
+      }
+    } catch {}
+  }
+
+  function setChatReply(id, name) {
+    chatReplyTo = { id, name: String(name || "") };
+    renderReplyBar();
+    try {
+      if (typeof chatInput !== "undefined" && chatInput) chatInput.focus({ preventScroll: true });
+    } catch {}
+  }
+
+  function clearChatReply() {
+    chatReplyTo = null;
+    renderReplyBar();
+  }
+
   function makeChatMsgEl(m) {
     const li = document.createElement("li");
-    li.className = "chatMsg" + (m.uid === myUid ? " chatMine" : "");
+    const mine = m.uid === myUid;
+    li.className = "chatMsg" + (mine ? " chatMine" : "")
+      + (isReplyToMe(m.uid, m.replyTo, m.reply) ? " chatReplyToMe" : "");
     li.dataset.id = String(m.id);
     const head = document.createElement("div");
     head.className = "chatHead";
@@ -112,6 +179,19 @@
     time.className = "ctime";
     time.textContent = formatChatTime(m.at);
     head.appendChild(time);
+    // 返信ボタン (自分・他人どちらの投稿にも付けられる)
+    if (m.uid) {
+      const rbtn = document.createElement("button");
+      rbtn.className = "blockBtn";
+      rbtn.type = "button";
+      rbtn.textContent = t("chatReply");
+      rbtn.title = t("chatReply");
+      rbtn.onclick = (ev) => {
+        ev.stopPropagation();
+        setChatReply(m.id, m.name);
+      };
+      head.appendChild(rbtn);
+    }
     if (m.uid && m.uid !== myUid && typeof blocked !== "undefined") {
       const btn = document.createElement("button");
       btn.className = "blockBtn";
@@ -125,6 +205,27 @@
       head.appendChild(btn);
     }
     li.appendChild(head);
+    // 引用 (返信の場合のみ。参照先欠落時は削除済み表示)
+    if (m.replyTo != null) {
+      const q = document.createElement("div");
+      q.className = "chatQuote";
+      if (m.reply) {
+        const qn = document.createElement("span");
+        qn.className = "qname";
+        qn.textContent = m.reply.name || t("anon");
+        q.appendChild(qn);
+        const qb = document.createElement("span");
+        qb.className = "qbody";
+        qb.textContent = " " + quoteSnippet(m.reply.body);
+        q.appendChild(qb);
+      } else {
+        const qd = document.createElement("span");
+        qd.className = "qdeleted";
+        qd.textContent = t("chatReplyDeleted");
+        q.appendChild(qd);
+      }
+      li.appendChild(q);
+    }
     const body = document.createElement("p");
     body.className = "chatBody";
     body.textContent = m.body || "";
@@ -164,6 +265,7 @@
     if (!m || typeof m.id !== "number" || !Number.isFinite(m.id)) return false;
     if (chatIds.has(m.id)) return false;
     chatIds.add(m.id);
+    const { replyTo, reply } = normReply(m);
     chatMsgs.push({
       id: m.id,
       uid: String(m.uid || ""),
@@ -172,6 +274,8 @@
       level: typeof m.level === "number" ? m.level : 1,
       body: String(m.body || ""),
       at: Number(m.at) || 0,
+      replyTo,
+      reply,
     });
     chatMsgs.sort((a, b) => a.id - b.id);
     // 上限を超えた古い分は落とす (id集合も掃除)
@@ -181,6 +285,14 @@
     }
     const isBlocked = typeof blocked !== "undefined" && blocked.has(String(m.uid || ""));
     const mine = String(m.uid || "") === myUid;
+    // 自分宛の返信は通知する (開いて読んでいる最中はトースト不要)
+    if (!isBlocked && !mine && isReplyToMe(String(m.uid || ""), replyTo, reply)) {
+      try {
+        if (!chatIsOpen() || !chatNearBottom()) {
+          toast(t("chatReplyToast", { name: String(m.name || t("anon")) }));
+        }
+      } catch {}
+    }
     if (chatIsOpen()) {
       if (!isBlocked) {
         const wasBottom = chatNearBottom() || mine || !!(opts && opts.scroll);
@@ -220,6 +332,7 @@
         for (const m of data.messages) {
           if (typeof m.id === "number" && !chatIds.has(m.id)) {
             chatIds.add(m.id);
+            const { replyTo, reply } = normReply(m);
             olds.push({
               id: m.id,
               uid: String(m.uid || ""),
@@ -228,6 +341,8 @@
               level: typeof m.level === "number" ? m.level : 1,
               body: String(m.body || ""),
               at: Number(m.at) || 0,
+              replyTo,
+              reply,
             });
           }
         }
@@ -269,7 +384,8 @@
       const res = await fetch(`${apiBase()}/api/chat`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ body }),
+        // 返信先は参照のみ。本文の200文字制限には含めない
+        body: JSON.stringify(chatReplyTo ? { body, replyTo: chatReplyTo.id } : { body }),
       });
       const data = await res.json().catch(() => null);
       if (!data || !data.ok) {
@@ -281,12 +397,16 @@
           toast(t("chatBanned"));
         } else if (code === "badBody") {
           toast(t("chatBadBody"));
+        } else if (code === "badReply") {
+          toast(t("chatBadReply"));
+          clearChatReply();
         } else {
           toast(t("chatFailed"));
         }
         return false;
       }
       if (data.message) ingestChatMessage(data.message, { scroll: true });
+      clearChatReply();
       if (typeof chatInput !== "undefined" && chatInput) {
         chatInput.value = "";
         updateChatCount();
@@ -337,6 +457,58 @@
   }
   // wd-net.jsから見えるようwindowにも出す (classic script間の前方参照対策)
   try { window.wdChatOnMsg = onChatBinMsg; } catch {}
+
+  // WSバイナリ kind=10 (返信・引用付き) の受信入口。
+  // Rust chat_reply_bin対称: [10, id8, at8, uid6, nlen u8, name, r,g,b,
+  //  level u16, blen u16, body, replyId8, ruid6, rnlen u8, rname, rblen u16, rbody]
+  function onChatReplyBinMsg(buf) {
+    try {
+      if (!buf || buf.byteLength < 31 + 8 + 6 + 1 + 2) return;
+      const v = new DataView(buf);
+      if (v.getUint8(0) !== 10) return;
+      const id = Number(v.getBigInt64(1, true));
+      const at = v.getFloat64(9, true);
+      let uid = "";
+      for (let i = 0; i < 6; i++) {
+        const c = v.getUint8(17 + i);
+        if (c === 0) break;
+        uid += String.fromCharCode(c);
+      }
+      const nl = v.getUint8(23);
+      if (buf.byteLength < 24 + nl + 7) return;
+      const td = new TextDecoder();
+      const name = td.decode(new Uint8Array(buf, 24, nl));
+      const o = 24 + nl;
+      const r = v.getUint8(o), g = v.getUint8(o + 1), b = v.getUint8(o + 2);
+      const level = v.getUint16(o + 3, true);
+      const blen = v.getUint16(o + 5, true);
+      if (buf.byteLength < o + 7 + blen + 8 + 6 + 1 + 2) return;
+      const body = td.decode(new Uint8Array(buf, o + 7, blen));
+      const p = o + 7 + blen;
+      const replyTo = Number(v.getBigInt64(p, true));
+      let ruid = "";
+      for (let i = 0; i < 6; i++) {
+        const c = v.getUint8(p + 8 + i);
+        if (c === 0) break;
+        ruid += String.fromCharCode(c);
+      }
+      const rnl = v.getUint8(p + 14);
+      if (buf.byteLength < p + 15 + rnl + 2) return;
+      const rname = td.decode(new Uint8Array(buf, p + 15, rnl));
+      const q = p + 15 + rnl;
+      const rblen = v.getUint16(q, true);
+      if (buf.byteLength !== q + 2 + rblen) return;
+      const rbody = td.decode(new Uint8Array(buf, q + 2, rblen));
+      const hex = "#" + [r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("");
+      ingestChatMessage({
+        id, uid, name, userColor: hex, level, body, at, replyTo,
+        reply: { id: replyTo, uid: ruid, name: rname, body: rbody },
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  try { window.wdChatOnReplyMsg = onChatReplyBinMsg; } catch {}
 
   function openChat() {
     try {
@@ -408,6 +580,10 @@
       if (typeof chatNew !== "undefined" && chatNew) {
         chatNew.onclick = () => chatScrollBottom();
       }
+      if (typeof chatReplyCancel !== "undefined" && chatReplyCancel) {
+        chatReplyCancel.onclick = () => clearChatReply();
+      }
+      renderReplyBar();
       // ドック時代の開閉記憶は使わない (モーダルのため自動で開かない)。
       // 未読バッジ用に履歴だけ先読みする
       try { localStorage.removeItem("wd_chat_open"); } catch {}
@@ -432,6 +608,7 @@
         if (typeof prevRefresh === "function") prevRefresh();
       } catch {}
       try { refreshChatList(); } catch {}
+      try { renderReplyBar(); } catch {}
       try { updateChatCount(); } catch {}
     };
   } catch {}

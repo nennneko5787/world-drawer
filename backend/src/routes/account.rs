@@ -298,6 +298,15 @@ pub async fn login(
                         &crate::color::int_to_hex(s.get::<i32, _>(3)),
                         &new_color,
                     );
+                    // 予約名 (管理者専用) の引き継ぎは管理者のみ。
+                    // 非管理者は引っ越し先の現行名・色を維持する (拒否すると
+                    // 引っ越し不能になるため。account-transfer.md)。
+                    if state.cfg.is_reserved_name(&new_name)
+                        && !state.cfg.is_admin_uid(&dst_uid)
+                    {
+                        new_name = name.clone();
+                        new_color = color.clone();
+                    }
                 }
                 let _ = sqlx::query(
                     "UPDATE users SET inventory = $1, cooldownUntil = $2, level = $3,

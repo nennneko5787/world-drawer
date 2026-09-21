@@ -52,6 +52,16 @@ pub struct Config {
     pub cors_origins: Vec<String>,
     #[serde(default, alias = "adminUIDs")]
     pub admin_uids: Vec<String>,
+    // 予約名 (管理者専用)。一般ユーザーは設定不可、管理者は使用可。
+    // リストはtrim後の大小無視完全一致、パターンは正規表現の検索一致
+    // (全体一致にしたい場合は ^...$ で囲む。不正パターンは警告のうえ無視)。
+    #[serde(default, alias = "reserved_names")]
+    pub reserved_names: Vec<String>,
+    #[serde(default, alias = "reserved_name_patterns")]
+    pub reserved_name_patterns: Vec<String>,
+    /// コンパイル済み予約名パターン (`load()` 終了時に構築)。
+    #[serde(skip)]
+    pub reserved_name_res: Vec<regex::Regex>,
     // ドメイン移行時の引っ越し元オリジン (新サイト側のみ。Rustは配信しないため参照用)
     #[serde(default, alias = "previous_origins")]
     pub previous_origins: Vec<String>,
@@ -204,6 +214,36 @@ impl Config {
             .map(|a| normalize_uid(a))
             .any(|a| a == cleaned)
     }
+
+    /// 予約名 (管理者専用) か。比較前にtrimする。
+    /// リストは大小無視の完全一致、パターンは正規表現の検索一致。
+    pub fn is_reserved_name(&self, name: &str) -> bool {
+        let t = name.trim();
+        if t.is_empty() {
+            return false;
+        }
+        let low = t.to_lowercase();
+        if self
+            .reserved_names
+            .iter()
+            .any(|n| n.trim().to_lowercase() == low)
+        {
+            return true;
+        }
+        self.reserved_name_res.iter().any(|re| re.is_match(t))
+    }
+}
+
+/// 予約名パターンをコンパイルする。不正なものは警告のうえ無視する。
+fn compile_reserved_name_patterns(patterns: &[String]) -> Vec<regex::Regex> {
+    let mut out = Vec::new();
+    for pat in patterns {
+        match regex::Regex::new(pat) {
+            Ok(re) => out.push(re),
+            Err(e) => tracing::warn!("reservedNamePatterns invalid {pat:?}, ignored: {e}"),
+        }
+    }
+    out
 }
 
 /// UID正規化: 前後空白・先頭#・ASCII大小文字を吸収する。
@@ -362,6 +402,7 @@ pub fn load() -> anyhow::Result<Config> {
     let merged = deep_merge(read_one(&base), read_one(&local));
     let mut cfg: Config =
         serde_json::from_value(merged).context("config.jsonc parse error")?;
+    cfg.reserved_name_res = compile_reserved_name_patterns(&cfg.reserved_name_patterns);
     // DATABASE_URLはDB接続先だけ上書きする (他キーを既定化しないこと。
     // 以前はここで早期returnしてadmin/turnstile等を失っていた)
     if let Ok(url) = std::env::var("DATABASE_URL") {
@@ -404,6 +445,38 @@ mod tests {
         assert!(!cfg.is_admin_uid("zzz999"));
         assert!(!cfg.is_admin_uid(""));
         assert!(!cfg.is_admin_uid("#"));
+    }
+
+    #[test]
+    fn reserved_names_match_list_and_patterns() {
+        let cfg = Config {
+            reserved_names: vec![" 運営 ".to_string(), "admin".to_string()],
+            reserved_name_res: compile_reserved_name_patterns(&[
+                "^運営.*".to_string(),
+                "公式".to_string(),
+            ]),
+            ..Default::default()
+        };
+        // リストはtrim・大小無視の完全一致
+        assert!(cfg.is_reserved_name("運営"));
+        assert!(cfg.is_reserved_name(" 運営 "));
+        assert!(cfg.is_reserved_name("ADMIN"));
+        assert!(cfg.is_reserved_name("Admin"));
+        // パターンは検索一致 (^で先頭縛り)
+        assert!(cfg.is_reserved_name("運営チーム"));
+        assert!(cfg.is_reserved_name("なんとか公式発表"));
+        // 部分一致しないもの・空は対象外
+        assert!(!cfg.is_reserved_name("一般ユーザー"));
+        assert!(!cfg.is_reserved_name(""));
+        assert!(!cfg.is_reserved_name("   "));
+        assert!(!cfg.is_reserved_name("Admi"));
+    }
+
+    #[test]
+    fn reserved_invalid_patterns_ignored() {
+        let res = compile_reserved_name_patterns(&["([unclosed".to_string(), "ok.*".to_string()]);
+        assert_eq!(res.len(), 1);
+        assert!(res[0].is_match("okay"));
     }
 
     #[test]

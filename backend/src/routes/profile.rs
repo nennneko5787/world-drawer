@@ -94,7 +94,7 @@ pub async fn update(
         }
     };
     let row = sqlx::query(
-        "SELECT name, color, showCountry, country FROM users WHERE token = $1 FOR UPDATE",
+        "SELECT uid, name, color, showCountry, country FROM users WHERE token = $1 FOR UPDATE",
     )
     .bind(&token)
     .fetch_optional(&mut *tx)
@@ -104,10 +104,19 @@ pub async fn update(
         return (StatusCode::NOT_FOUND, r#"{"ok":false,"error":"noUser"}"#).into_response();
     };
     use sqlx::Row;
-    let cur_color = crate::color::int_to_hex(r.get::<i32, _>(1));
-    let cur_show: i32 = r.get(2);
-    let cur_country: Option<String> = r.get(3);
+    let uid: String = r.get(0);
+    let cur_color = crate::color::int_to_hex(r.get::<i32, _>(2));
+    let cur_show: i32 = r.get(3);
+    let cur_country: Option<String> = r.get(4);
     let new_name = users::clean_name(&body.name, 20, "ななし");
+    // 予約名 (管理者専用) は一般ユーザーが設定不可。管理者は使用可。
+    if state.cfg.is_reserved_name(&new_name) && !state.cfg.is_admin_uid(&uid) {
+        return (
+            StatusCode::FORBIDDEN,
+            r#"{"ok":false,"error":"reservedName"}"#,
+        )
+            .into_response();
+    }
     let new_color = users::clean_color(&body.color, &cur_color);
     let new_show = body.show_country.unwrap_or(cur_show != 0);
     let _ = sqlx::query(
