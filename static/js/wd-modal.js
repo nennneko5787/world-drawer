@@ -1,12 +1,13 @@
 // wd-modal.js — パネル系の共通モーダル基盤。
-// 設定・ユーザー・ランキング・プロフィール・履歴・チャット・お知らせを排他モーダル化する。
+// 設定・ユーザー・ランキング・プロフィール・履歴・チャットを排他モーダル化する。
+// お知らせは /notices 専用ページに移行したため対象外。
 // 色パネルはドック (非モーダル) のため対象外。モーダルを開く際は色ドックを閉じる。
 // HTML変更なしで動く: overlayを生成し、Esc/外側クリックで閉じる。
 "use strict";
   const __modalPanels = [];
   function __collectModals() {
     if (__modalPanels.length) return __modalPanels;
-    for (const id of ["settingsPanel", "userPanel", "rankingPanel", "profilePanel", "historyPanel", "chatDock", "noticesPanel"]) {
+    for (const id of ["settingsPanel", "userPanel", "rankingPanel", "profilePanel", "historyPanel", "chatDock"]) {
       const el = document.getElementById(id);
       if (el) {
         el.classList.add("wd-modal");

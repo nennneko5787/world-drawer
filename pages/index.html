@@ -87,7 +87,7 @@
         </div>
         <div class="tbGroup">
             <button id="chatBtn" class="pill clickable" data-i18n-title="chatTitle" title="チャット"><i class="bi bi-chat-dots"></i> <span id="chatBadge" class="hidden"></span></button>
-            <button id="noticesBtn" class="pill clickable" data-i18n-title="noticesTitle" title="お知らせ"><i class="bi bi-megaphone"></i> <span id="noticesBadge" class="hidden"></span></button>
+            <a id="noticesBtn" class="pill clickable" data-i18n-title="noticesTitle" title="お知らせ" href="/notices"><i class="bi bi-megaphone"></i> <span id="noticesBadge" class="hidden"></span></a>
         </div>
         <div class="tbGroup">
             <a id="adminBtn" class="pill clickable hidden" data-i18n-title="adminTitle" title="管理" href="/admin"><i class="bi bi-shield"></i></a>
@@ -245,11 +245,6 @@
     <aside id="historyPanel" class="hidden">
         <div class="panelTitle"><span id="historyTitle">履歴</span><button id="historyClose" data-i18n-title="close" title="閉じる"><i class="bi bi-x-lg"></i></button></div>
         <ul id="historyList"></ul>
-    </aside>
-
-    <aside id="noticesPanel" class="hidden">
-        <div class="panelTitle"><span data-i18n="noticesTitle">お知らせ</span><button id="noticesClose" data-i18n-title="close" title="閉じる"><i class="bi bi-x-lg"></i></button></div>
-        <ul id="noticesList"></ul>
     </aside>
 
     <aside id="chatDock" class="hidden" aria-label="chat">

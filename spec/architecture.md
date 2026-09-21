@@ -4,7 +4,7 @@
 
 ```text
 Cloudflare Pages (dist/)          Rust API (backend/, Axum)
-  index/help/admin × 5言語  --->    /api/* (no-store)
+  index/help/notices/admin × 5言語  --->    /api/* (no-store)
   /static/* (immutable)             /ws (素WebSocket・バイナリ)
   /og-image.png へのOGP参照  --->    /og-image.png (60s cache)
                                     /healthz

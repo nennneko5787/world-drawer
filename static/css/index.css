@@ -71,7 +71,7 @@
 html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--page); font-family: system-ui, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; color: var(--chrome-fg); -webkit-touch-callout: none; }
 #board { position: fixed; inset: 0; width: 100vw; height: 100vh; width: 100dvw; height: 100dvh; display: block; touch-action: none; cursor: crosshair; background: var(--board); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 button, select, input { touch-action: manipulation; }
-#topbar, #toolbar, #profileBar, #settingsPanel, #userPanel, #rankingPanel, #historyPanel, #noticesPanel, #colorPanel, #toast-wrap, #undoBtn, #statsOverlay { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#topbar, #toolbar, #profileBar, #settingsPanel, #userPanel, #rankingPanel, #historyPanel, #colorPanel, #toast-wrap, #undoBtn, #statsOverlay { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 #profileBar input, #settingsPanel input, #colorPanel input, .accCode { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
 
 /* ---------- topbar (compact・単行) ---------- */
@@ -154,7 +154,7 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
 
 /* ---------- side panels (card共通) ---------- */
 /* 位置は modal.css (.wd-modal 中央配置) に任せる。ここでは見た目とサイズのみ */
-#userPanel, #rankingPanel, #historyPanel, #noticesPanel {
+#userPanel, #rankingPanel, #historyPanel {
   background: var(--chrome); color: var(--chrome-fg);
   border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: var(--shadow); padding: 12px 14px;
@@ -199,7 +199,7 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
   border-radius: 8px; padding: 2px 8px; font-size: 11px; line-height: 1.25; cursor: pointer; flex: none;
   min-height: 30px;
 }
-#historyClose, #rankingClose, #noticesClose, #colorClose, #settingsClose, #userClose, #chatClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
+#historyClose, #rankingClose, #colorClose, #settingsClose, #userClose, #chatClose { border: 1px solid var(--border); background: var(--btn); color: var(--btn-fg); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
 
 /* ---------- profile (公開プロフィール。一覧の名前クリックで開く) ---------- */
 #profilePanel {
@@ -297,7 +297,7 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
   padding: 6px 14px; font-size: 12px; line-height: 1.25; cursor: pointer; min-height: 34px;
 }
 
-/* ---------- admin / notices ---------- */
+/* ---------- badges (notices/chat。お知らせ一覧は /notices 専用ページ) ---------- */
 #adminBtn.hidden { display: none; }
 #noticesBadge, #chatBadge {
   background: #e33; color: #fff; border-radius: 999px;
@@ -305,34 +305,6 @@ button.pill.clickable { cursor: pointer; font: inherit; line-height: 1.25; }
   line-height: 1.25;
 }
 #noticesBadge.hidden, #chatBadge.hidden { display: none; }
-#noticesPanel {
-  width: min(320px, calc(100vw - 20px)); max-height: 50vh; overflow: auto;
-}
-#noticesPanel.hidden { display: none; }
-#noticesList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
-.noticesItem { border-top: 1px solid var(--border); padding-top: 8px; }
-.noticesItem:first-child { border-top: none; padding-top: 0; }
-.noticesHead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.noticesTime { font-size: 11px; color: var(--hint); flex: none; }
-.noticesBody { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
-.noticesEmpty { color: var(--hint); }
-/* お知らせ本文のMarkdown内側 (pre/code/リンクの折り返し。スマホで右欠け防止) */
-.noticesItem, #noticesList { min-width: 0; }
-.noticesBody p, .noticesBody ul, .noticesBody ol, .noticesBody blockquote,
-.noticesBody h1, .noticesBody h2, .noticesBody h3, .noticesBody h4 {
-  max-width: 100%; overflow-wrap: anywhere;
-}
-.noticesBody p { margin: 0 0 6px; }
-.noticesBody p:last-child { margin-bottom: 0; }
-.noticesBody ul, .noticesBody ol { padding-left: 20px; margin: 4px 0; }
-.noticesBody blockquote { margin: 4px 0; padding-left: 8px; border-left: 3px solid var(--border); }
-.noticesBody pre {
-  white-space: pre-wrap; word-break: break-word;
-  max-width: 100%; overflow-x: auto;
-  font-size: 12px; background: var(--seg); border-radius: 8px; padding: 8px;
-}
-.noticesBody code { overflow-wrap: anywhere; word-break: break-word; }
-.noticesBody a { overflow-wrap: anywhere; word-break: break-all; }
 
 /* ---------- chat (右ドロワー。他パネルと排他。位置・高さは modal.css に任せる) ---------- */
 #chatDock {
@@ -550,7 +522,7 @@ body.chromeHidden #undoBtn { bottom: 10px; }
   #colorBtn { min-height: 40px; }
   #colorChip { width: 40px; height: 30px; }
   .hint { display: none; }
-  #userPanel, #historyPanel, #noticesPanel, #settingsPanel, #profilePanel { max-height: 52vh; }
+  #userPanel, #historyPanel, #settingsPanel, #profilePanel { max-height: 52vh; }
   /* 設定の選択行は狭幅で折り返す (潰れ・横溢れ防止) */
   #settingsPanel .setRow { flex-wrap: wrap; }
   #settingsPanel .setRow > span { flex: none; max-width: 100%; }

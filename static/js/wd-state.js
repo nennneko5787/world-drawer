@@ -106,9 +106,6 @@
   // 管理操作は /admin ページに統一 (キャンバス内の管理モーダルは持たない)
   const noticesBtn = document.getElementById("noticesBtn");
   const noticesBadge = document.getElementById("noticesBadge");
-  const noticesPanel = document.getElementById("noticesPanel");
-  const noticesList = document.getElementById("noticesList");
-  const noticesClose = document.getElementById("noticesClose");
   const statsOverlay = document.getElementById("statsOverlay");
   const stFps = document.getElementById("stFps");
   const stMs = document.getElementById("stMs");

@@ -8,13 +8,14 @@
 ## モーダル配置
 
 - 共通（`.wd-modal`）は中央配置のまま。対象は
-  `settingsPanel / userPanel / rankingPanel / historyPanel / chatDock / noticesPanel`
- （`wd-modal.js` が `wd-modal` 付与・排他・Esc/外側クリックで閉じる）。
+  `settingsPanel / userPanel / rankingPanel / historyPanel / chatDock`
+  （`wd-modal.js` が `wd-modal` 付与・排他・Esc/外側クリックで閉じる）。
+  お知らせは `/notices` 専用ページに移行したため対象外。
 - **チャット（`#chatDock`）のみ右ドロワー化**（中央から分離）:
   デスクトップは右端 `right:16px`・縦中央・`height:min(86vh,800px)`、
   `#chatList` は `flex:1` で縦に伸ばす。タブレットも右ドロワー維持
   （幅400px・84vh）。スマホのみ他と同じボトムシートだが一回り縦長（88vh）。
-- **横幅**: ランキング560px・お知らせ600px・ユーザー一覧520px・設定600px
+- **横幅**: ランキング560px・ユーザー一覧520px・設定600px
   （デスクトップ値。`modal.css` が正準）。
 
 ## 管理の統一（キャンバス → /admin）
@@ -61,15 +62,23 @@
 - 時刻は吹き出し内に収まる短形（当日 `HH:MM`、それ以外 `M/D HH:MM`）。
   受信・未読バッジ・WS kind=8 の仕様は不変（`ws-protocol.md`）。
 
-## お知らせモーダル（全文表示）
+## お知らせ別ページ（`/notices`・全文表示）
 
-- `#noticesPanel.wd-modal` は `flex-direction:column`＋
-  `#noticesList{flex:1; overflow-y:auto}` の内側スクロール（チャットと同型）。
-  タイトルは固定。スマホは `max-height:88vh`。
-- 本文Markdownの内側は折り返す（`index.css` の `.noticesBody` 配下）:
-  `pre` は `pre-wrap`＋箱内横スクロール可、`code`・`a`・見出し・リストは
-  `overflow-wrap:anywhere`。360px幅で縦スクロールのみで全文到達できること。
+- ゲーム内モーダルは持たない。`#noticesBtn` は `/help` と同型の
+  `/notices` へのリンク（`a.pill`）。一覧表示は `pages/notices.html`＋
+  `static/js/notices-page.js`＋`static/css/notices.css`
+  （`help.css` と同型の独立スタイル・通常ドキュメントスクロール）の
+  専用ページが担う。スマホ・PC共通。
+- トップバーの未読バッジ（`#noticesBadge`）は維持する。
+  `static/js/wd-notices.js` はバッジ専用（初回＋5分ごと取得・
+  `wd_notices_seen` との差分表示）。リンククリック時と `/notices`
+  表示時に最大 id を既読保存する（キー名は従来と同じ）。
 - 描画タグ・XSS方針（`wd-markdown.js` の安全タグのみ）は不変。
+- 本文の内側は折り返す（`notices.css` の `.noticeBody` 配下）:
+  `pre` は `pre-wrap`＋箱内横スクロール可、`code`・`a`・見出し・リスト・
+  引用・表は `overflow-wrap:anywhere`。360px幅で縦スクロールのみで
+  全文到達できること。
+- 投稿・編集・削除は `/admin` のまま。公開API（`GET /api/notices`）は不変。
 
 ## 設定モバイル（360-390px）
 

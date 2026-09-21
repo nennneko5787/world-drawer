@@ -42,7 +42,7 @@ Python（`app/`）は凍結（`architecture.md`）のため、Python側に
 - ソースのアイコンURLは版なし `/static/...` のまま。
   ビルド時に `?v=` 版を付与したものを `dist/manifest.json` に生成する
   （`_headers` の `immutable` 長期キャッシュと不整合を起こさないため）。
-- `shortcuts`：`/`（Canvas）・`/help`（Help）。
+- `shortcuts`：`/`（Canvas）・`/help`（Help）・`/notices`（Notices）。
 - `pages/*.html` の共通head：`mobile-web-app-capable` /
   `apple-mobile-web-app-capable` / status-bar / application-name /
   icon（favicon.ico + icon-192）/ apple-touch-icon / manifest リンク。
@@ -67,6 +67,6 @@ Python（`app/`）は凍結（`architecture.md`）のため、Python側に
 - `navigator.serviceWorker.register("/sw.js", { scope: "/" })` のみ。
 - https/localhost以外・登録失敗時は黙って無効
   （開発サーバ等に `/sw.js` が無い場合も無害）。
-- 全ページ（index/help/admin）で `defer` 読込。i18n・wd-* 非依存。
+- 全ページ（index/help/notices/admin）で `defer` 読込。i18n・wd-* 非依存。
 - `wd-*.js` の読み順規約（`wd-state`→…→`wd-main`）の対象外
   （トップレベル共有を使わない自己完結IIFEのため）。

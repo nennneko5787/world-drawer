@@ -1,7 +1,9 @@
-// wd-notices.js — お知らせ一覧 (ボタン+モーダル・未読バッジ付き)。
+// wd-notices.js — お知らせ未読バッジ専用 (一覧表示は /notices ページに移行)。
+// トップバーの #noticesBtn は /notices へのリンク。ここでは未読数バッジの
+// 更新 (初回 + 5分ごと) と、クリック時の既読保存だけを行う。
 // classic script (defer順に読む。トップレベルスコープ共有、前方参照は実行時解決)。
 "use strict";
-  let noticesCache = []; // [{id,title,body,createdAt,updatedAt}]
+  let noticesCache = []; // [{id}]
 
   function noticesSeenId() {
     try {
@@ -31,75 +33,6 @@
     }
   }
 
-  function formatNoticeTime(at) {
-    try {
-      return new Date(at * 1000).toLocaleString(window.wdI18n.locale);
-    } catch {
-      return "";
-    }
-  }
-
-  // 表示言語の本文を選ぶ。日本語ベースが正準で、翻訳があれば使う。
-  // 項目ごと (title/body別々) にフォールバックする。
-  function localizeNotice(n) {
-    let lang = "ja";
-    try {
-      lang = window.wdI18n.lang || "ja";
-    } catch {}
-    if (lang !== "ja" && n.tr && typeof n.tr === "object") {
-      const tr = n.tr[lang];
-      if (tr && typeof tr === "object") {
-        const title = typeof tr.title === "string" && tr.title ? tr.title : n.title;
-        const body = typeof tr.body === "string" && tr.body ? tr.body : n.body;
-        return { title, body };
-      }
-    }
-    return { title: n.title, body: n.body };
-  }
-
-  function renderNoticesList() {
-    if (typeof noticesList === "undefined" || !noticesList) return;
-    noticesList.innerHTML = "";
-    if (noticesCache.length === 0) {
-      const li = document.createElement("li");
-      li.className = "noticesEmpty";
-      li.textContent = t("noticesEmpty");
-      noticesList.appendChild(li);
-      return;
-    }
-    for (const n of noticesCache) {
-      const li = document.createElement("li");
-      li.className = "noticesItem";
-      const head = document.createElement("div");
-      head.className = "noticesHead";
-      const loc = localizeNotice(n);
-      const title = document.createElement("b");
-      title.textContent = loc.title;
-      head.appendChild(title);
-      const time = document.createElement("span");
-      time.className = "noticesTime";
-      time.textContent = formatNoticeTime(n.updatedAt || n.createdAt);
-      head.appendChild(time);
-      li.appendChild(head);
-      const body = document.createElement("div");
-      body.className = "noticesBody";
-      // 本文はMarkdown描画 (リンク等)。描画器が無ければ素の文字列。
-      if (typeof window.wdMarkdown === "function") body.innerHTML = window.wdMarkdown(loc.body);
-      else body.textContent = loc.body;
-      // 作者UIDがある場合はコピー可能にする (将来API拡張用)
-      if (n.uid) {
-        const uidEl = document.createElement("span");
-        uidEl.className = "noticeUid";
-        uidEl.textContent = `#${n.uid}`;
-        uidEl.dataset.uid = n.uid;
-        uidEl.style.cssText = "font-size:11px;color:var(--hint);cursor:pointer;margin-top:4px;display:inline-block;";
-        uidEl.title = t("copyUidHint");
-        body.appendChild(uidEl);
-      }
-      noticesList.appendChild(li);
-    }
-  }
-
   async function fetchNotices() {
     try {
       const res = await fetch(`${apiBase()}/api/notices?limit=100`, { headers: { "Accept": "application/json" } });
@@ -107,51 +40,23 @@
       if (data && data.ok && Array.isArray(data.notices)) {
         noticesCache = data.notices.map((n) => ({
           id: Number(n.id) || 0,
-          title: String(n.title || ""),
-          body: String(n.body || ""),
-          tr: (n.translations && typeof n.translations === "object") ? n.translations : {},
-          createdAt: Number(n.createdAt) || 0,
-          updatedAt: Number(n.updatedAt) || 0,
-          uid: n.uid || null,
         })).filter((n) => n.id > 0);
-        renderNoticesList();
         refreshNoticesBadge();
       }
     } catch {}
   }
 
-  function openNotices() {
-    renderNoticesList();
-    if (typeof noticesPanel !== "undefined" && noticesPanel) openModal(noticesPanel);
-    // 開いた時点で既読にする (バッジは次回来訪まで消灯のまま)
-    if (noticesCache.length > 0) {
-      const maxId = Math.max(...noticesCache.map((n) => n.id));
-      noticesSaveSeen(maxId);
-    }
-    refreshNoticesBadge();
-  }
-
   if (typeof noticesBtn !== "undefined" && noticesBtn) {
-    noticesBtn.onclick = () => {
-      const opening = typeof noticesPanel !== "undefined" && noticesPanel && noticesPanel.classList.contains("hidden");
-      if (opening) openNotices();
-      else closeAllModals();
-      fetchNotices();
-    };
+    // リンク遷移前に手持ちの最大idを既読にする (戻ってきた時にバッジ消灯)。
+    // /notices 側でも開いた時点で既読保存するため、両方向で整合する。
+    noticesBtn.addEventListener("click", () => {
+      if (noticesCache.length > 0) {
+        const maxId = Math.max(...noticesCache.map((n) => n.id));
+        noticesSaveSeen(maxId);
+      }
+      refreshNoticesBadge();
+    });
   }
-  if (typeof noticesClose !== "undefined" && noticesClose) {
-    noticesClose.onclick = () => closeAllModals();
-  }
-  // 初回取得 + 5分ごとに更新 (バッジ用。開いている時は一覧も更新)
+  // 初回取得 + 5分ごとに更新 (バッジ用)
   fetchNotices();
   setInterval(fetchNotices, 5 * 60 * 1000);
-  // 言語切替時は表示言語で描き直す (既存の更新処理は維持)
-  {
-    const prevRefresh = window.wdLocaleRefresh;
-    window.wdLocaleRefresh = () => {
-      try {
-        if (typeof prevRefresh === "function") prevRefresh();
-      } catch {}
-      renderNoticesList();
-    };
-  }

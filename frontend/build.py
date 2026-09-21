@@ -78,6 +78,28 @@ OG_TEXTS = {
             "pixDraw 玩法說明：基本操作、墨水、等級與冷卻、設計圖、歷史、帳號遷移、防破壞措施、規則。",
         ),
     },
+    "notices": {
+        "ja": (
+            "お知らせ - pixDraw",
+            "pixDraw のお知らせ一覧。運営からの案内を掲載します。",
+        ),
+        "en": (
+            "Notices - pixDraw",
+            "pixDraw notices: announcements from the operators.",
+        ),
+        "ko": (
+            "공지 - pixDraw",
+            "pixDraw 공지 목록. 운영팀의 안내를 게시합니다.",
+        ),
+        "zh-CN": (
+            "公告 - pixDraw",
+            "pixDraw 公告列表。发布来自运营团队的通知。",
+        ),
+        "zh-TW": (
+            "公告 - pixDraw",
+            "pixDraw 公告列表。發佈來自營運團隊的通知。",
+        ),
+    },
     "admin": {
         "ja": ("管理 - pixDraw", "管理者用の操作ページ。"),
         "en": ("Admin - pixDraw", "Admin operations page."),
@@ -287,6 +309,7 @@ def main() -> int:
     specs = [
         ("index.html", "index", "/"),
         ("help.html", "help", "/help"),
+        ("notices.html", "notices", "/notices"),
         ("admin.html", "admin", "/admin"),
     ]
     for name, page, path in specs:
@@ -328,6 +351,8 @@ def main() -> int:
   Cache-Control: public, max-age=300
 /admin
   Cache-Control: no-store
+/notices
+  Cache-Control: public, max-age=300
 """
     (DIST / "_headers").write_text(headers, encoding="utf-8")
     print(f"built dist/ ver={ver} base={base} api={api}")

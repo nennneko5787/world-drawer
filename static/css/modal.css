@@ -34,18 +34,6 @@
   width: min(560px, calc(100vw - 24px)) !important;
   max-height: min(78vh, 740px) !important;
 }
-/* お知らせパネル: 横幅広め・高さ大きめ。見出し固定＋一覧の内側スクロール */
-#noticesPanel.wd-modal {
-  width: min(600px, calc(100vw - 24px)) !important;
-  max-height: min(76vh, 720px) !important;
-  display: flex; flex-direction: column;
-}
-#noticesPanel.wd-modal.hidden { display: none !important; }
-#noticesPanel.wd-modal .panelTitle { flex: none; }
-#noticesPanel.wd-modal #noticesList {
-  flex: 1; min-height: 0;
-  overflow-y: auto; overscroll-behavior: contain;
-}
 /* チャットパネル: 中央モーダルではなく右ドロワー。縦に長く常時読みやすい */
 #chatDock.wd-modal {
   left: auto !important; right: 16px !important;
@@ -71,7 +59,6 @@
   }
   #userPanel.wd-modal { width: min(600px, calc(100vw - 32px)) !important; }
   #rankingPanel.wd-modal { width: min(560px, calc(100vw - 32px)) !important; }
-  #noticesPanel.wd-modal { width: min(600px, calc(100vw - 32px)) !important; }
   #chatDock.wd-modal {
     width: min(400px, calc(100vw - 32px)) !important;
     right: 12px !important;
@@ -151,10 +138,6 @@
     height: min(88vh, 700px) !important;
     max-height: 88vh !important;
     border-radius: 16px 16px 0 0 !important;
-  }
-  /* お知らせも長文が読めるよう縦長に */
-  #noticesPanel.wd-modal {
-    max-height: 88vh !important;
   }
   /* スマホは上タブ+下内容 (6タブは潰さず横スクロールで逃がす) */
   .setBody { flex-direction: column; align-items: stretch; }
